@@ -1,2 +1,2 @@
-# pinolrent-api
-Estructura/Logica de la aplicacion pinolrent
+# Pinol Rent API
+Pinol Rent API
