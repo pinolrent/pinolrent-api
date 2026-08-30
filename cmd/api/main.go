@@ -1,46 +1,77 @@
 package main
 
 import (
-	"crypto/rand"
-	"encoding/base64"
-	"log"
+	"context"
+	"errors"
+	"log/slog"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/pinolrent/pinolrent-api/internal/auth"
 	"github.com/pinolrent/pinolrent-api/internal/config"
 	"github.com/pinolrent/pinolrent-api/internal/db"
 	"github.com/pinolrent/pinolrent-api/internal/handlers"
+	"github.com/pinolrent/pinolrent-api/internal/ratelimit"
 )
 
 func main() {
-	cfg := config.Load()
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, nil)))
 
-	if cfg.JWTSecret == "" {
-		buf := make([]byte, 32)
-		if _, err := rand.Read(buf); err != nil {
-			log.Fatal("generate jwt secret: ", err)
-		}
-		cfg.JWTSecret = base64.RawURLEncoding.EncodeToString(buf)
-		log.Println("JWT_SECRET not set; generated a random ephemeral secret")
+	cfg := config.Load()
+	if err := cfg.Validate(); err != nil {
+		slog.Error("invalid config", "error", err)
+		os.Exit(1)
 	}
 
 	d, err := db.Open(cfg.DatabaseURL)
 	if err != nil {
-		log.Fatal("db: ", err)
+		slog.Error("open db", "error", err)
+		os.Exit(1)
 	}
 	defer d.Close()
 
 	if err := db.SeedAdmin(d, cfg.AdminEmail, cfg.AdminPassword); err != nil {
-		log.Fatal("seed admin: ", err)
+		slog.Error("seed admin", "error", err)
+		os.Exit(1)
 	}
 
 	a := auth.New(cfg.JWTSecret, d)
 	h := handlers.New(d, a)
-	mux := handlers.Routes(h)
 
-	addr := ":" + cfg.Port
-	log.Printf("listening on %s", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
-		log.Fatal(err)
+	var mux http.Handler = handlers.Routes(h)
+	mux = handlers.WithRequestLog(mux)
+	mux = ratelimit.New(0.5, 30).Middleware(mux, "/auth/")
+
+	srv := &http.Server{
+		Addr:              ":" + cfg.Port,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    1 << 20,
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	go func() {
+		slog.Info("listening", "addr", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("server", "error", err)
+			stop()
+		}
+	}()
+
+	<-ctx.Done()
+	stop()
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		slog.Error("shutdown", "error", err)
 	}
 }

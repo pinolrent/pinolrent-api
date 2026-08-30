@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"golang.org/x/crypto/bcrypt"
@@ -48,7 +49,8 @@ CREATE TABLE IF NOT EXISTS payments (
 
 func Open(url string) (*sql.DB, error) {
 	dsn := url
-	if url == ":memory:" {
+	mem := url == ":memory:"
+	if mem {
 		dsn = "file::memory:?cache=shared"
 	} else {
 		dsn = fmt.Sprintf("file:%s?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)", url)
@@ -58,7 +60,12 @@ func Open(url string) (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	d.SetMaxOpenConns(1)
+	if mem {
+		d.SetMaxOpenConns(1)
+	} else {
+		d.SetMaxOpenConns(8)
+		d.SetMaxIdleConns(8)
+	}
 
 	if _, err := d.Exec(schema); err != nil {
 		d.Close()
@@ -67,16 +74,19 @@ func Open(url string) (*sql.DB, error) {
 	return d, nil
 }
 
+const OverlapPredicate = "r.start_date <= ? AND r.end_date >= ?"
+
+func ReservationOverlaps(d *sql.DB, carID int64, start, end string) (bool, error) {
+	var n int
+	err := d.QueryRow(`
+		SELECT COUNT(*) FROM reservations
+		WHERE car_id = ? AND status != 'cancelled'
+			AND `+OverlapPredicate, carID, end, start).Scan(&n)
+	return n > 0, err
+}
+
 func SeedAdmin(d *sql.DB, email, password string) error {
 	if email == "" || password == "" {
-		return nil
-	}
-
-	var count int
-	if err := d.QueryRow(`SELECT COUNT(*) FROM users WHERE email = ? AND role = 'admin'`, email).Scan(&count); err != nil {
-		return err
-	}
-	if count > 0 {
 		return nil
 	}
 
@@ -84,6 +94,20 @@ func SeedAdmin(d *sql.DB, email, password string) error {
 	if err != nil {
 		return err
 	}
-	_, err = d.Exec(`INSERT INTO users (email, password_hash, role) VALUES (?, ?, 'admin')`, email, string(hash))
+
+	var role string
+	err = d.QueryRow(`SELECT role FROM users WHERE email = ?`, email).Scan(&role)
+	if errors.Is(err, sql.ErrNoRows) {
+		_, err = d.Exec(`INSERT INTO users (email, password_hash, role) VALUES (?, ?, 'admin')`, email, string(hash))
+		return err
+	}
+	if err != nil {
+		return err
+	}
+	if role != "admin" {
+		return fmt.Errorf("ADMIN_EMAIL %q conflicts with an existing %s account", email, role)
+	}
+
+	_, err = d.Exec(`UPDATE users SET password_hash = ? WHERE email = ? AND role = 'admin'`, string(hash), email)
 	return err
 }

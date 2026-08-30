@@ -1,6 +1,10 @@
 package config
 
-import "os"
+import (
+	"fmt"
+	"os"
+	"strings"
+)
 
 type Config struct {
 	Port          string
@@ -16,8 +20,25 @@ func Load() Config {
 		DatabaseURL:   getenv("DATABASE_URL", "pinolrent.db"),
 		JWTSecret:     os.Getenv("JWT_SECRET"),
 		AdminEmail:    getenv("ADMIN_EMAIL", "admin@pinolrent.com"),
-		AdminPassword: getenv("ADMIN_PASSWORD", "admin123"),
+		AdminPassword: os.Getenv("ADMIN_PASSWORD"),
 	}
+}
+
+func (c Config) Validate() error {
+	var missing []string
+	if c.JWTSecret == "" {
+		missing = append(missing, "JWT_SECRET")
+	}
+	if c.AdminPassword == "" {
+		missing = append(missing, "ADMIN_PASSWORD")
+	}
+	if c.AdminEmail == "" {
+		missing = append(missing, "ADMIN_EMAIL")
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("missing required env vars: %s", strings.Join(missing, ", "))
+	}
+	return nil
 }
 
 func getenv(key, def string) string {
