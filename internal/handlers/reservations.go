@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/pinolrent/pinolrent-api/internal/auth"
+	"github.com/pinolrent/pinolrent-api/internal/db"
 	"github.com/pinolrent/pinolrent-api/internal/models"
 )
 
@@ -66,8 +67,8 @@ func (a *API) CreateReservation(w http.ResponseWriter, r *http.Request) {
 		StartDate string `json:"start_date"`
 		EndDate   string `json:"end_date"`
 	}
-	if err := decodeBody(r, &in); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+	if err := decodeBody(w, r, &in); err != nil {
+		writeBodyErr(w, err)
 		return
 	}
 
@@ -85,6 +86,10 @@ func (a *API) CreateReservation(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "end_date must be on or after start_date")
 		return
 	}
+	if start.Before(todayStart()) {
+		writeError(w, http.StatusBadRequest, "start_date cannot be in the past")
+		return
+	}
 	if in.CarID == 0 {
 		writeError(w, http.StatusBadRequest, "car_id is required")
 		return
@@ -93,13 +98,13 @@ func (a *API) CreateReservation(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	conn, err := a.DB.Conn(ctx)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "server error")
+		serverError(w, err)
 		return
 	}
 	defer conn.Close()
 
 	if _, err := conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
-		writeError(w, http.StatusInternalServerError, "server error")
+		serverError(w, err)
 		return
 	}
 	committed := false
@@ -116,7 +121,7 @@ func (a *API) CreateReservation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "server error")
+		serverError(w, err)
 		return
 	}
 	if active != 1 {
@@ -126,13 +131,11 @@ func (a *API) CreateReservation(w http.ResponseWriter, r *http.Request) {
 
 	var overlap int
 	err = conn.QueryRowContext(ctx, `
-		SELECT COUNT(*) FROM reservations
-		WHERE car_id = ? AND status != 'cancelled'
-			AND start_date <= ? AND end_date >= ?`,
-		in.CarID, in.EndDate, in.StartDate,
-	).Scan(&overlap)
+		SELECT COUNT(*) FROM reservations r
+		WHERE r.car_id = ? AND r.status != 'cancelled'
+			AND `+db.OverlapPredicate, in.CarID, in.EndDate, in.StartDate).Scan(&overlap)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "server error")
+		serverError(w, err)
 		return
 	}
 	if overlap > 0 {
@@ -145,13 +148,13 @@ func (a *API) CreateReservation(w http.ResponseWriter, r *http.Request) {
 		u.ID, in.CarID, in.StartDate, in.EndDate,
 	)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "server error")
+		serverError(w, err)
 		return
 	}
 	id, _ := res.LastInsertId()
 
 	if _, err := conn.ExecContext(ctx, "COMMIT"); err != nil {
-		writeError(w, http.StatusInternalServerError, "server error")
+		serverError(w, err)
 		return
 	}
 	committed = true
@@ -159,7 +162,7 @@ func (a *API) CreateReservation(w http.ResponseWriter, r *http.Request) {
 
 	v, err := a.reservationView(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "server error")
+		serverError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, v)
@@ -171,7 +174,7 @@ func (a *API) ListReservations(w http.ResponseWriter, r *http.Request) {
 	rows, err := a.DB.Query(reservationSelect+`
 		WHERE r.user_id = ? ORDER BY r.id DESC`, u.ID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "server error")
+		serverError(w, err)
 		return
 	}
 	defer rows.Close()
@@ -180,13 +183,13 @@ func (a *API) ListReservations(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var v reservationView
 		if err := scanReservation(rows, &v); err != nil {
-			writeError(w, http.StatusInternalServerError, "server error")
+			serverError(w, err)
 			return
 		}
 		views = append(views, v)
 	}
 	if err := rows.Err(); err != nil {
-		writeError(w, http.StatusInternalServerError, "server error")
+		serverError(w, err)
 		return
 	}
 
@@ -208,7 +211,7 @@ func (a *API) GetReservation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "server error")
+		serverError(w, err)
 		return
 	}
 

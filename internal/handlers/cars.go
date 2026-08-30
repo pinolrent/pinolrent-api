@@ -3,15 +3,17 @@ package handlers
 import (
 	"database/sql"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/pinolrent/pinolrent-api/internal/db"
 	"github.com/pinolrent/pinolrent-api/internal/models"
 )
 
 const dateLayout = "2006-01-02"
+
+const maxPricePerDay = 100_000_000
 
 func (a *API) ListCars(w http.ResponseWriter, r *http.Request) {
 	startStr := r.URL.Query().Get("start_date")
@@ -26,12 +28,12 @@ func (a *API) ListCars(w http.ResponseWriter, r *http.Request) {
 	if startStr == "" {
 		rows, err := a.DB.Query(`SELECT id, name, photo_url, price_per_day, active FROM cars WHERE active = 1 ORDER BY id`)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "server error")
+			serverError(w, err)
 			return
 		}
 		cars, err = scanCars(rows)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "server error")
+			serverError(w, err)
 			return
 		}
 	} else {
@@ -58,16 +60,16 @@ func (a *API) ListCars(w http.ResponseWriter, r *http.Request) {
 				SELECT 1 FROM reservations r
 				WHERE r.car_id = c.id
 					AND r.status != 'cancelled'
-					AND r.start_date <= ? AND r.end_date >= ?
+					AND `+db.OverlapPredicate+`
 			)
 			ORDER BY c.id`, endStr, startStr)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "server error")
+			serverError(w, err)
 			return
 		}
 		cars, err = scanCars(rows)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "server error")
+			serverError(w, err)
 			return
 		}
 	}
@@ -84,8 +86,8 @@ func (a *API) CreateCar(w http.ResponseWriter, r *http.Request) {
 		PhotoURL    string `json:"photo_url"`
 		PricePerDay int64  `json:"price_per_day"`
 	}
-	if err := decodeBody(r, &in); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+	if err := decodeBody(w, r, &in); err != nil {
+		writeBodyErr(w, err)
 		return
 	}
 
@@ -98,17 +100,19 @@ func (a *API) CreateCar(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "price_per_day must be >= 0")
 		return
 	}
-	if in.PhotoURL != "" {
-		if _, err := url.ParseRequestURI(in.PhotoURL); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid photo_url")
-			return
-		}
+	if in.PricePerDay > maxPricePerDay {
+		writeError(w, http.StatusBadRequest, "price_per_day must be <= "+strconv.FormatInt(maxPricePerDay, 10))
+		return
+	}
+	if in.PhotoURL != "" && !validURL(in.PhotoURL) {
+		writeError(w, http.StatusBadRequest, "invalid photo_url")
+		return
 	}
 
 	res, err := a.DB.Exec(`INSERT INTO cars (name, photo_url, price_per_day) VALUES (?, ?, ?)`,
 		in.Name, in.PhotoURL, in.PricePerDay)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "server error")
+		serverError(w, err)
 		return
 	}
 	id, _ := res.LastInsertId()
@@ -132,8 +136,8 @@ func (a *API) PatchCar(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Active *bool `json:"active"`
 	}
-	if err := decodeBody(r, &in); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+	if err := decodeBody(w, r, &in); err != nil {
+		writeBodyErr(w, err)
 		return
 	}
 	if in.Active == nil {
@@ -143,7 +147,7 @@ func (a *API) PatchCar(w http.ResponseWriter, r *http.Request) {
 
 	res, err := a.DB.Exec(`UPDATE cars SET active = ? WHERE id = ?`, *in.Active, id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "server error")
+		serverError(w, err)
 		return
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
@@ -153,7 +157,7 @@ func (a *API) PatchCar(w http.ResponseWriter, r *http.Request) {
 
 	var car models.Car
 	if err := scanCar(a.DB.QueryRow(`SELECT id, name, photo_url, price_per_day, active FROM cars WHERE id = ?`, id), &car); err != nil {
-		writeError(w, http.StatusInternalServerError, "server error")
+		serverError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, car)
@@ -161,6 +165,11 @@ func (a *API) PatchCar(w http.ResponseWriter, r *http.Request) {
 
 func parseDate(s string) (time.Time, error) {
 	return time.Parse(dateLayout, s)
+}
+
+func todayStart() time.Time {
+	now := time.Now().UTC()
+	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 }
 
 func scanCar(row *sql.Row, c *models.Car) error {

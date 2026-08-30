@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
-	"net/url"
 	"strconv"
 
 	"github.com/pinolrent/pinolrent-api/internal/auth"
@@ -26,19 +25,17 @@ func (a *API) RecordPayment(w http.ResponseWriter, r *http.Request) {
 		Method   string `json:"method"`
 		ProofURL string `json:"proof_url"`
 	}
-	if err := decodeBody(r, &in); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+	if err := decodeBody(w, r, &in); err != nil {
+		writeBodyErr(w, err)
 		return
 	}
 	if !validMethods[in.Method] {
 		writeError(w, http.StatusBadRequest, "method must be pos or cash")
 		return
 	}
-	if in.ProofURL != "" {
-		if _, err := url.ParseRequestURI(in.ProofURL); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid proof_url")
-			return
-		}
+	if in.ProofURL != "" && !validURL(in.ProofURL) {
+		writeError(w, http.StatusBadRequest, "invalid proof_url")
+		return
 	}
 
 	var ownerID int64
@@ -49,7 +46,7 @@ func (a *API) RecordPayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "server error")
+		serverError(w, err)
 		return
 	}
 	if ownerID != u.ID {
@@ -63,7 +60,7 @@ func (a *API) RecordPayment(w http.ResponseWriter, r *http.Request) {
 
 	var count int
 	if err := a.DB.QueryRow(`SELECT COUNT(*) FROM payments WHERE reservation_id = ?`, id).Scan(&count); err != nil {
-		writeError(w, http.StatusInternalServerError, "server error")
+		serverError(w, err)
 		return
 	}
 	if count > 0 {
@@ -78,7 +75,7 @@ func (a *API) RecordPayment(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusConflict, "payment already recorded")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "server error")
+		serverError(w, err)
 		return
 	}
 	pid, _ := res.LastInsertId()
@@ -102,13 +99,13 @@ func (a *API) ConfirmReservation(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	conn, err := a.DB.Conn(ctx)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "server error")
+		serverError(w, err)
 		return
 	}
 	defer conn.Close()
 
 	if _, err := conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
-		writeError(w, http.StatusInternalServerError, "server error")
+		serverError(w, err)
 		return
 	}
 	committed := false
@@ -125,7 +122,7 @@ func (a *API) ConfirmReservation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "server error")
+		serverError(w, err)
 		return
 	}
 	if status != "pending" {
@@ -140,21 +137,21 @@ func (a *API) ConfirmReservation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "server error")
+		serverError(w, err)
 		return
 	}
 
 	if _, err := conn.ExecContext(ctx, `UPDATE payments SET status = 'approved' WHERE reservation_id = ?`, id); err != nil {
-		writeError(w, http.StatusInternalServerError, "server error")
+		serverError(w, err)
 		return
 	}
 	if _, err := conn.ExecContext(ctx, `UPDATE reservations SET status = 'confirmed' WHERE id = ?`, id); err != nil {
-		writeError(w, http.StatusInternalServerError, "server error")
+		serverError(w, err)
 		return
 	}
 
 	if _, err := conn.ExecContext(ctx, "COMMIT"); err != nil {
-		writeError(w, http.StatusInternalServerError, "server error")
+		serverError(w, err)
 		return
 	}
 	committed = true
@@ -162,7 +159,7 @@ func (a *API) ConfirmReservation(w http.ResponseWriter, r *http.Request) {
 
 	v, err := a.reservationView(id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "server error")
+		serverError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, v)

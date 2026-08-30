@@ -20,8 +20,8 @@ func (a *API) Register(w http.ResponseWriter, r *http.Request) {
 		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
-	if err := decodeBody(r, &in); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+	if err := decodeBody(w, r, &in); err != nil {
+		writeBodyErr(w, err)
 		return
 	}
 
@@ -37,7 +37,7 @@ func (a *API) Register(w http.ResponseWriter, r *http.Request) {
 
 	hash, err := a.Auth.HashPassword(in.Password)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "server error")
+		serverError(w, err)
 		return
 	}
 
@@ -47,7 +47,7 @@ func (a *API) Register(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusConflict, "email already registered")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "server error")
+		serverError(w, err)
 		return
 	}
 
@@ -60,8 +60,8 @@ func (a *API) Login(w http.ResponseWriter, r *http.Request) {
 		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
-	if err := decodeBody(r, &in); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+	if err := decodeBody(w, r, &in); err != nil {
+		writeBodyErr(w, err)
 		return
 	}
 
@@ -73,7 +73,7 @@ func (a *API) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "server error")
+		serverError(w, err)
 		return
 	}
 	if !a.Auth.CheckPassword(u.PasswordHash, in.Password) {
@@ -83,7 +83,7 @@ func (a *API) Login(w http.ResponseWriter, r *http.Request) {
 
 	token, err := a.Auth.SignToken(&u)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "server error")
+		serverError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"token": token})
