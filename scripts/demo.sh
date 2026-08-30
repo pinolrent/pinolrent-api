@@ -13,6 +13,10 @@ LOG="$(mktemp /tmp/pinolrent-demo.XXXXXX.log)"
 BIN="$(mktemp /tmp/pinolrent-demo.XXXXXX.bin)"
 PID=""
 
+# Same min length the server enforces, so the smoke starts without
+# tripping its own fail-fast.
+SMOKE_JWT_SECRET="${SMOKE_JWT_SECRET:-smoke-test-secret-min-32-bytes-ok}"
+
 failures=0
 pass=0
 
@@ -38,31 +42,62 @@ cond() {
   fi
 }
 
+# wait_for_health polls /health up to N seconds, sleeping 0.2s between
+# attempts. Returns 0 once the server answers 200/503, 1 on timeout.
+wait_for_health() {
+  local seconds="$1"
+  local tries=$((seconds * 5))   # 5 attempts per second
+  while [ "$tries" -gt 0 ]; do
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 1 "$BASE/health" 2>/dev/null || true)
+    if [ "$code" = "200" ] || [ "$code" = "503" ]; then
+      return 0
+    fi
+    sleep 0.2
+    tries=$((tries - 1))
+  done
+  return 1
+}
+
 cleanup() {
-  [ -n "$PID" ] && kill -9 "$PID" 2>/dev/null
+  if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
+    kill -TERM "$PID" 2>/dev/null || true
+    for _ in 1 2 3 4 5; do
+      kill -0 "$PID" 2>/dev/null || break
+      sleep 0.2
+    done
+    kill -KILL "$PID" 2>/dev/null || true
+  fi
   rm -f "$DB" "$DB-shm" "$DB-wal" "$LOG" "$BIN"
 }
 trap cleanup EXIT INT TERM
 
 echo "== build =="
-go build -o "$BIN" ./cmd/api || { echo "build FAIL"; exit 1; }
+if ! go build -o "$BIN" ./cmd/api; then
+  echo "build FAIL"; exit 1
+fi
+
+echo "== fail-fast sin JWT_SECRET =="
+# Unset JWT_SECRET to verify the server refuses to start. env -u ensures
+# the variable is not inherited from the caller's environment. The
+# server logs its config error to stdout (via slog), so we just check
+# the non-zero exit code here; checking the message text is brittle
+# because slog's output destination depends on configuration.
+env -u JWT_SECRET DATABASE_URL="$DB" PORT=9999 "$BIN" >/dev/null 2>&1
+rc=$?
+check "aborta sin JWT_SECRET" "1" "$rc"
 
 echo "== start =="
-DATABASE_URL="$DB" JWT_SECRET=demo-secret-not-for-production PORT="$PORT" \
+DATABASE_URL="$DB" JWT_SECRET="$SMOKE_JWT_SECRET" PORT="$PORT" \
   "$BIN" > "$LOG" 2>&1 &
 PID=$!
-sleep 1
-if ! curl -sf "$BASE/health" > /dev/null; then
-  echo "server no levantó:"; cat "$LOG"; exit 1
+if ! wait_for_health 5; then
+  echo "server no levantó en 5s:"; cat "$LOG"; exit 1
 fi
+check "health responde 200" "200" "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/health")"
 
 echo "== health con version =="
 health_version=$(curl -s "$BASE/health" | jq -r '.version // empty')
 check "health incluye version (dev)" "dev" "$health_version"
-
-echo "== fail-fast sin JWT_SECRET =="
-DATABASE_URL="$DB" PORT=9999 "$BIN" > /dev/null 2>&1
-check "aborta sin JWT_SECRET" "1" "$?"
 
 echo "== auth =="
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/auth/register" \
@@ -201,8 +236,15 @@ done
 
 echo "== graceful shutdown =="
 kill -TERM "$PID"
-sleep 1
-kill -0 "$PID" 2>/dev/null && check "se detiene con SIGTERM" "si" "no" || check "se detiene con SIGTERM" "si" "si"
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  kill -0 "$PID" 2>/dev/null || break
+  sleep 0.2
+done
+if kill -0 "$PID" 2>/dev/null; then
+  check "se detiene con SIGTERM" "si" "no"
+else
+  check "se detiene con SIGTERM" "si" "si"
+fi
 PID=""
 
 echo
