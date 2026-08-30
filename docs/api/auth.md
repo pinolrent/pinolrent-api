@@ -30,8 +30,8 @@ Crea una cuenta `buyer`. Público (rate-limited).
 
 | Campo | Tipo | Requerido | Reglas |
 |-------|------|-----------|--------|
-| `email` | string | sí | formato email; se normaliza a minúsculas |
-| `password` | string | sí | mínimo 6 caracteres |
+| `email` | string | sí | formato email; ≤ 254 caracteres; se normaliza a minúsculas |
+| `password` | string | sí | 8 a 72 caracteres (bcrypt trunca silenciosamente a 72 bytes) |
 
 ```json
 {"email":"demo@example.com","password":"secret123"}
@@ -49,7 +49,7 @@ Crea una cuenta `buyer`. Público (rate-limited).
 |--------|---------|--------|
 | `400` | `invalid email` | El email no pasa la validación de formato |
 | `400` | `email is too long` | Email > 254 caracteres |
-| `400` | `password must be 8-72 characters` | Password fuera de rango (bcrypt trunca a 72 bytes) |
+| `400` | `password must be 8-72 characters` | Password fuera de rango |
 | `400` | `invalid JSON body` | JSON malformado / campos desconocidos |
 | `413` | `request body too large` | Body > 1 MB |
 
@@ -101,6 +101,10 @@ Valida credenciales y devuelve un token JWT (válido 24 h). Público
 | `400` | `invalid JSON body` | JSON malformado / campos desconocidos |
 | `413` | `request body too large` | Body > 1 MB |
 
+> El tiempo de respuesta es **constante** independientemente de si el email
+> existe: en el camino de "no existe" se ejecuta un `bcrypt.Compare` contra
+> un hash dummy, así un atacante no puede enumerar emails midiendo timing.
+
 ---
 
 ## `GET /auth/me`
@@ -126,6 +130,35 @@ Usa el token como `Authorization: Bearer <token>`.
 
 Nota: al vivir bajo `/auth/`, hereda el rate limit de ese prefijo; cacheá la
 respuesta en el cliente en vez de pollearla.
+
+---
+
+## Contrato del JWT
+
+El token que devuelve `POST /auth/login` es un JWT firmado con **HS256** y
+válido por **24 h**. Claims incluidos:
+
+| Claim | Tipo | Valor |
+|-------|------|-------|
+| `uid` | número | `id` del usuario |
+| `role` | string | `buyer` o `seller` |
+| `sub` | string | `id` del usuario como string |
+| `iss` | string | `pinolrent-api` (siempre) |
+| `aud` | string | `pinolrent-api` (siempre) |
+| `iat` | número | timestamp de emisión (segundos UNIX) |
+| `exp` | número | timestamp de expiración (iat + 24 h) |
+
+El parser rechaza explícitamente tokens con:
+
+- Algoritmo distinto de `HS256` (incluido el clásico `alg=none`).
+- Falta de `exp`, `iss` o `aud`.
+- Firma inválida, secret desconocido o `exp` vencido.
+
+> Si tu cliente quiere decodificar el token para, por ejemplo, mostrar el
+> tiempo restante o el rol sin llamar a `/auth/me`, podés usar el header
+> `Authorization: Bearer <token>` y parsear el payload (no la firma) con
+> cualquier librería JWT estándar. La verificación de firma la hace el
+> servidor en cada request.
 
 ---
 

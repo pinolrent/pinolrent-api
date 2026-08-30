@@ -88,8 +88,8 @@ Da de alta un auto **propio**. Requiere rol `seller`.
 
 | Campo | Tipo | Requerido | Reglas |
 |-------|------|-----------|--------|
-| `name` | string | sí | no vacío (trim) |
-| `photo_url` | string | no | si se manda, URL `http(s)` válida |
+| `name` | string | sí | no vacío (trim); ≤ 200 caracteres |
+| `photo_url` | string | no | si se manda, URL `http(s)` válida; ≤ 2048 caracteres |
 | `price_per_day` | entero | no | `0..100_000_000` centavos |
 
 ```json
@@ -107,9 +107,13 @@ Da de alta un auto **propio**. Requiere rol `seller`.
 | Status | Mensaje | Cuándo |
 |--------|---------|--------|
 | `400` | `name is required` | `name` vacío o ausente |
+| `400` | `name is too long (max 200 characters)` | `name` > 200 caracteres |
 | `400` | `price_per_day must be >= 0` | Precio negativo |
 | `400` | `price_per_day must be <= 100000000` | Precio sobre el tope |
+| `400` | `photo_url is too long` | `photo_url` > 2048 caracteres |
 | `400` | `invalid photo_url` | URL malformada o sin scheme `http(s)` |
+| `400` | `invalid JSON body` | JSON malformado / campos desconocidos |
+| `413` | `request body too large` | Body > 1 MB |
 | `401` / `403` | ver [00-general](00-general.md) | Sin token / rol incorrecto |
 
 ---

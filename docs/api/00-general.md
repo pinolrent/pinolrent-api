@@ -45,7 +45,10 @@ Todos los errores siguen el mismo shape:
 ```
 
 - Los **400** se usan para validación de entrada y JSON inválido.
-- Los **409** se usan para conflictos de dominio (duplicado, overlap, estado inválido).
+- Los **409** se usan para conflictos de dominio (overlap, estado inválido,
+  pago duplicado). El caso de email duplicado en `/auth/register` se responde
+  `201 {"id":0,"email":"..."}` en vez de `409` para no permitir enumerar
+  cuentas registradas — ver [auth](auth.md#post-authregister).
 - Los **404** ocultan recursos ajenos: un comprador no ve reservas de otros y un
   vendedor no accede a autos o reservas de otro vendedor (devuelve `404` igual).
 

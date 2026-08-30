@@ -6,7 +6,7 @@
 |----------|---------|-----------|-------------|
 | `PORT` | `8080` | no | Puerto del servidor |
 | `DATABASE_URL` | `pinolrent.db` | no | Ruta/DSN del archivo SQLite |
-| `JWT_SECRET` | — | **sí** | Secreto HS256 para firmar tokens; el proceso **aborta si falta** |
+| `JWT_SECRET` | — | **sí** | Secreto HS256 para firmar tokens; el proceso **aborta si falta o tiene menos de 32 bytes** |
 | `CORS_ALLOWED_ORIGINS` | `*` | no | Orígenes permitidos, separados por coma; `*` acepta cualquiera. Ver [00-general](api/00-general.md) |
 
 Precedencia de valores: **variables del shell > `.env` > defaults**. Las
@@ -14,7 +14,7 @@ variables que están vacías en el entorno se tratan como ausentes.
 
 ### Fail-fast
 
-El server no arranca sin `JWT_SECRET`:
+El server no arranca si `JWT_SECRET` falta o tiene menos de 32 bytes:
 
 ```sh
 $ go run ./cmd/api
@@ -22,7 +22,15 @@ time=... level=ERROR msg="invalid config" error="missing required env vars: JWT_
 exit status 1
 ```
 
-El validador es `Config.Validate` en `internal/config/config.go`.
+```sh
+$ JWT_SECRET=short go run ./cmd/api
+time=... level=ERROR msg="invalid config" error="JWT_SECRET must be at least 32 bytes (got 5); generate one with `openssl rand -base64 32`"
+exit status 1
+```
+
+El validador es `Config.Validate` en `internal/config/config.go`. El mínimo de 32
+bytes se exige porque HS256 con un secreto corto es trivial de forjar offline
+si un atacante consigue un solo token.
 
 ### Proveerse un secreto aleatorio
 
@@ -55,9 +63,10 @@ público (`POST /auth/register` y `POST /auth/register/seller`).
 
 Con `make dev` no hace falta crear `.env`: el script `scripts/dev.sh` aplica
 defaults de desarrollo cuando falta la variable correspondiente
-(`JWT_SECRET=dev-secret-not-for-production`, `DATABASE_URL=dev.db`) y arranca
+(`JWT_SECRET=dev-secret-not-for-production-32b`, `DATABASE_URL=dev.db`) y arranca
 con `go run`. El fail-fast de producción se conserva: invocar
-`go run ./cmd/api` directamente sin variables sigue abortando.
+`go run ./cmd/api` directamente sin variables (o con un `JWT_SECRET` corto)
+sigue abortando.
 
 Copia `.env.example` a `.env` para override de esos defaults.
 

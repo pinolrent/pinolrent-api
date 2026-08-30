@@ -145,14 +145,23 @@ Validaciones de entrada:
 - El body se limita a **1 MB** y es JSON estricto: campos desconocidos o JSON
   inválido → `400 "invalid JSON body"`; exceso de tamaño → `413`.
 - `price_per_day` en el rango `0..100_000_000` centavos.
-- `photo_url` y `proof_url`, si se envían, deben ser URLs HTTP/HTTPS válidas.
-- Los emails se normalizan a minúsculas (trim incluido).
-- El password mínimo es de 6 caracteres.
+- `photo_url` y `proof_url`, si se envían, deben ser URLs HTTP/HTTPS válidas
+  y de hasta 2048 caracteres.
+- `name` de auto, hasta 200 caracteres.
+- Los emails se normalizan a minúsculas (trim incluido) y se limitan a 254
+  caracteres (RFC 5321).
+- El password es de 8 a 72 caracteres; bcrypt trunca silenciosamente a 72 bytes
+  si se pasa un valor más largo, por eso se valida el límite superior.
 
 Operaciones atómicas:
 
 - `POST /reservations` y `PATCH /seller/reservations/{id}/confirm` corren dentro
   de una transacción `BEGIN IMMEDIATE` (SQLite) para evitar carreras.
+- `POST /reservations/{id}/payment` y `PATCH /reservations/{id}/cancel`
+  actualmente no usan transacción: confían en el `UNIQUE(reservation_id)`
+  para doble pago y en el check `status = 'pending'` para cancelar. Es una
+  ventana TOCTOU menor (carrera entre el `SELECT` y el `UPDATE`) que queda
+  como deuda pendiente.
 
 ## Autenticación y autorización
 
@@ -160,7 +169,12 @@ Operaciones atómicas:
   `POST /auth/register/seller` cuentas `seller` (un vendedor gestiona **sus**
   autos).
 - El login valida credenciales (bcrypt) y emite un **JWT HS256 de 24 h** con
-  los claims `uid` (id de usuario) y `role`.
+  los claims `uid` (id de usuario), `role`, `iss=pinolrent-api`, `aud=pinolrent-api`,
+  `iat`, `exp` y `sub` (id como string). El parser rechaza tokens con
+  algoritmo distinto de HS256, sin `exp`, sin `iss/aud`, o con firma
+  inválida. En el camino de "email no existe" corre un `bcrypt.Compare` contra
+  un hash fijo para que el tiempo de respuesta no filtre la enumeración de
+  cuentas.
 - `Authorization: Bearer <token>` en toda ruta protegida.
 - Los middleware `RequireAuth` y `RequireRole` resuelven el usuario desde el
   token, lo cargan en la base y lo inyectan en el contexto de la request.
@@ -201,6 +215,11 @@ Operaciones atómicas:
   idle 60 s) y `MaxHeaderBytes` 1 MB.
 - `WithRequestLog` registra una línea por request con método, path, status y
   duración en ms usando `log/slog` (formato texto).
+- `WithRecover` envuelve el handler y captura panics: los loguea con
+  `slog.Error` incluyendo stack trace y método/path, y devuelve
+  `500 {"error":"server error"}` en JSON. Corre dentro de `WithRequestLog`,
+  así el log de request captura el 500 resultante en vez de la conexión
+  cortada.
 - `GET /health` responde `{"status":"ok","version":"..."}` tras hacer ping a la
   base (`503 degraded` si falla). La versión del build se inyecta con
   `-ldflags "-X main.version=<version>"` (ver `make build`).

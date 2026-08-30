@@ -9,7 +9,7 @@ Registra el pago de la reserva del comprador autenticado. Requiere login.
 | Campo | Tipo | Requerido | Reglas |
 |-------|------|-----------|--------|
 | `method` | string | sí | `pos` \| `cash` |
-| `proof_url` | string | no | si se manda, URL `http(s)` válida |
+| `proof_url` | string | no | si se manda, URL `http(s)` válida; ≤ 2048 caracteres |
 
 ```json
 {"method":"pos","proof_url":"https://example.com/boleta.pdf"}
@@ -36,6 +36,7 @@ puede estar `cancelled`; y no puede tener ya un pago (uno por reserva).
 |--------|---------|--------|
 | `400` | `invalid reservation id` | `{id}` no es un entero |
 | `400` | `method must be pos or cash` | Método desconocido |
+| `400` | `proof_url is too long` | `proof_url` > 2048 caracteres |
 | `400` | `invalid proof_url` | URL malformada o sin scheme `http(s)` |
 | `404` | `reservation not found` | No existe, **o** pertenece a otro comprador (se oculta) |
 | `409` | `cancelled reservation cannot be paid` | La reserva está cancelada |

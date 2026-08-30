@@ -223,4 +223,5 @@ curl -s -o /dev/null -w '%{http_code}\n' \
   además comprueba hardening: body demasiado grande (`413`), fechas pasadas
   (`400`), overlap (`409`), rango > 30 días (`400`), paginación inválida
   (`400`), cancelación y re-reserva, comprador sin permisos de vendedor
-  (`403`) y rate limit sobre `/auth/*` (`429`).
+  (`403`), rate limit sobre `/auth/*` (`429`), fail-fast de `JWT_SECRET`
+  ausente, y shutdown limpio con `SIGTERM`.
