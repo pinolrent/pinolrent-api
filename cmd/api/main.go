@@ -1,3 +1,4 @@
+// Package main runs the pinolrent-api HTTP server.
 package main
 
 import (
@@ -10,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/pinolrent/pinolrent-api/internal/auth"
 	"github.com/pinolrent/pinolrent-api/internal/config"
 	"github.com/pinolrent/pinolrent-api/internal/db"
@@ -19,6 +21,9 @@ import (
 
 func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, nil)))
+
+	// Load .env if present. Values already set in the environment win over it.
+	_ = godotenv.Load()
 
 	cfg := config.Load()
 	if err := cfg.Validate(); err != nil {
@@ -31,7 +36,7 @@ func main() {
 		slog.Error("open db", "error", err)
 		os.Exit(1)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	if err := db.SeedAdmin(d, cfg.AdminEmail, cfg.AdminPassword); err != nil {
 		slog.Error("seed admin", "error", err)

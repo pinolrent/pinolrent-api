@@ -1,2 +1,14 @@
 # AI stuff
 .codegraph
+
+# Local env and database
+.env
+*.db
+*.db-shm
+*.db-wal
+dev.db*
+
+# Build output
+bin/
+tmp/
+air.log
