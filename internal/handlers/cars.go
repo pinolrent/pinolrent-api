@@ -1,0 +1,186 @@
+package handlers
+
+import (
+	"database/sql"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/pinolrent/pinolrent-api/internal/models"
+)
+
+const dateLayout = "2006-01-02"
+
+func (a *API) ListCars(w http.ResponseWriter, r *http.Request) {
+	startStr := r.URL.Query().Get("start_date")
+	endStr := r.URL.Query().Get("end_date")
+
+	if (startStr == "") != (endStr == "") {
+		writeError(w, http.StatusBadRequest, "start_date and end_date must be provided together")
+		return
+	}
+
+	var cars []models.Car
+	if startStr == "" {
+		rows, err := a.DB.Query(`SELECT id, name, photo_url, price_per_day, active FROM cars WHERE active = 1 ORDER BY id`)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "server error")
+			return
+		}
+		cars, err = scanCars(rows)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "server error")
+			return
+		}
+	} else {
+		start, err := parseDate(startStr)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid start_date, expected YYYY-MM-DD")
+			return
+		}
+		end, err := parseDate(endStr)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid end_date, expected YYYY-MM-DD")
+			return
+		}
+		if end.Before(start) {
+			writeError(w, http.StatusBadRequest, "end_date must be on or after start_date")
+			return
+		}
+
+		rows, err := a.DB.Query(`
+			SELECT c.id, c.name, c.photo_url, c.price_per_day, c.active
+			FROM cars c
+			WHERE c.active = 1
+			AND NOT EXISTS (
+				SELECT 1 FROM reservations r
+				WHERE r.car_id = c.id
+					AND r.status != 'cancelled'
+					AND r.start_date <= ? AND r.end_date >= ?
+			)
+			ORDER BY c.id`, endStr, startStr)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "server error")
+			return
+		}
+		cars, err = scanCars(rows)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "server error")
+			return
+		}
+	}
+
+	if cars == nil {
+		cars = []models.Car{}
+	}
+	writeJSON(w, http.StatusOK, cars)
+}
+
+func (a *API) CreateCar(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Name        string `json:"name"`
+		PhotoURL    string `json:"photo_url"`
+		PricePerDay int64  `json:"price_per_day"`
+	}
+	if err := decodeBody(r, &in); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	in.Name = strings.TrimSpace(in.Name)
+	if in.Name == "" {
+		writeError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+	if in.PricePerDay < 0 {
+		writeError(w, http.StatusBadRequest, "price_per_day must be >= 0")
+		return
+	}
+	if in.PhotoURL != "" {
+		if _, err := url.ParseRequestURI(in.PhotoURL); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid photo_url")
+			return
+		}
+	}
+
+	res, err := a.DB.Exec(`INSERT INTO cars (name, photo_url, price_per_day) VALUES (?, ?, ?)`,
+		in.Name, in.PhotoURL, in.PricePerDay)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "server error")
+		return
+	}
+	id, _ := res.LastInsertId()
+
+	writeJSON(w, http.StatusCreated, models.Car{
+		ID:          id,
+		Name:        in.Name,
+		PhotoURL:    in.PhotoURL,
+		PricePerDay: in.PricePerDay,
+		Active:      true,
+	})
+}
+
+func (a *API) PatchCar(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid car id")
+		return
+	}
+
+	var in struct {
+		Active *bool `json:"active"`
+	}
+	if err := decodeBody(r, &in); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if in.Active == nil {
+		writeError(w, http.StatusBadRequest, "active is required")
+		return
+	}
+
+	res, err := a.DB.Exec(`UPDATE cars SET active = ? WHERE id = ?`, *in.Active, id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "server error")
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		writeError(w, http.StatusNotFound, "car not found")
+		return
+	}
+
+	var car models.Car
+	if err := scanCar(a.DB.QueryRow(`SELECT id, name, photo_url, price_per_day, active FROM cars WHERE id = ?`, id), &car); err != nil {
+		writeError(w, http.StatusInternalServerError, "server error")
+		return
+	}
+	writeJSON(w, http.StatusOK, car)
+}
+
+func parseDate(s string) (time.Time, error) {
+	return time.Parse(dateLayout, s)
+}
+
+func scanCar(row *sql.Row, c *models.Car) error {
+	var active int
+	err := row.Scan(&c.ID, &c.Name, &c.PhotoURL, &c.PricePerDay, &active)
+	c.Active = active == 1
+	return err
+}
+
+func scanCars(rows *sql.Rows) ([]models.Car, error) {
+	defer rows.Close()
+	var cars []models.Car
+	for rows.Next() {
+		var c models.Car
+		var active int
+		if err := rows.Scan(&c.ID, &c.Name, &c.PhotoURL, &c.PricePerDay, &active); err != nil {
+			return nil, err
+		}
+		c.Active = active == 1
+		cars = append(cars, c)
+	}
+	return cars, rows.Err()
+}
