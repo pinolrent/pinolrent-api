@@ -16,7 +16,7 @@ Healthcheck público.
 
 ## `POST /auth/register`
 
-Crea una cuenta `client`. Público (rate-limited).
+Crea una cuenta `buyer`. Público (rate-limited).
 
 **Body:**
 
@@ -47,6 +47,21 @@ Crea una cuenta `client`. Público (rate-limited).
 
 ---
 
+## `POST /auth/register/seller`
+
+Crea una cuenta `seller` (vendedor) que puede publicar y gestionar **sus**
+autos. Mismo body y validaciones que `/auth/register`. Público (rate-limited).
+
+**Respuesta** — `201 Created`:
+
+```json
+{"id":4,"email":"vendedor@example.com"}
+```
+
+**Errores:** idénticos a `/auth/register`.
+
+---
+
 ## `POST /auth/login`
 
 Valida credenciales y devuelve un token JWT (válido 24 h). Público
@@ -55,7 +70,7 @@ Valida credenciales y devuelve un token JWT (válido 24 h). Público
 **Body:**
 
 ```json
-{"email":"admin@pinolrent.com","password":"admin123"}
+{"email":"vendedor@example.com","password":"secret123"}
 ```
 
 **Respuesta** — `200 OK`:

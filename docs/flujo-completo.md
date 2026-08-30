@@ -1,8 +1,8 @@
 # Flujo completo
 
-Recorrido end-to-end con `curl`: de la mano del cliente que se registra hasta el
-admin que confirma la reserva. La respuesta de ejemplo de cada paso es la que
-devuelve la API hoy.
+Recorrido end-to-end con `curl`: un **vendedor** publica un auto, un
+**comprador** lo reserva y paga, y el vendedor confirma. La respuesta de
+ejemplo de cada paso es la que devuelve la API hoy.
 
 Presupuestos:
 
@@ -13,38 +13,34 @@ Presupuestos:
 BASE=http://localhost:8080
 ```
 
-## 1 · Registrar un cliente
+## 1 · Registrar comprador y vendedor
 
 ```sh
 curl -s -X POST "$BASE/auth/register" \
   -H 'Content-Type: application/json' \
-  -d '{"email":"demo@example.com","password":"secret123"}'
+  -d '{"email":"compra@example.com","password":"secret123"}'
+
+curl -s -X POST "$BASE/auth/register/seller" \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"vende@example.com","password":"secret123"}'
 ```
 
-Enviado:
+Recibido en ambos casos (`201 Created`):
 
 ```json
-{"email":"demo@example.com","password":"secret123"}
-```
-
-Recibido (`201 Created`):
-
-```json
-{"id":3,"email":"demo@example.com"}
+{"id":4,"email":"vende@example.com"}
 ```
 
 ## 2 · Logins
 
-El admin se siembra al arrancar con `ADMIN_EMAIL`/`ADMIN_PASSWORD`.
-
 ```sh
-ADMIN_TOKEN=$(curl -s -X POST "$BASE/auth/login" \
+SELLER=$(curl -s -X POST "$BASE/auth/login" \
   -H 'Content-Type: application/json' \
-  -d '{"email":"admin@pinolrent.com","password":"admin123"}' | jq -r .token)
+  -d '{"email":"vende@example.com","password":"secret123"}' | jq -r .token)
 
-CLIENT_TOKEN=$(curl -s -X POST "$BASE/auth/login" \
+BUYER=$(curl -s -X POST "$BASE/auth/login" \
   -H 'Content-Type: application/json' \
-  -d '{"email":"demo@example.com","password":"secret123"}' | jq -r .token)
+  -d '{"email":"compra@example.com","password":"secret123"}' | jq -r .token)
 ```
 
 Cada login devuelve (`200 OK`):
@@ -53,20 +49,21 @@ Cada login devuelve (`200 OK`):
 {"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."}
 ```
 
-## 3 · El admin crea un auto
+## 3 · El vendedor crea un auto
 
 ```sh
-curl -s -X POST "$BASE/admin/cars" \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
+curl -s -X POST "$BASE/seller/cars" \
+  -H "Authorization: Bearer $SELLER" \
   -H 'Content-Type: application/json' \
   -d '{"name":"Toyota Yaris","price_per_day":45000,"photo_url":"https://example.com/yaris.jpg"}'
 ```
 
-Recibido (`201 Created`):
+Recibido (`201 Created`) — el auto queda ligado a tu `owner_id`:
 
 ```json
 {
   "id":1,
+  "owner_id":4,
   "name":"Toyota Yaris",
   "photo_url":"https://example.com/yaris.jpg",
   "price_per_day":45000,
@@ -74,11 +71,11 @@ Recibido (`201 Created`):
 }
 ```
 
-## 4 · El cliente reserva
+## 4 · El comprador reserva
 
 ```sh
 curl -s -X POST "$BASE/reservations" \
-  -H "Authorization: Bearer $CLIENT_TOKEN" \
+  -H "Authorization: Bearer $BUYER" \
   -H 'Content-Type: application/json' \
   -d '{"car_id":1,"start_date":"2026-10-01","end_date":"2026-10-05"}'
 ```
@@ -95,6 +92,7 @@ Recibido (`201 Created`) — el pago todavía no existe, por eso va `omitempty`:
   "status":"pending",
   "car":{
     "id":1,
+    "owner_id":4,
     "name":"Toyota Yaris",
     "price_per_day":45000,
     "active":true
@@ -102,11 +100,11 @@ Recibido (`201 Created`) — el pago todavía no existe, por eso va `omitempty`:
 }
 ```
 
-## 5 · El cliente paga
+## 5 · El comprador paga
 
 ```sh
 curl -s -X POST "$BASE/reservations/1/payment" \
-  -H "Authorization: Bearer $CLIENT_TOKEN" \
+  -H "Authorization: Bearer $BUYER" \
   -H 'Content-Type: application/json' \
   -d '{"method":"pos","proof_url":"https://example.com/boleta.pdf"}'
 ```
@@ -129,15 +127,15 @@ Un segundo pago sobre la misma reserva falla (`409 Conflict`):
 {"error":"payment already recorded"}
 ```
 
-## 6 · El admin confirma
+## 6 · El vendedor confirma
 
 ```sh
-curl -s -X PATCH "$BASE/admin/reservations/1/confirm" \
-  -H "Authorization: Bearer $ADMIN_TOKEN"
+curl -s -X PATCH "$BASE/seller/reservations/1/confirm" \
+  -H "Authorization: Bearer $SELLER"
 ```
 
-Recibido (`200 OK`) — la reserva queda `confirmed` y el pago `approved`, todo en
-una transacción:
+Recibido (`200 OK`) — la reserva queda `confirmed` y el pago `approved`, todo
+en una transacción:
 
 ```json
 {
@@ -149,6 +147,7 @@ una transacción:
   "status":"confirmed",
   "car":{
     "id":1,
+    "owner_id":4,
     "name":"Toyota Yaris",
     "price_per_day":45000,
     "active":true
@@ -163,12 +162,24 @@ una transacción:
 }
 ```
 
+## Aislamiento entre vendedores
+
+`vende@example.com` no puede tocar los autos de otro vendedor:
+
+```sh
+# otro vendedor crea su auto y vos intentás desactivarlo
+curl -s -o /dev/null -w '%{http_code}\n' \
+  -X PATCH "$BASE/seller/cars/2" -H "Authorization: Bearer $SELLER" \
+  -H 'Content-Type: application/json' -d '{"active":false}'
+# → 404 {car not found} (existe pero no es tuyo)
+```
+
 ## Estado final
 
 - El auto 1 ya no aparece al listar con el rango reservado:
   `GET /cars?start_date=2026-10-01&end_date=2026-10-05` → `[]`.
-- `GET /reservations/1` con el token del cliente devuelve el mismo detalle
-  confirmado.
+- El vendedor ve sus reservas en `GET /seller/reservations`.
 - El mismo flujo está automatizado en `scripts/demo.sh` (`make demo`), que
   además comprueba hardening: body demasiado grande (`413`), fechas pasadas
-  (`400`), overlap (`409`) y rate limit sobre `/auth/*` (`429`).
+  (`400`), overlap (`409`), comprador sin permisos de vendedor (`403`) y rate
+  limit sobre `/auth/*` (`429`).

@@ -3,7 +3,7 @@
 ## Stack
 
 - **Go 1.26** con la librería estándar: `net/http` (con las rutas con `Method` y
-  placeholders, p. ej. `"PATCH /admin/cars/{id}"`), `database/sql` y `log/slog`.
+  placeholders, p. ej. `"PATCH /seller/cars/{id}"`), `database/sql` y `log/slog`.
 - **SQLite** embebido vía `modernc.org/sqlite` (implementación 100% Go, no
   requiere CGO ni binarios externos).
 - **JWT HS256** (`golang-jwt/jwt/v5`) y **bcrypt** (`golang.org/x/crypto`).
@@ -18,7 +18,7 @@ consultas son SQL directo.
 cmd/api/                  # main: configuración, servidor, middleware, graceful shutdown
 internal/
   config/                 # carga y validación de variables de entorno
-  db/                     # esquema SQLite, conexión, seed del admin, predicado de overlap
+  db/                     # esquema SQLite, conexión, migración versionada, predicado de overlap
   auth/                   # bcrypt, JWT, middleware de autenticación y roles
   models/                 # tipos de dominio compartidos (User, Car, Reservation, Payment)
   handlers/               # API, rutas, middleware HTTP y handlers por recurso
@@ -35,10 +35,11 @@ erDiagram
         int id PK
         text email UK
         text password_hash
-        text role "client | admin"
+        text role "buyer | seller"
     }
     cars {
         int id PK
+        int owner_id FK "usuario seller dueño"
         text name
         text photo_url
         int price_per_day "centavos, >= 0"
@@ -60,17 +61,23 @@ erDiagram
         text proof_url
     }
 
-    users ||--o{ reservations : "reserva"
-    cars ||--o{ reservations : "es reservada"
+    users ||--o{ reservations : "comprador reserva"
+    users ||--o{ cars : "vendedor publica"
+    cars ||--o{ reservations : "es reservado"
     reservations ||--o| payments : "tiene a lo sumo uno"
 ```
 
 Puntos clave del esquema (`internal/db/db.go`):
 
-- `users.email` es único; `role` solo admite `client` y `admin`.
+- `users.email` es único; `role` solo admite `buyer` (comprador) y `seller`
+  (vendedor). No existe cuenta admin global: cada vendedor es dueño de sus autos.
+- `cars.owner_id` apunta al `users.id` del vendedor que lo publica (NOT NULL).
 - `cars.price_per_day` está en **centavos** (entero) y no puede ser negativo.
 - `payments.reservation_id` es único: **una reserva tiene a lo sumo un pago**.
 - Las fechas son strings ISO `YYYY-MM-DD` en texto.
+- La base usa `PRAGMA user_version` (v2): si el archivo tiene un esquema viejo,
+  se reconstruye de forma destructiva al abrir. Como no hay datos de producción,
+  eso mantiene las bases de desarrollo funcionando tras un upgrade.
 
 ## Máquina de estados
 
@@ -78,21 +85,21 @@ Puntos clave del esquema (`internal/db/db.go`):
 stateDiagram-v2
     direction LR
     [*] --> pending: POST /reservations
-    pending --> confirmed: admin confirma (con pago)
+    pending --> confirmed: seller confirma (con pago)
     pending --> cancelled
     confirmed --> [*]
     cancelled --> [*]
 
     state "pago" as p {
         [*] --> pendingPay: POST /reservations/{id}/payment
-        pendingPay --> approved: admin confirma
+        pendingPay --> approved: seller confirma
         pendingPay --> rejected
     }
 ```
 
-- Una reserva nace en `pending`; el admin la confirma con `confirmed` tras
+- Una reserva nace en `pending`; el vendedor la confirma con `confirmed` tras
   aprobar el pago. La cancelación (`cancelled`) no se expone hoy vía API.
-- Un pago nace en `pending`; pasa a `approved` cuando el admin confirma la
+- Un pago nace en `pending`; pasa a `approved` cuando el vendedor confirma la
   reserva. Un pago `rejected` no tiene endpoint en el MVP.
 
 ## Reglas de dominio
@@ -117,18 +124,38 @@ Validaciones de entrada:
 
 Operaciones atómicas:
 
-- `POST /reservations` y `PATCH /admin/reservations/{id}/confirm` corren dentro
+- `POST /reservations` y `PATCH /seller/reservations/{id}/confirm` corren dentro
   de una transacción `BEGIN IMMEDIATE` (SQLite) para evitar carreras.
 
 ## Autenticación y autorización
 
+- El registro es público: `POST /auth/register` crea cuentas `buyer` y
+  `POST /auth/register/seller` cuentas `seller` (un vendedor gestiona **sus**
+  autos).
 - El login valida credenciales (bcrypt) y emite un **JWT HS256 de 24 h** con
   los claims `uid` (id de usuario) y `role`.
 - `Authorization: Bearer <token>` en toda ruta protegida.
 - Los middleware `RequireAuth` y `RequireRole` resuelven el usuario desde el
   token, lo cargan en la base y lo inyectan en el contexto de la request.
-- Las rutas de admin requieren el rol `admin`; la app usa el patrón
-  `Auth.RequireRole("admin", handler)` declarado en `Routes`.
+- Las rutas de vendedor usan `Auth.RequireRole("seller", handler)` declarado en
+  `Routes`, **y** verifican ownership por fila: `PATCH /seller/cars/{id}` y
+  `PATCH /seller/reservations/{id}/confirm` solo operan sobre autos del vendedor
+  autenticado (si no, `404`). `GET /reservations/{id}` habilita al vendedor
+  dueño del auto, además del comprador que reservó.
+
+### Permission matrix
+
+| Recurso | Comprador (`buyer`) | Vendedor (`seller`) | Anónimo |
+|---------|--------------------|--------------------|---------|
+| `GET /cars` | sí | sí | sí |
+| `POST /auth/register*`, `POST /auth/login` | sí | sí | sí |
+| `GET /seller/cars`, `POST /seller/cars` | no (403) | **solo sus autos** | no (401) |
+| `PATCH /seller/cars/{id}` | no (403) | **solo sus autos** | no (401) |
+| `POST /reservations`, `GET /reservations` | sí (sus reservas) | sí (si reserva) | no (401) |
+| `GET /reservations/{id}` | sus reservas | **dueño del auto** | no (401) |
+| `POST /reservations/{id}/payment` | **sus reservas** | su reserva | no (401) |
+| `GET /seller/reservations` | no (403) | **sus autos** | no (401) |
+| `PATCH /seller/reservations/{id}/confirm` | no (403) | **dueño del auto** | no (401) |
 
 ## Rate limiting
 

@@ -42,13 +42,15 @@ Herramientas instaladas: `air` y `golangci-lint` viven en `$(go env GOPATH)/bin`
 `bruno/pinolrent-api/` es una colección versionada y lista para correr:
 
 - `bruno/pinolrent-api/collection.bru` — define variables runtime
-  (`baseUrl`, `adminEmail`, `adminPassword`, `clientEmail`, `clientPassword`).
+  (`baseUrl`, `sellerEmail`, `sellerPassword`, `buyerEmail`, `buyerPassword`).
 - Los requests de login capturan el token automáticamente y lo guardan en
-  `adminToken`/`clientToken` con un `script:post-response`.
+  `sellerToken`/`buyerToken` con un `script:post-response`.
 - `carId` y `reservationId` se inyectan igual al crear el auto/la reserva.
 
 Corre la colección **en orden** (los requests dependen de los anteriores):
-Registrar cliente → Logins → Crear auto → Crear reserva → Registrar pago →
+Registrar comprador → Registrar vendedor → Login vendedor → Login comprador →
+Listar autos → Crear auto → Activar auto → Listar mis autos → Crear reserva →
+Mis reservas → Detalle reserva → Registrar pago → Reservas de mis autos →
 Confirmar reserva. Ajusta `baseUrl` si no es `http://localhost:8080`.
 
 ## Tests

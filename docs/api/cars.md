@@ -2,8 +2,8 @@
 
 ## `GET /cars`
 
-Lista los autos **activos**, opcionalmente excluyendo los ya reservados en un
-rango. Público.
+Lista los autos **activos** de todos los vendedores, opcionalmente excluyendo
+los ya reservados en un rango. Público.
 
 **Query params** (opcionales, van juntos o ninguno):
 
@@ -20,8 +20,8 @@ reservas `cancelled` no bloquean.
 
 ```json
 [
-  {"id":1,"name":"Toyota Yaris","photo_url":"https://...","price_per_day":45000,"active":true},
-  {"id":2,"name":"Fiat Cronos","price_per_day":38000,"active":true}
+  {"id":1,"owner_id":4,"name":"Toyota Yaris","photo_url":"https://...","price_per_day":45000,"active":true},
+  {"id":2,"owner_id":7,"name":"Fiat Cronos","price_per_day":38000,"active":true}
 ]
 ```
 
@@ -38,9 +38,26 @@ Sin resultados → `[]`.
 
 ---
 
-## `POST /admin/cars`
+## `GET /seller/cars`
 
-Da de alta un auto. Requiere rol `admin`.
+Lista los autos del vendedor autenticado, más nuevos primero. Requiere rol
+`seller`.
+
+**Respuesta** — `200 OK`:
+
+```json
+[
+  {"id":1,"owner_id":4,"name":"Toyota Yaris","price_per_day":45000,"active":true}
+]
+```
+
+Sin autos → `[]`.
+
+---
+
+## `POST /seller/cars`
+
+Da de alta un auto **propio**. Requiere rol `seller`.
 
 **Body:**
 
@@ -54,10 +71,10 @@ Da de alta un auto. Requiere rol `admin`.
 {"name":"Toyota Yaris","photo_url":"https://example.com/yaris.jpg","price_per_day":45000}
 ```
 
-**Respuesta** — `201 Created` (nace `active: true`):
+**Respuesta** — `201 Created` (nace `active: true`, con tu `owner_id`):
 
 ```json
-{"id":1,"name":"Toyota Yaris","photo_url":"https://example.com/yaris.jpg","price_per_day":45000,"active":true}
+{"id":1,"owner_id":4,"name":"Toyota Yaris","photo_url":"https://example.com/yaris.jpg","price_per_day":45000,"active":true}
 ```
 
 **Errores:**
@@ -72,9 +89,9 @@ Da de alta un auto. Requiere rol `admin`.
 
 ---
 
-## `PATCH /admin/cars/{id}`
+## `PATCH /seller/cars/{id}`
 
-Activa/inactiva un auto. Requiere rol `admin`.
+Activa/inactiva un auto **propio**. Requiere rol `seller`.
 
 **Body** (parcial; solo `active`):
 
@@ -85,7 +102,7 @@ Activa/inactiva un auto. Requiere rol `admin`.
 **Respuesta** — `200 OK` (el auto completo):
 
 ```json
-{"id":1,"name":"Toyota Yaris","photo_url":"https://example.com/yaris.jpg","price_per_day":45000,"active":false}
+{"id":1,"owner_id":4,"name":"Toyota Yaris","photo_url":"https://example.com/yaris.jpg","price_per_day":45000,"active":false}
 ```
 
 **Errores:**
@@ -94,7 +111,7 @@ Activa/inactiva un auto. Requiere rol `admin`.
 |--------|---------|--------|
 | `400` | `invalid car id` | `{id}` no es un entero |
 | `400` | `active is required` | Campo ausente (debe ser `true`/`false` explícito) |
-| `404` | `car not found` | No existe el auto |
+| `404` | `car not found` | No existe, **o** pertenece a otro vendedor (se oculta) |
 | `401` / `403` | ver [00-general](00-general.md) | Sin token / rol incorrecto |
 
 ---

@@ -2,7 +2,7 @@
 
 ## `POST /reservations/{id}/payment`
 
-Registra el pago de la reserva del cliente autenticado. Requiere rol `client`.
+Registra el pago de la reserva del comprador autenticado. Requiere login.
 
 **Body:**
 
@@ -15,8 +15,8 @@ Registra el pago de la reserva del cliente autenticado. Requiere rol `client`.
 {"method":"pos","proof_url":"https://example.com/boleta.pdf"}
 ```
 
-Reglas: la reserva debe existir y **pertenecer al cliente**; no puede estar
-`cancelled`; y no puede tener ya un pago (uno por reserva).
+Reglas: la reserva debe existir y **pertenecer al comprador autenticado**; no
+puede estar `cancelled`; y no puede tener ya un pago (uno por reserva).
 
 **Respuesta** — `201 Created` (nace `status: pending`):
 
@@ -37,7 +37,7 @@ Reglas: la reserva debe existir y **pertenecer al cliente**; no puede estar
 | `400` | `invalid reservation id` | `{id}` no es un entero |
 | `400` | `method must be pos or cash` | Método desconocido |
 | `400` | `invalid proof_url` | URL malformada o sin scheme `http(s)` |
-| `404` | `reservation not found` | No existe, **o** pertenece a otro cliente (se oculta) |
+| `404` | `reservation not found` | No existe, **o** pertenece a otro comprador (se oculta) |
 | `409` | `cancelled reservation cannot be paid` | La reserva está cancelada |
 | `409` | `payment already recorded` | La reserva ya tiene pago |
 | `400` | `invalid JSON body` | JSON malformado / campos desconocidos |
@@ -45,10 +45,11 @@ Reglas: la reserva debe existir y **pertenecer al cliente**; no puede estar
 
 ---
 
-## `PATCH /admin/reservations/{id}/confirm`
+## `PATCH /seller/reservations/{id}/confirm`
 
 Aprueba el pago y confirma la reserva, atomáticamente (transacción
-`BEGIN IMMEDIATE`). Requiere rol `admin`. Sin body.
+`BEGIN IMMEDIATE`). Requiere rol `seller` y que el auto de la reserva sea del
+vendedor autenticado. Sin body.
 
 Efectos: `payments.status` → `approved` y `reservations.status` → `confirmed`.
 
@@ -62,7 +63,7 @@ Efectos: `payments.status` → `approved` y `reservations.status` → `confirmed
   "start_date":"2026-10-01",
   "end_date":"2026-10-05",
   "status":"confirmed",
-  "car":{"id":1,"name":"Toyota Yaris","price_per_day":45000,"active":true},
+  "car":{"id":1,"owner_id":4,"name":"Toyota Yaris","price_per_day":45000,"active":true},
   "payment":{"id":1,"reservation_id":1,"method":"pos","status":"approved","proof_url":"https://..."}
 }
 ```
@@ -72,6 +73,6 @@ Efectos: `payments.status` → `approved` y `reservations.status` → `confirmed
 | Status | Mensaje | Cuándo |
 |--------|---------|--------|
 | `400` | `invalid reservation id` | `{id}` no es un entero |
-| `404` | `reservation not found` | No existe la reserva |
+| `404` | `reservation not found` | No existe, **o** el auto pertenece a otro vendedor (se oculta) |
 | `409` | `reservation is not pending` | Ya fue confirmada o cancelada |
 | `409` | `no payment recorded for this reservation` | No hay pago que aprobar |

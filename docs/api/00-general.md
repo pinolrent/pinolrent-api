@@ -17,8 +17,15 @@ Authorization: Bearer <token>
 ```
 
 El token se obtiene de `POST /auth/login` (ver [auth](auth.md)) y vence a las
-**24 h**. Los roles: `client` (rutas de reservas y pagos) y `admin` (rutas de
-admin).
+**24 h**.
+
+Roles:
+
+- **`buyer`** (comprador): registra reservas, paga y consulta sus reservas.
+- **`seller`** (vendedor): publica autos propios, activa/inactiva y confirma
+  reservas de **sus** autos. Se registra en `POST /auth/register/seller`.
+
+Un vendedor autenticado también puede reservar como comprador.
 
 Errores de autenticación:
 
@@ -39,8 +46,8 @@ Todos los errores siguen el mismo shape:
 
 - Los **400** se usan para validación de entrada y JSON inválido.
 - Los **409** se usan para conflictos de dominio (duplicado, overlap, estado inválido).
-- Los **404** ocultan recursos ajenos: un cliente nunca sabe si la reserva de otro
-  existe (devuelve `404` igual).
+- Los **404** ocultan recursos ajenos: un comprador no ve reservas de otros y un
+  vendedor no accede a autos o reservas de otro vendedor (devuelve `404` igual).
 
 ## Límites y rate limiting
 
@@ -57,25 +64,29 @@ Todos los errores siguen el mismo shape:
 |--------|------|------|-----------|
 | GET | `/health` | no | [auth](auth.md) |
 | POST | `/auth/register` | no | [auth](auth.md) |
+| POST | `/auth/register/seller` | no | [auth](auth.md) |
 | POST | `/auth/login` | no | [auth](auth.md) |
 | GET | `/cars` | no | [cars](cars.md) |
-| POST | `/admin/cars` | admin | [cars](cars.md) |
-| PATCH | `/admin/cars/{id}` | admin | [cars](cars.md) |
-| POST | `/reservations` | client | [reservations](reservations.md) |
-| GET | `/reservations` | client | [reservations](reservations.md) |
-| GET | `/reservations/{id}` | client/admin | [reservations](reservations.md) |
-| POST | `/reservations/{id}/payment` | client | [payments](payments.md) |
-| PATCH | `/admin/reservations/{id}/confirm` | admin | [payments](payments.md) |
+| GET | `/seller/cars` | seller | [cars](cars.md) |
+| POST | `/seller/cars` | seller | [cars](cars.md) |
+| PATCH | `/seller/cars/{id}` | seller | [cars](cars.md) |
+| POST | `/reservations` | buyer/seller | [reservations](reservations.md) |
+| GET | `/reservations` | buyer/seller | [reservations](reservations.md) |
+| GET | `/reservations/{id}` | buyer/seller | [reservations](reservations.md) |
+| POST | `/reservations/{id}/payment` | buyer/seller | [payments](payments.md) |
+| GET | `/seller/reservations` | seller | [payments](payments.md) |
+| PATCH | `/seller/reservations/{id}/confirm` | seller | [payments](payments.md) |
 
 ## Tipos compartidos
 
 **Car:**
 
 ```json
-{"id":1,"name":"Toyota Yaris","photo_url":"https://...","price_per_day":45000,"active":true}
+{"id":1,"owner_id":4,"name":"Toyota Yaris","photo_url":"https://...","price_per_day":45000,"active":true}
 ```
 
-`photo_url` se omite cuando está vacío.
+`photo_url` se omite cuando está vacío. `owner_id` es el id del vendedor que lo
+publicó.
 
 **Reservation view** (reserva con su auto y, si existe, su pago):
 

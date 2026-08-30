@@ -1,10 +1,11 @@
 # Reservas
 
-Todas las rutas de reserva requieren `Authorization: Bearer <token>`.
+Todas las rutas de reserva requieren `Authorization: Bearer <token>` (rol
+`buyer` o `seller`).
 
 ## `POST /reservations`
 
-Crea una reserva. Requiere rol `client`.
+Crea una reserva. Requiere login.
 
 **Body:**
 
@@ -20,7 +21,8 @@ Crea una reserva. Requiere rol `client`.
 
 La operación corre en una transacción (`BEGIN IMMEDIATE`): verifica que el auto
 exista y esté activo, que no solape con reservas `pending`/`confirmed` y
-rechaza con `409` si algo falla.
+rechaza con `409` si algo falla. Un vendedor también puede reservar el auto de
+otro.
 
 **Respuesta** — `201 Created` (reservation view; `payment` ausente):
 
@@ -32,7 +34,7 @@ rechaza con `409` si algo falla.
   "start_date":"2026-10-01",
   "end_date":"2026-10-05",
   "status":"pending",
-  "car":{"id":1,"name":"Toyota Yaris","price_per_day":45000,"active":true}
+  "car":{"id":1,"owner_id":4,"name":"Toyota Yaris","price_per_day":45000,"active":true}
 }
 ```
 
@@ -56,7 +58,7 @@ rechaza con `409` si algo falla.
 
 ## `GET /reservations`
 
-Lista las reservas del cliente autenticado, más recientes primero.
+Lista las reservas del comprador autenticado, más recientes primero.
 
 **Respuesta** — `200 OK`:
 
@@ -66,7 +68,7 @@ Lista las reservas del cliente autenticado, más recientes primero.
     "id":1,"user_id":3,"car_id":1,
     "start_date":"2026-10-01","end_date":"2026-10-05",
     "status":"confirmed",
-    "car":{"id":1,"name":"Toyota Yaris","price_per_day":45000,"active":true},
+    "car":{"id":1,"owner_id":4,"name":"Toyota Yaris","price_per_day":45000,"active":true},
     "payment":{"id":1,"reservation_id":1,"method":"pos","status":"approved","proof_url":"https://..."}
   }
 ]
@@ -78,8 +80,8 @@ Sin reservas → `[]`.
 
 ## `GET /reservations/{id}`
 
-Detalle de una reserva. Un `client` solo ve las suyas; un `admin` ve cualquier
-reserva.
+Detalle de una reserva. Un comprador solo ve las suyas; un vendedor ve las
+reservas de **sus** autos.
 
 **Respuesta** — `200 OK` (misma shape que el ejemplo anterior).
 
@@ -88,4 +90,13 @@ reserva.
 | Status | Mensaje | Cuándo |
 |--------|---------|--------|
 | `400` | `invalid reservation id` | `{id}` no es un entero |
-| `404` | `reservation not found` | No existe, **o** pertenece a otro cliente (se oculta) |
+| `404` | `reservation not found` | No existe, o no te pertenece ni al comprador ni al vendedor dueño (se oculta) |
+
+---
+
+## `GET /seller/reservations`
+
+Lista las reservas de los autos del vendedor autenticado, más recientes
+primero. Requiere rol `seller`.
+
+**Respuesta** — `200 OK` (array de reservation views). Sin reservas → `[]`.
