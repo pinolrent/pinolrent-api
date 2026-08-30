@@ -6,11 +6,15 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/pinolrent/pinolrent-api/internal/auth"
 	"github.com/pinolrent/pinolrent-api/internal/db"
 	"github.com/pinolrent/pinolrent-api/internal/models"
 )
+
+// maxRentalDays caps how long a single reservation may span.
+const maxRentalDays = 30
 
 type reservationView struct {
 	models.Reservation
@@ -87,6 +91,10 @@ func (a *API) CreateReservation(w http.ResponseWriter, r *http.Request) {
 	}
 	if end.Before(start) {
 		writeError(w, http.StatusBadRequest, "end_date must be on or after start_date")
+		return
+	}
+	if end.Sub(start) > maxRentalDays*24*time.Hour {
+		writeError(w, http.StatusBadRequest, "reservation cannot be longer than "+strconv.Itoa(maxRentalDays)+" days")
 		return
 	}
 	if start.Before(todayStart()) {
@@ -176,8 +184,14 @@ func (a *API) CreateReservation(w http.ResponseWriter, r *http.Request) {
 func (a *API) ListReservations(w http.ResponseWriter, r *http.Request) {
 	u, _ := auth.CurrentUser(r.Context())
 
+	limit, offset, errMsg := paginate(r)
+	if errMsg != "" {
+		writeError(w, http.StatusBadRequest, errMsg)
+		return
+	}
+
 	rows, err := a.DB.QueryContext(r.Context(), reservationSelect+`
-		WHERE r.user_id = ? ORDER BY r.id DESC`, u.ID)
+		WHERE r.user_id = ? ORDER BY r.id DESC LIMIT ? OFFSET ?`, u.ID, limit, offset)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -230,13 +244,76 @@ func (a *API) GetReservation(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, v)
 }
 
+// CancelReservation cancels the authenticated buyer's pending reservation, as
+// long as no payment has been recorded for it.
+func (a *API) CancelReservation(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.CurrentUser(r.Context())
+
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid reservation id")
+		return
+	}
+
+	var buyerID int64
+	var status string
+	err = a.DB.QueryRowContext(r.Context(),
+		`SELECT user_id, status FROM reservations WHERE id = ?`, id).Scan(&buyerID, &status)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "reservation not found")
+		return
+	}
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	if buyerID != u.ID {
+		writeError(w, http.StatusNotFound, "reservation not found")
+		return
+	}
+	if status != "pending" {
+		writeError(w, http.StatusConflict, "reservation is not pending")
+		return
+	}
+
+	var count int
+	if err := a.DB.QueryRowContext(r.Context(),
+		`SELECT COUNT(*) FROM payments WHERE reservation_id = ?`, id).Scan(&count); err != nil {
+		serverError(w, err)
+		return
+	}
+	if count > 0 {
+		writeError(w, http.StatusConflict, "payment already recorded, cannot cancel")
+		return
+	}
+
+	if _, err := a.DB.ExecContext(r.Context(),
+		`UPDATE reservations SET status = 'cancelled' WHERE id = ? AND user_id = ?`, id, u.ID); err != nil {
+		serverError(w, err)
+		return
+	}
+
+	v, err := a.reservationView(r.Context(), id)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
+}
+
 // ListSellerReservations returns the reservations for the authenticated
 // seller's cars, newest first.
 func (a *API) ListSellerReservations(w http.ResponseWriter, r *http.Request) {
 	u, _ := auth.CurrentUser(r.Context())
 
+	limit, offset, errMsg := paginate(r)
+	if errMsg != "" {
+		writeError(w, http.StatusBadRequest, errMsg)
+		return
+	}
+
 	rows, err := a.DB.QueryContext(r.Context(), reservationSelect+`
-		WHERE c.owner_id = ? ORDER BY r.id DESC`, u.ID)
+		WHERE c.owner_id = ? ORDER BY r.id DESC LIMIT ? OFFSET ?`, u.ID, limit, offset)
 	if err != nil {
 		serverError(w, err)
 		return

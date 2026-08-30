@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/pinolrent/pinolrent-api/internal/auth"
@@ -71,6 +72,32 @@ func writeBodyErr(w http.ResponseWriter, err error) {
 
 func isUniqueViolation(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed")
+}
+
+const (
+	defaultPageLimit = 50
+	maxPageLimit     = 200
+)
+
+// paginate extracts the limit/offset query params with defaults. It returns a
+// non-empty error message when the caller provided invalid values.
+func paginate(r *http.Request) (limit, offset int, errMsg string) {
+	limit = defaultPageLimit
+	if s := r.URL.Query().Get("limit"); s != "" {
+		n, err := strconv.Atoi(s)
+		if err != nil || n < 1 || n > maxPageLimit {
+			return 0, 0, "invalid limit"
+		}
+		limit = n
+	}
+	if s := r.URL.Query().Get("offset"); s != "" {
+		n, err := strconv.Atoi(s)
+		if err != nil || n < 0 {
+			return 0, 0, "invalid offset"
+		}
+		offset = n
+	}
+	return limit, offset, ""
 }
 
 func validURL(s string) bool {
