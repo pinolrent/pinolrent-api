@@ -87,6 +87,21 @@ Puntos clave del esquema (`internal/db/migrations/`):
   historial en `goose_db_version`; solo se aplican las pendientes y **los datos
   nunca se borran**.
 
+## SQLite y concurrencia
+
+- `db.Open` configura SQLite con **WAL**, `busy_timeout` de 5 s, `foreign_keys`
+  y un pool pequeño (8 conexiones, 1 en `:memory:`). Las escrituras se serializan
+  con `BEGIN IMMEDIATE`; SQLite también bloquea el caso de un auto reservado dos
+  veces en la misma carrera.
+- `synchronous=NORMAL` (recomendación de SQLite en WAL): un crash del proceso no
+  pierde nada; solo un corte de energía puede revertir la última transacción
+  commiteada (nunca corrupción).
+- `journal_size_limit` de 64 MiB acota el crecimiento del `-wal` entre
+  checkpoints.
+- `00002_perf.sql` crea los índices que las consultas dominantes recorren:
+  `cars(owner_id, id)`, `reservations(user_id, id)` y
+  `reservations(car_id, start_date, end_date)` (solapamiento de fechas).
+
 ## Máquina de estados
 
 ```mermaid

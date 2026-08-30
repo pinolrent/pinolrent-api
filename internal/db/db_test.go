@@ -24,6 +24,102 @@ func TestMigrationsApplied(t *testing.T) {
 	}
 }
 
+func TestPerfMigrationApplied(t *testing.T) {
+	d, err := Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = d.Close() })
+
+	var n int
+	if err := d.QueryRowContext(context.Background(),
+		`SELECT COUNT(*) FROM goose_db_version WHERE version_id = 2 AND is_applied = 1`).Scan(&n); err != nil {
+		t.Fatalf("goose_db_version: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("migration 00002 not applied: rows = %d, want 1", n)
+	}
+}
+
+func TestIndexesExist(t *testing.T) {
+	d, err := Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = d.Close() })
+
+	want := map[string]bool{
+		"idx_cars_owner":             false,
+		"idx_reservations_user":      false,
+		"idx_reservations_car_dates": false,
+	}
+	for _, table := range []string{"cars", "reservations"} {
+		rows, err := d.QueryContext(context.Background(),
+			`SELECT name FROM pragma_index_list(?)`, table)
+		if err != nil {
+			t.Fatalf("index_list(%s): %v", table, err)
+		}
+		for rows.Next() {
+			var name string
+			if err := rows.Scan(&name); err != nil {
+				t.Fatalf("scan: %v", err)
+			}
+			if _, ok := want[name]; ok {
+				want[name] = true
+			}
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatalf("rows: %v", err)
+		}
+		_ = rows.Close()
+	}
+	for name, found := range want {
+		if !found {
+			t.Fatalf("missing index %q", name)
+		}
+	}
+}
+
+func TestPragmasConfigured(t *testing.T) {
+	d, err := Open(filepath.Join(t.TempDir(), "pragmas.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = d.Close() })
+
+	readint := func(pragma string) int {
+		t.Helper()
+		var v int
+		if err := d.QueryRowContext(context.Background(),
+			`PRAGMA `+pragma).Scan(&v); err != nil {
+			t.Fatalf("PRAGMA %s: %v", pragma, err)
+		}
+		return v
+	}
+
+	if v := readint("journal_size_limit"); v != 67108864 {
+		t.Fatalf("journal_size_limit = %d, want 67108864", v)
+	}
+	if v := readint("synchronous"); v != 1 {
+		t.Fatalf("synchronous = %d, want 1 (NORMAL)", v)
+	}
+	if v := readint("busy_timeout"); v != 5000 {
+		t.Fatalf("busy_timeout = %d, want 5000", v)
+	}
+	if v := readint("foreign_keys"); v != 1 {
+		t.Fatalf("foreign_keys = %d, want 1", v)
+	}
+
+	var mode string
+	if err := d.QueryRowContext(context.Background(),
+		`PRAGMA journal_mode`).Scan(&mode); err != nil {
+		t.Fatalf("PRAGMA journal_mode: %v", err)
+	}
+	if mode != "wal" {
+		t.Fatalf("journal_mode = %q, want wal", mode)
+	}
+}
+
 func TestSchemaHasOwnerID(t *testing.T) {
 	d, err := Open(":memory:")
 	if err != nil {
@@ -73,6 +169,7 @@ CREATE TABLE users (
 );
 CREATE TABLE cars (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	owner_id INTEGER NOT NULL REFERENCES users(id),
 	name TEXT NOT NULL,
 	photo_url TEXT NOT NULL DEFAULT '',
 	price_per_day INTEGER NOT NULL CHECK (price_per_day >= 0),

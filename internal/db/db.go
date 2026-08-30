@@ -24,14 +24,15 @@ var migrationsFS embed.FS
 
 // Open returns a SQLite database pool configured for the connection URL.
 // In-memory databases are limited to a single connection; file databases use
-// WAL mode with a small pool and a 5s busy timeout.
+// WAL mode with NORMAL synchronous commits, a bounded WAL, a small pool and a
+// 5s busy timeout.
 func Open(url string) (*sql.DB, error) {
 	mem := url == ":memory:"
 	var dsn string
 	if mem {
 		dsn = "file::memory:?cache=shared"
 	} else {
-		dsn = fmt.Sprintf("file:%s?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)", url)
+		dsn = fmt.Sprintf("file:%s?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=journal_size_limit(67108864)", url)
 	}
 
 	d, err := sql.Open("sqlite", dsn)
