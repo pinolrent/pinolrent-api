@@ -1,58 +1,26 @@
-// Package db provides the SQLite schema, connection setup, and versioned
-// migration used at server startup.
+// Package db provides the SQLite connection setup and the goose migrations
+// applied at server startup.
 package db
 
 import (
 	"context"
 	"database/sql"
+	"embed"
 	"fmt"
+	"io/fs"
+	"log/slog"
+	"time"
 
 	// Blank import to register the modernc.org/sqlite driver with database/sql.
 	_ "modernc.org/sqlite"
+
+	"github.com/pressly/goose/v3"
 )
 
-// schemaVersion is the current database schema version, tracked via PRAGMA
-// user_version. Versions older than this are rebuilt destructively by migrate.
-const schemaVersion = 2
-
-const schema = `
-CREATE TABLE IF NOT EXISTS users (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	email TEXT NOT NULL UNIQUE,
-	password_hash TEXT NOT NULL,
-	role TEXT NOT NULL DEFAULT 'buyer' CHECK (role IN ('buyer','seller')),
-	created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS cars (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	owner_id INTEGER NOT NULL REFERENCES users(id),
-	name TEXT NOT NULL,
-	photo_url TEXT NOT NULL DEFAULT '',
-	price_per_day INTEGER NOT NULL CHECK (price_per_day >= 0),
-	active INTEGER NOT NULL DEFAULT 1,
-	created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS reservations (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	user_id INTEGER NOT NULL REFERENCES users(id),
-	car_id INTEGER NOT NULL REFERENCES cars(id),
-	start_date TEXT NOT NULL,
-	end_date TEXT NOT NULL,
-	status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','confirmed','cancelled')),
-	created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS payments (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	reservation_id INTEGER NOT NULL UNIQUE REFERENCES reservations(id),
-	method TEXT NOT NULL CHECK (method IN ('pos','cash')),
-	status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
-	proof_url TEXT NOT NULL DEFAULT '',
-	created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-`
+// migrationsFS embeds the versioned SQL migrations applied by migrate.
+//
+//go:embed migrations/*.sql
+var migrationsFS embed.FS
 
 // Open returns a SQLite database pool configured for the connection URL.
 // In-memory databases are limited to a single connection; file databases use
@@ -84,39 +52,28 @@ func Open(url string) (*sql.DB, error) {
 	return d, nil
 }
 
-// migrate brings the database up to schemaVersion. Databases with an older
-// schema are rebuilt: the schema predates any production data, so a destructive
-// rebuild keeps local development databases working. Fresh databases (version
-// 0 with no tables) just run the CREATE statements.
+// migrate brings the database schema up to date with the goose migrations
+// embedded in the binary. Only pending migrations are applied; existing data
+// is never dropped, unlike the destructive rebuild of earlier versions.
 func migrate(d *sql.DB) error {
-	ctx := context.Background()
+	sub, err := fs.Sub(migrationsFS, "migrations")
+	if err != nil {
+		return fmt.Errorf("migrate: embed migrations: %w", err)
+	}
+	prov, err := goose.NewProvider(goose.DialectSQLite3, d, sub)
+	if err != nil {
+		return fmt.Errorf("migrate: provider: %w", err)
+	}
 
-	var v int
-	if err := d.QueryRowContext(ctx, `PRAGMA user_version`).Scan(&v); err != nil {
-		return fmt.Errorf("migrate: read version: %w", err)
-	}
-	if v >= schemaVersion {
-		return nil
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
-	if v > 0 {
-		fmt.Printf("migrate: rebuilding database schema v%d -> v%d\n", v, schemaVersion)
-	}
-	for _, stmt := range []string{
-		`DROP TABLE IF EXISTS payments`,
-		`DROP TABLE IF EXISTS reservations`,
-		`DROP TABLE IF EXISTS cars`,
-		`DROP TABLE IF EXISTS users`,
-	} {
-		if _, err := d.ExecContext(ctx, stmt); err != nil {
-			return fmt.Errorf("migrate: %w", err)
-		}
-	}
-	if _, err := d.ExecContext(ctx, schema); err != nil {
+	applied, err := prov.Up(ctx)
+	if err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
-	if _, err := d.ExecContext(ctx, fmt.Sprintf(`PRAGMA user_version = %d`, schemaVersion)); err != nil {
-		return fmt.Errorf("migrate: set version: %w", err)
+	for _, m := range applied {
+		slog.Info("migration applied", "version", m.Source.Version, "path", m.Source.Path)
 	}
 	return nil
 }

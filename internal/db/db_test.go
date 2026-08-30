@@ -7,19 +7,20 @@ import (
 	"testing"
 )
 
-func TestSchemaVersion(t *testing.T) {
+func TestMigrationsApplied(t *testing.T) {
 	d, err := Open(":memory:")
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
 	t.Cleanup(func() { _ = d.Close() })
 
-	var v int
-	if err := d.QueryRowContext(context.Background(), `PRAGMA user_version`).Scan(&v); err != nil {
-		t.Fatalf("user_version: %v", err)
+	var n int
+	if err := d.QueryRowContext(context.Background(),
+		`SELECT COUNT(*) FROM goose_db_version WHERE version_id = 1 AND is_applied = 1`).Scan(&n); err != nil {
+		t.Fatalf("goose_db_version: %v", err)
 	}
-	if v != schemaVersion {
-		t.Fatalf("user_version = %d, want %d", v, schemaVersion)
+	if n != 1 {
+		t.Fatalf("migration 00001 not applied: rows = %d, want 1", n)
 	}
 }
 
@@ -56,7 +57,7 @@ func TestSchemaHasOwnerID(t *testing.T) {
 	}
 }
 
-func TestMigrateLegacySchema(t *testing.T) {
+func TestMigrateLegacySchemaKeepsData(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "legacy.db")
 	legacy, err := sql.Open("sqlite", "file:"+path)
 	if err != nil {
@@ -109,20 +110,21 @@ INSERT INTO users (email, password_hash, role) VALUES ('admin@example.com', 'h',
 	}
 	t.Cleanup(func() { _ = d.Close() })
 
-	var v int
-	if err := d.QueryRowContext(context.Background(), `PRAGMA user_version`).Scan(&v); err != nil {
-		t.Fatalf("user_version: %v", err)
+	var n int
+	if err := d.QueryRowContext(context.Background(),
+		`SELECT COUNT(*) FROM goose_db_version WHERE version_id = 1 AND is_applied = 1`).Scan(&n); err != nil {
+		t.Fatalf("goose_db_version: %v", err)
 	}
-	if v != schemaVersion {
-		t.Fatalf("user_version = %d, want %d", v, schemaVersion)
+	if n != 1 {
+		t.Fatalf("migration 00001 not applied: rows = %d, want 1", n)
 	}
 
-	var n int
+	// Migrations must be non-destructive: legacy rows survive the upgrade.
 	if err := d.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM users`).Scan(&n); err != nil {
 		t.Fatalf("count users: %v", err)
 	}
-	if n != 0 {
-		t.Fatalf("legacy rows kept after rebuild: users = %d, want 0", n)
+	if n != 1 {
+		t.Fatalf("legacy rows lost after migrate: users = %d, want 1", n)
 	}
 }
 
