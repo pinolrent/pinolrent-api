@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/pinolrent/pinolrent-api/internal/auth"
 	"github.com/pinolrent/pinolrent-api/internal/models"
 )
 
@@ -14,6 +15,16 @@ var emailRe = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
 // Health reports that the server is up.
 func (a *API) Health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// Me returns the authenticated user's public profile.
+func (a *API) Me(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.CurrentUser(r.Context())
+	writeJSON(w, http.StatusOK, map[string]any{
+		"id":    u.ID,
+		"email": u.Email,
+		"role":  u.Role,
+	})
 }
 
 // Register creates a new buyer account.

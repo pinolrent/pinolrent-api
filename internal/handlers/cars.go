@@ -18,8 +18,8 @@ const maxPricePerDay = 100_000_000
 
 const carColumns = "id, owner_id, name, photo_url, price_per_day, active"
 
-// ListCars returns active cars, optionally excluding those already reserved
-// in the [start_date, end_date] range.
+// ListCars returns active cars, optionally filtered by owner and excluding
+// those already reserved in the [start_date, end_date] range.
 func (a *API) ListCars(w http.ResponseWriter, r *http.Request) {
 	startStr := r.URL.Query().Get("start_date")
 	endStr := r.URL.Query().Get("end_date")
@@ -29,10 +29,35 @@ func (a *API) ListCars(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	limit, offset, errMsg := paginate(r)
+	if errMsg != "" {
+		writeError(w, http.StatusBadRequest, errMsg)
+		return
+	}
+
+	ownerCond := ""
+	var ownerID int64
+	if s := r.URL.Query().Get("owner_id"); s != "" {
+		n, err := strconv.ParseInt(s, 10, 64)
+		if err != nil || n < 1 {
+			writeError(w, http.StatusBadRequest, "invalid owner_id")
+			return
+		}
+		ownerID = n
+		ownerCond = " AND c.owner_id = ?"
+	}
+
 	var cars []models.Car
 	if startStr == "" {
+		args := []any{limit, offset}
+		if ownerCond != "" {
+			args = append([]any{ownerID}, args...)
+		}
+		// #nosec G202 -- ownerCond/carColumns are fixed internal fragments,
+		// not user input; owner_id is bound as a parameter.
 		rows, err := a.DB.QueryContext(r.Context(),
-			`SELECT `+carColumns+` FROM cars WHERE active = 1 ORDER BY id`)
+			`SELECT c.`+carColumns+` FROM cars c WHERE c.active = 1`+ownerCond+` ORDER BY c.id LIMIT ? OFFSET ?`,
+			args...)
 		if err != nil {
 			serverError(w, err)
 			return
@@ -58,19 +83,25 @@ func (a *API) ListCars(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// #nosec G202 -- db.OverlapPredicate is a fixed internal SQL fragment,
-		// not user input.
+		args := make([]any, 0, 5)
+		if ownerCond != "" {
+			args = append(args, ownerID)
+		}
+		args = append(args, endStr, startStr, limit, offset)
+
+		// #nosec G202 -- db.OverlapPredicate, ownerCond and carColumns are fixed
+		// internal SQL fragments, not user input; the values are bound params.
 		rows, err := a.DB.QueryContext(r.Context(), `
 			SELECT c.`+carColumns+`
 			FROM cars c
-			WHERE c.active = 1
+			WHERE c.active = 1`+ownerCond+`
 			AND NOT EXISTS (
 				SELECT 1 FROM reservations r
 				WHERE r.car_id = c.id
 					AND r.status != 'cancelled'
 					AND `+db.OverlapPredicate+`
 			)
-			ORDER BY c.id`, endStr, startStr)
+			ORDER BY c.id LIMIT ? OFFSET ?`, args...)
 		if err != nil {
 			serverError(w, err)
 			return
@@ -143,8 +174,15 @@ func (a *API) CreateCar(w http.ResponseWriter, r *http.Request) {
 func (a *API) ListMyCars(w http.ResponseWriter, r *http.Request) {
 	u, _ := auth.CurrentUser(r.Context())
 
+	limit, offset, errMsg := paginate(r)
+	if errMsg != "" {
+		writeError(w, http.StatusBadRequest, errMsg)
+		return
+	}
+
 	rows, err := a.DB.QueryContext(r.Context(),
-		`SELECT `+carColumns+` FROM cars WHERE owner_id = ? ORDER BY id DESC`, u.ID)
+		`SELECT `+carColumns+` FROM cars WHERE owner_id = ? ORDER BY id DESC LIMIT ? OFFSET ?`,
+		u.ID, limit, offset)
 	if err != nil {
 		serverError(w, err)
 		return
