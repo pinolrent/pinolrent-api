@@ -1,3 +1,6 @@
+// Package auth provides bcrypt password hashing, JWT signing/validation, and
+// HTTP middleware that identifies the current user from the Authorization
+// header.
 package auth
 
 import (
@@ -16,30 +19,37 @@ import (
 	"github.com/pinolrent/pinolrent-api/internal/models"
 )
 
+// Auth signs and validates HS256 JWTs and provides HTTP auth middleware.
 type Auth struct {
 	secret []byte
 	db     *sql.DB
 }
 
+// New returns an Auth that signs tokens with the given secret and looks up
+// users in the provided database.
 func New(secret string, d *sql.DB) *Auth {
 	return &Auth{secret: []byte(secret), db: d}
 }
 
+// Claims is the JWT payload carried by issued tokens.
 type Claims struct {
 	UserID int64  `json:"uid"`
 	Role   string `json:"role"`
 	jwt.RegisteredClaims
 }
 
+// HashPassword returns the bcrypt hash of pw.
 func (a *Auth) HashPassword(pw string) (string, error) {
 	b, err := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.DefaultCost)
 	return string(b), err
 }
 
+// CheckPassword reports whether pw matches the given bcrypt hash.
 func (a *Auth) CheckPassword(hash, pw string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(pw)) == nil
 }
 
+// SignToken issues a signed token for the user, valid for 24 hours.
 func (a *Auth) SignToken(u *models.User) (string, error) {
 	claims := Claims{
 		UserID: u.ID,
@@ -71,11 +81,14 @@ type ctxKey int
 
 const userKey ctxKey = 0
 
+// CurrentUser returns the user stored in the request context, if any.
 func CurrentUser(ctx context.Context) (*models.User, bool) {
 	u, ok := ctx.Value(userKey).(*models.User)
 	return u, ok
 }
 
+// RequireAuth wraps a handler so it only runs for valid, non-expired tokens.
+// The authenticated user is added to the request context.
 func (a *Auth) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
@@ -91,7 +104,8 @@ func (a *Auth) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 		}
 
 		var u models.User
-		err = a.db.QueryRow(`SELECT id, email, password_hash, role FROM users WHERE id = ?`, claims.UserID).
+		err = a.db.QueryRowContext(r.Context(),
+			`SELECT id, email, password_hash, role FROM users WHERE id = ?`, claims.UserID).
 			Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role)
 		if err != nil {
 			writeError(w, http.StatusUnauthorized, "user not found")
@@ -103,6 +117,8 @@ func (a *Auth) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// RequireRole wraps a handler so it only runs for authenticated users with the
+// given role.
 func (a *Auth) RequireRole(role string, next http.HandlerFunc) http.HandlerFunc {
 	return a.RequireAuth(func(w http.ResponseWriter, r *http.Request) {
 		u, ok := CurrentUser(r.Context())

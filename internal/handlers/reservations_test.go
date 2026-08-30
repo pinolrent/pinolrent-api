@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"testing"
 
@@ -125,7 +126,7 @@ func TestCreateReservationAllowsCancelled(t *testing.T) {
 	car := seedCar(t, a)
 	token := registerClient(t, a, "user@example.com", "secret123")
 
-	if _, err := a.DB.Exec(
+	if _, err := a.DB.ExecContext(context.Background(),
 		`INSERT INTO reservations (user_id, car_id, start_date, end_date, status) VALUES (1, ?, '2026-09-10', '2026-09-12', 'cancelled')`, car.ID,
 	); err != nil {
 		t.Fatalf("seed cancelled: %v", err)

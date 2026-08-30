@@ -1,3 +1,5 @@
+// Package ratelimit provides a simple in-memory token bucket rate limiter
+// keyed by client IP.
 package ratelimit
 
 import (
@@ -13,6 +15,7 @@ type bucket struct {
 	last   time.Time
 }
 
+// Limiter is a token bucket rate limiter with per-key refill and expiry.
 type Limiter struct {
 	mu       sync.Mutex
 	rate     float64
@@ -23,6 +26,8 @@ type Limiter struct {
 	tokenTTL time.Duration
 }
 
+// New returns a Limiter that refills at the given tokens-per-second rate with
+// the given burst capacity for each key.
 func New(rate float64, burst int) *Limiter {
 	return &Limiter{
 		rate:     rate,
@@ -34,6 +39,8 @@ func New(rate float64, burst int) *Limiter {
 	}
 }
 
+// Allow consumes a token for the key and reports whether the request is
+// within the limit.
 func (l *Limiter) Allow(key string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -66,6 +73,8 @@ func (l *Limiter) gc(now time.Time) {
 	}
 }
 
+// Middleware wraps a handler and rate-limits requests whose path starts with
+// any of the given prefixes, returning 429 when over the limit.
 func (l *Limiter) Middleware(next http.Handler, limitPaths ...string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if matchesPrefix(r.URL.Path, limitPaths) {

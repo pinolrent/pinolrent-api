@@ -12,6 +12,7 @@ import (
 
 var validMethods = map[string]bool{"pos": true, "cash": true}
 
+// RecordPayment records a single pending payment for the client's reservation.
 func (a *API) RecordPayment(w http.ResponseWriter, r *http.Request) {
 	u, _ := auth.CurrentUser(r.Context())
 
@@ -40,7 +41,8 @@ func (a *API) RecordPayment(w http.ResponseWriter, r *http.Request) {
 
 	var ownerID int64
 	var status string
-	err = a.DB.QueryRow(`SELECT user_id, status FROM reservations WHERE id = ?`, id).Scan(&ownerID, &status)
+	err = a.DB.QueryRowContext(r.Context(),
+		`SELECT user_id, status FROM reservations WHERE id = ?`, id).Scan(&ownerID, &status)
 	if errors.Is(err, sql.ErrNoRows) {
 		writeError(w, http.StatusNotFound, "reservation not found")
 		return
@@ -59,7 +61,8 @@ func (a *API) RecordPayment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var count int
-	if err := a.DB.QueryRow(`SELECT COUNT(*) FROM payments WHERE reservation_id = ?`, id).Scan(&count); err != nil {
+	if err := a.DB.QueryRowContext(r.Context(),
+		`SELECT COUNT(*) FROM payments WHERE reservation_id = ?`, id).Scan(&count); err != nil {
 		serverError(w, err)
 		return
 	}
@@ -68,7 +71,8 @@ func (a *API) RecordPayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := a.DB.Exec(`INSERT INTO payments (reservation_id, method, proof_url) VALUES (?, ?, ?)`,
+	res, err := a.DB.ExecContext(r.Context(),
+		`INSERT INTO payments (reservation_id, method, proof_url) VALUES (?, ?, ?)`,
 		id, in.Method, in.ProofURL)
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -89,6 +93,8 @@ func (a *API) RecordPayment(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ConfirmReservation approves the reservation payment and marks the
+// reservation as confirmed, atomically.
 func (a *API) ConfirmReservation(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
@@ -102,7 +108,7 @@ func (a *API) ConfirmReservation(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	if _, err := conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
 		serverError(w, err)
@@ -157,7 +163,7 @@ func (a *API) ConfirmReservation(w http.ResponseWriter, r *http.Request) {
 	committed = true
 	_ = conn.Close()
 
-	v, err := a.reservationView(id)
+	v, err := a.reservationView(r.Context(), id)
 	if err != nil {
 		serverError(w, err)
 		return

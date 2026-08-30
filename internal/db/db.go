@@ -1,11 +1,15 @@
+// Package db provides the SQLite schema, connection setup, and admin seeding
+// used at server startup.
 package db
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 
 	"golang.org/x/crypto/bcrypt"
+	// Blank import to register the modernc.org/sqlite driver with database/sql.
 	_ "modernc.org/sqlite"
 )
 
@@ -47,9 +51,12 @@ CREATE TABLE IF NOT EXISTS payments (
 );
 `
 
+// Open returns a SQLite database pool configured for the connection URL.
+// In-memory databases are limited to a single connection; file databases use
+// WAL mode with a small pool and a 5s busy timeout.
 func Open(url string) (*sql.DB, error) {
-	dsn := url
 	mem := url == ":memory:"
+	var dsn string
 	if mem {
 		dsn = "file::memory:?cache=shared"
 	} else {
@@ -67,24 +74,20 @@ func Open(url string) (*sql.DB, error) {
 		d.SetMaxIdleConns(8)
 	}
 
-	if _, err := d.Exec(schema); err != nil {
-		d.Close()
+	if _, err := d.ExecContext(context.Background(), schema); err != nil {
+		_ = d.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 	return d, nil
 }
 
+// OverlapPredicate is a SQL fragment that detects overlapping reservations
+// over a range [start, end]. The reservations table must be aliased as r.
 const OverlapPredicate = "r.start_date <= ? AND r.end_date >= ?"
 
-func ReservationOverlaps(d *sql.DB, carID int64, start, end string) (bool, error) {
-	var n int
-	err := d.QueryRow(`
-		SELECT COUNT(*) FROM reservations
-		WHERE car_id = ? AND status != 'cancelled'
-			AND `+OverlapPredicate, carID, end, start).Scan(&n)
-	return n > 0, err
-}
-
+// SeedAdmin creates the admin user with the given email and password if it
+// does not exist, or updates its password when it already exists. It returns
+// an error when the email belongs to an existing non-admin account.
 func SeedAdmin(d *sql.DB, email, password string) error {
 	if email == "" || password == "" {
 		return nil
@@ -95,10 +98,11 @@ func SeedAdmin(d *sql.DB, email, password string) error {
 		return err
 	}
 
+	ctx := context.Background()
 	var role string
-	err = d.QueryRow(`SELECT role FROM users WHERE email = ?`, email).Scan(&role)
+	err = d.QueryRowContext(ctx, `SELECT role FROM users WHERE email = ?`, email).Scan(&role)
 	if errors.Is(err, sql.ErrNoRows) {
-		_, err = d.Exec(`INSERT INTO users (email, password_hash, role) VALUES (?, ?, 'admin')`, email, string(hash))
+		_, err = d.ExecContext(ctx, `INSERT INTO users (email, password_hash, role) VALUES (?, ?, 'admin')`, email, string(hash))
 		return err
 	}
 	if err != nil {
@@ -108,6 +112,6 @@ func SeedAdmin(d *sql.DB, email, password string) error {
 		return fmt.Errorf("ADMIN_EMAIL %q conflicts with an existing %s account", email, role)
 	}
 
-	_, err = d.Exec(`UPDATE users SET password_hash = ? WHERE email = ? AND role = 'admin'`, string(hash), email)
+	_, err = d.ExecContext(ctx, `UPDATE users SET password_hash = ? WHERE email = ? AND role = 'admin'`, string(hash), email)
 	return err
 }

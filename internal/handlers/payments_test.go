@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"testing"
 
@@ -112,7 +113,7 @@ func TestRecordPaymentCancelled(t *testing.T) {
 		"car_id": car.ID, "start_date": "2026-10-01", "end_date": "2026-10-03",
 	})
 
-	if _, err := a.DB.Exec(`UPDATE reservations SET status = 'cancelled' WHERE id = ?`, v.ID); err != nil {
+	if _, err := a.DB.ExecContext(context.Background(), `UPDATE reservations SET status = 'cancelled' WHERE id = ?`, v.ID); err != nil {
 		t.Fatalf("cancel: %v", err)
 	}
 

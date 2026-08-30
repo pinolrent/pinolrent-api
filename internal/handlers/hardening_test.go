@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -22,7 +23,7 @@ func TestCreateReservationConcurrent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
-	t.Cleanup(func() { d.Close() })
+	t.Cleanup(func() { _ = d.Close() })
 
 	if err := db.SeedAdmin(d, "admin@pinolrent.com", "admin123"); err != nil {
 		t.Fatalf("seed admin: %v", err)
@@ -90,11 +91,11 @@ func TestRequireAuthExpired(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle("GET /auth/me", a.Auth.RequireAuth(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("GET /auth/me", a.Auth.RequireAuth(func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
 	}))
 
-	req := httptest.NewRequest("GET", "/auth/me", nil)
+	req := httptest.NewRequestWithContext(context.Background(), "GET", "/auth/me", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -133,7 +134,7 @@ func TestBodyTooLarge(t *testing.T) {
 	buf.WriteString(strings.Repeat("x", maxBodyBytes))
 	buf.WriteString(`@example.com","password":"secret123"}`)
 
-	req := httptest.NewRequest("POST", "/auth/register", &buf)
+	req := httptest.NewRequestWithContext(context.Background(), "POST", "/auth/register", &buf)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	Routes(a).ServeHTTP(rec, req)

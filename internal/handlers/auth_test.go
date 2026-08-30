@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -139,7 +140,7 @@ func TestRequireAuth(t *testing.T) {
 	}))
 
 	serve := func(method, path, token string) *httptest.ResponseRecorder {
-		req := httptest.NewRequest(method, path, nil)
+		req := httptest.NewRequestWithContext(context.Background(), method, path, nil)
 		if token != "" {
 			req.Header.Set("Authorization", "Bearer "+token)
 		}
@@ -174,12 +175,12 @@ func TestRequireRole(t *testing.T) {
 	a := newTestAPI(t)
 
 	mux := http.NewServeMux()
-	mux.Handle("GET /admin/probe", a.Auth.RequireRole("admin", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("GET /admin/probe", a.Auth.RequireRole("admin", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
 	}))
 
 	serve := func(token string) *httptest.ResponseRecorder {
-		req := httptest.NewRequest("GET", "/admin/probe", nil)
+		req := httptest.NewRequestWithContext(context.Background(), "GET", "/admin/probe", nil)
 		req.Header.Set("Authorization", "Bearer "+token)
 		rec := httptest.NewRecorder()
 		mux.ServeHTTP(rec, req)

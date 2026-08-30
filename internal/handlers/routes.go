@@ -2,6 +2,7 @@ package handlers
 
 import "net/http"
 
+// Routes returns the HTTP mux with all endpoints registered.
 func Routes(a *API) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", a.Health)

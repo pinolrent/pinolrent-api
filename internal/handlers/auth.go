@@ -11,10 +11,12 @@ import (
 
 var emailRe = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
 
-func (a *API) Health(w http.ResponseWriter, r *http.Request) {
+// Health reports that the server is up.
+func (a *API) Health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// Register creates a new client account.
 func (a *API) Register(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Email    string `json:"email"`
@@ -41,7 +43,8 @@ func (a *API) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := a.DB.Exec(`INSERT INTO users (email, password_hash, role) VALUES (?, ?, 'client')`, in.Email, hash)
+	res, err := a.DB.ExecContext(r.Context(),
+		`INSERT INTO users (email, password_hash, role) VALUES (?, ?, 'client')`, in.Email, hash)
 	if err != nil {
 		if isUniqueViolation(err) {
 			writeError(w, http.StatusConflict, "email already registered")
@@ -55,6 +58,7 @@ func (a *API) Register(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]any{"id": id, "email": in.Email})
 }
 
+// Login validates credentials and returns a signed token.
 func (a *API) Login(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Email    string `json:"email"`
@@ -66,7 +70,9 @@ func (a *API) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var u models.User
-	err := a.DB.QueryRow(`SELECT id, email, password_hash, role FROM users WHERE email = ?`, strings.ToLower(strings.TrimSpace(in.Email))).
+	err := a.DB.QueryRowContext(r.Context(),
+		`SELECT id, email, password_hash, role FROM users WHERE email = ?`,
+		strings.ToLower(strings.TrimSpace(in.Email))).
 		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role)
 	if err == sql.ErrNoRows {
 		writeError(w, http.StatusUnauthorized, "invalid credentials")

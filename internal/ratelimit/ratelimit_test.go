@@ -1,6 +1,7 @@
 package ratelimit
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -48,12 +49,12 @@ func TestAllowIsPerKey(t *testing.T) {
 
 func TestMiddleware(t *testing.T) {
 	l := New(100, 2)
-	h := l.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	h := l.Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}), "/auth/")
 
 	do := func(path string) int {
-		req := httptest.NewRequest("GET", path, nil)
+		req := httptest.NewRequestWithContext(context.Background(), "GET", path, nil)
 		req.RemoteAddr = "10.0.0.1:1234"
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, req)

@@ -1,3 +1,4 @@
+// Package config loads the server configuration from environment variables.
 package config
 
 import (
@@ -6,6 +7,7 @@ import (
 	"strings"
 )
 
+// Config holds all runtime settings for the server.
 type Config struct {
 	Port          string
 	DatabaseURL   string
@@ -14,6 +16,8 @@ type Config struct {
 	AdminPassword string
 }
 
+// Load reads the configuration from the environment, applying defaults for
+// optional values.
 func Load() Config {
 	return Config{
 		Port:          getenv("PORT", "8080"),
@@ -24,6 +28,8 @@ func Load() Config {
 	}
 }
 
+// Validate returns an error when a required setting is missing. Failing fast
+// here prevents the server from starting with insecure defaults.
 func (c Config) Validate() error {
 	var missing []string
 	if c.JWTSecret == "" {

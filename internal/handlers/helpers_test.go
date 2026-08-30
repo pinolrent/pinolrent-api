@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -18,7 +19,7 @@ func newTestAPI(t *testing.T) *API {
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
-	t.Cleanup(func() { d.Close() })
+	t.Cleanup(func() { _ = d.Close() })
 
 	if err := db.SeedAdmin(d, "admin@pinolrent.com", "admin123"); err != nil {
 		t.Fatalf("seed admin: %v", err)
@@ -39,7 +40,7 @@ func doJSON(t *testing.T, a *API, method, path, token string, body any) *httptes
 		rdr = bytes.NewReader(b)
 	}
 
-	req := httptest.NewRequest(method, path, rdr)
+	req := httptest.NewRequestWithContext(context.Background(), method, path, rdr)
 	req.Header.Set("Content-Type", "application/json")
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)

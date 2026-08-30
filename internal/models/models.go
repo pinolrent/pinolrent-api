@@ -1,5 +1,7 @@
+// Package models defines the domain types exposed by the API.
 package models
 
+// User is an account that can authenticate as a client or as an admin.
 type User struct {
 	ID           int64  `json:"id"`
 	Email        string `json:"email"`
@@ -7,6 +9,7 @@ type User struct {
 	Role         string `json:"role"`
 }
 
+// Car is a rentable vehicle in the catalog.
 type Car struct {
 	ID          int64  `json:"id"`
 	Name        string `json:"name"`
@@ -15,6 +18,7 @@ type Car struct {
 	Active      bool   `json:"active"`
 }
 
+// Reservation is a booking for a car over a date range.
 type Reservation struct {
 	ID        int64  `json:"id"`
 	UserID    int64  `json:"user_id"`
@@ -24,6 +28,7 @@ type Reservation struct {
 	Status    string `json:"status"`
 }
 
+// Payment is the record of payment for a reservation.
 type Payment struct {
 	ID            int64  `json:"id"`
 	ReservationID int64  `json:"reservation_id"`

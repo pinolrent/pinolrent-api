@@ -15,6 +15,8 @@ const dateLayout = "2006-01-02"
 
 const maxPricePerDay = 100_000_000
 
+// ListCars returns active cars, optionally excluding those already reserved
+// in the [start_date, end_date] range.
 func (a *API) ListCars(w http.ResponseWriter, r *http.Request) {
 	startStr := r.URL.Query().Get("start_date")
 	endStr := r.URL.Query().Get("end_date")
@@ -26,7 +28,8 @@ func (a *API) ListCars(w http.ResponseWriter, r *http.Request) {
 
 	var cars []models.Car
 	if startStr == "" {
-		rows, err := a.DB.Query(`SELECT id, name, photo_url, price_per_day, active FROM cars WHERE active = 1 ORDER BY id`)
+		rows, err := a.DB.QueryContext(r.Context(),
+			`SELECT id, name, photo_url, price_per_day, active FROM cars WHERE active = 1 ORDER BY id`)
 		if err != nil {
 			serverError(w, err)
 			return
@@ -52,7 +55,9 @@ func (a *API) ListCars(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		rows, err := a.DB.Query(`
+		// #nosec G202 -- db.OverlapPredicate is a fixed internal SQL fragment,
+		// not user input.
+		rows, err := a.DB.QueryContext(r.Context(), `
 			SELECT c.id, c.name, c.photo_url, c.price_per_day, c.active
 			FROM cars c
 			WHERE c.active = 1
@@ -80,6 +85,7 @@ func (a *API) ListCars(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, cars)
 }
 
+// CreateCar adds a new car to the catalog.
 func (a *API) CreateCar(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Name        string `json:"name"`
@@ -109,7 +115,8 @@ func (a *API) CreateCar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := a.DB.Exec(`INSERT INTO cars (name, photo_url, price_per_day) VALUES (?, ?, ?)`,
+	res, err := a.DB.ExecContext(r.Context(),
+		`INSERT INTO cars (name, photo_url, price_per_day) VALUES (?, ?, ?)`,
 		in.Name, in.PhotoURL, in.PricePerDay)
 	if err != nil {
 		serverError(w, err)
@@ -126,6 +133,7 @@ func (a *API) CreateCar(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// PatchCar toggles the active flag of an existing car.
 func (a *API) PatchCar(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
@@ -145,7 +153,7 @@ func (a *API) PatchCar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := a.DB.Exec(`UPDATE cars SET active = ? WHERE id = ?`, *in.Active, id)
+	res, err := a.DB.ExecContext(r.Context(), `UPDATE cars SET active = ? WHERE id = ?`, *in.Active, id)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -156,7 +164,8 @@ func (a *API) PatchCar(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var car models.Car
-	if err := scanCar(a.DB.QueryRow(`SELECT id, name, photo_url, price_per_day, active FROM cars WHERE id = ?`, id), &car); err != nil {
+	if err := scanCar(a.DB.QueryRowContext(r.Context(),
+		`SELECT id, name, photo_url, price_per_day, active FROM cars WHERE id = ?`, id), &car); err != nil {
 		serverError(w, err)
 		return
 	}
@@ -180,7 +189,7 @@ func scanCar(row *sql.Row, c *models.Car) error {
 }
 
 func scanCars(rows *sql.Rows) ([]models.Car, error) {
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var cars []models.Car
 	for rows.Next() {
 		var c models.Car

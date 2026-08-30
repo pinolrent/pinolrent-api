@@ -1,0 +1,17 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - revive
+    - gosec
+    - noctx
+    - misspell
+  settings:
+    errcheck:
+      exclude-functions:
+        - io.Closer.Close
+        - database/sql.DB.Close
+
+run:
+  timeout: 5m

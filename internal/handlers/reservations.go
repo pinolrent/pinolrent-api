@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"net/http"
@@ -59,6 +60,8 @@ func scanReservation(row rowScanner, v *reservationView) error {
 	return nil
 }
 
+// CreateReservation books a car for the authenticated client, rejecting past
+// dates, inactive cars, and overlapping active reservations.
 func (a *API) CreateReservation(w http.ResponseWriter, r *http.Request) {
 	u, _ := auth.CurrentUser(r.Context())
 
@@ -101,7 +104,7 @@ func (a *API) CreateReservation(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	if _, err := conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
 		serverError(w, err)
@@ -160,7 +163,7 @@ func (a *API) CreateReservation(w http.ResponseWriter, r *http.Request) {
 	committed = true
 	_ = conn.Close()
 
-	v, err := a.reservationView(id)
+	v, err := a.reservationView(r.Context(), id)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -168,16 +171,18 @@ func (a *API) CreateReservation(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, v)
 }
 
+// ListReservations returns the reservations of the authenticated client,
+// newest first.
 func (a *API) ListReservations(w http.ResponseWriter, r *http.Request) {
 	u, _ := auth.CurrentUser(r.Context())
 
-	rows, err := a.DB.Query(reservationSelect+`
+	rows, err := a.DB.QueryContext(r.Context(), reservationSelect+`
 		WHERE r.user_id = ? ORDER BY r.id DESC`, u.ID)
 	if err != nil {
 		serverError(w, err)
 		return
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	views := []reservationView{}
 	for rows.Next() {
@@ -196,6 +201,7 @@ func (a *API) ListReservations(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, views)
 }
 
+// GetReservation returns one reservation; clients can only access their own.
 func (a *API) GetReservation(w http.ResponseWriter, r *http.Request) {
 	u, _ := auth.CurrentUser(r.Context())
 
@@ -205,7 +211,7 @@ func (a *API) GetReservation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	v, err := a.reservationView(id)
+	v, err := a.reservationView(r.Context(), id)
 	if errors.Is(err, sql.ErrNoRows) {
 		writeError(w, http.StatusNotFound, "reservation not found")
 		return
@@ -223,8 +229,8 @@ func (a *API) GetReservation(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, v)
 }
 
-func (a *API) reservationView(id int64) (reservationView, error) {
+func (a *API) reservationView(ctx context.Context, id int64) (reservationView, error) {
 	var v reservationView
-	err := scanReservation(a.DB.QueryRow(reservationSelect+` WHERE r.id = ?`, id), &v)
+	err := scanReservation(a.DB.QueryRowContext(ctx, reservationSelect+` WHERE r.id = ?`, id), &v)
 	return v, err
 }

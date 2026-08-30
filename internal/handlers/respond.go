@@ -1,3 +1,5 @@
+// Package handlers wires the API routes to their HTTP handlers and provides
+// shared request/response helpers.
 package handlers
 
 import (
@@ -14,11 +16,14 @@ import (
 
 const maxBodyBytes = 1 << 20
 
+// API bundles the shared dependencies used by every handler: the database
+// pool and the auth provider.
 type API struct {
 	DB   *sql.DB
 	Auth *auth.Auth
 }
 
+// New returns an API bound to the given database pool and auth provider.
 func New(db *sql.DB, a *auth.Auth) *API {
 	return &API{DB: db, Auth: a}
 }

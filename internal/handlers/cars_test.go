@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"testing"
@@ -119,7 +120,7 @@ func TestListCarsByDates(t *testing.T) {
 
 	clientToken := registerClient(t, a, "cli@example.com", "secret123")
 	_ = clientToken
-	if _, err := a.DB.Exec(
+	if _, err := a.DB.ExecContext(context.Background(),
 		`INSERT INTO reservations (user_id, car_id, start_date, end_date, status) VALUES (?, ?, '2026-09-05', '2026-09-10', 'pending')`,
 		1, booked.ID,
 	); err != nil {
