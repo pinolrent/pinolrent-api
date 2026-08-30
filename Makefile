@@ -3,6 +3,7 @@
 .DEFAULT_GOAL := help
 
 GOLANGCI_VERSION := v2.13.2
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
 help: ## Shows this help
 	@printf "Available targets:\n\n"
@@ -21,9 +22,9 @@ dev: run ## Alias of run: one-shot dev server
 watch: ## Hot-reload with air (requires: make tools)
 	@air -c .air.toml
 
-build: ## Builds the binary at bin/pinolrent-api
+build: ## Builds the binary at bin/pinolrent-api with the build version baked in
 	@mkdir -p bin
-	go build -o bin/pinolrent-api ./cmd/api
+	go build -ldflags "-X main.version=$(VERSION)" -o bin/pinolrent-api ./cmd/api
 
 test: ## Runs the test suite (no cache of results)
 	go test -count=1 -timeout 120s ./...

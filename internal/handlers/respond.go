@@ -20,8 +20,9 @@ const maxBodyBytes = 1 << 20
 // API bundles the shared dependencies used by every handler: the database
 // pool and the auth provider.
 type API struct {
-	DB   *sql.DB
-	Auth *auth.Auth
+	DB      *sql.DB
+	Auth    *auth.Auth
+	Version string
 }
 
 // New returns an API bound to the given database pool and auth provider.

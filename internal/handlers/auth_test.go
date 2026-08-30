@@ -11,6 +11,7 @@ import (
 
 func TestHealth(t *testing.T) {
 	a := newTestAPI(t)
+	a.Version = "test"
 	rec := doJSON(t, a, "GET", "/health", "", nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -19,6 +20,9 @@ func TestHealth(t *testing.T) {
 	decodeJSON(t, rec, &out)
 	if out["status"] != "ok" {
 		t.Fatalf("status = %q, want ok", out["status"])
+	}
+	if out["version"] != "test" {
+		t.Fatalf("version = %q, want test", out["version"])
 	}
 }
 

@@ -56,6 +56,10 @@ if ! curl -sf "$BASE/health" > /dev/null; then
   echo "server no levantó:"; cat "$LOG"; exit 1
 fi
 
+echo "== health con version =="
+health_version=$(curl -s "$BASE/health" | jq -r '.version // empty')
+check "health incluye version (dev)" "dev" "$health_version"
+
 echo "== fail-fast sin JWT_SECRET =="
 DATABASE_URL="$DB" PORT=9999 "$BIN" > /dev/null 2>&1
 check "aborta sin JWT_SECRET" "1" "$?"

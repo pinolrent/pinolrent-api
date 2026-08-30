@@ -19,6 +19,10 @@ import (
 	"github.com/pinolrent/pinolrent-api/internal/ratelimit"
 )
 
+// version is the build version reported by GET /health. Release builds set it
+// via -ldflags "-X main.version=<version>".
+var version = "dev"
+
 func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, nil)))
 
@@ -40,6 +44,7 @@ func main() {
 
 	a := auth.New(cfg.JWTSecret, d)
 	h := handlers.New(d, a)
+	h.Version = version
 
 	origins, err := cfg.CORSOrigins()
 	if err != nil {

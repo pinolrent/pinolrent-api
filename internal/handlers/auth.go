@@ -1,10 +1,13 @@
 package handlers
 
 import (
+	"context"
 	"database/sql"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/pinolrent/pinolrent-api/internal/auth"
 	"github.com/pinolrent/pinolrent-api/internal/models"
@@ -12,9 +15,22 @@ import (
 
 var emailRe = regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
 
-// Health reports that the server is up.
-func (a *API) Health(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+// Health reports liveness, build version, and database reachability.
+func (a *API) Health(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+	defer cancel()
+
+	status := "ok"
+	code := http.StatusOK
+	if err := a.DB.PingContext(ctx); err != nil {
+		status = "degraded"
+		code = http.StatusServiceUnavailable
+		slog.Error("health: db ping", "error", err)
+	}
+	writeJSON(w, code, map[string]string{
+		"status":  status,
+		"version": a.Version,
+	})
 }
 
 // Me returns the authenticated user's public profile.
