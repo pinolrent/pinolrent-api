@@ -35,7 +35,10 @@ jobs:
         run: make test-race
 
       - name: golangci-lint
-        run: make lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v2.13.2
+          args: run ./...
 
       - name: Build
         run: make build
