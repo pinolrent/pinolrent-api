@@ -32,6 +32,9 @@ func (c Config) Validate() error {
 	if c.JWTSecret == "" {
 		return fmt.Errorf("missing required env vars: %s", "JWT_SECRET")
 	}
+	if len(c.JWTSecret) < 32 {
+		return fmt.Errorf("JWT_SECRET must be at least 32 bytes (got %d); generate one with `openssl rand -base64 32`", len(c.JWTSecret))
+	}
 	if _, err := c.CORSOrigins(); err != nil {
 		return err
 	}

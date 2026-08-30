@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.."
 
 if [ ! -f .env ]; then
   if [ -z "${JWT_SECRET:-}" ]; then
-    export JWT_SECRET="dev-secret-not-for-production"
+    export JWT_SECRET="dev-secret-not-for-production-32b"
   fi
   if [ -z "${DATABASE_URL:-}" ]; then
     export DATABASE_URL="dev.db"

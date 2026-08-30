@@ -23,7 +23,7 @@ func newTestAPI(t *testing.T) *API {
 	}
 	t.Cleanup(func() { _ = d.Close() })
 
-	a := auth.New("test-secret", d)
+	a := auth.New("test-secret-32-bytes-minimum-okay", d)
 	return New(d, a)
 }
 

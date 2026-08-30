@@ -25,7 +25,7 @@ func TestCreateReservationConcurrent(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = d.Close() })
 
-	a := auth.New("test-secret", d)
+	a := auth.New("test-secret-32-bytes-minimum-okay", d)
 	api := New(d, a)
 	car := createCar(t, api, newSeller(t, api), map[string]any{"name": "Toyota Yaris", "price_per_day": 100})
 	token := registerBuyer(t, api, "user@example.com", "secret123")
@@ -81,7 +81,7 @@ func TestRequireAuthExpired(t *testing.T) {
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(-time.Hour)),
 		},
 	}
-	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte("test-secret"))
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte("test-secret-32-bytes-minimum-okay"))
 	if err != nil {
 		t.Fatalf("sign token: %v", err)
 	}
@@ -181,5 +181,71 @@ func TestCarPriceCap(t *testing.T) {
 	})
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("over cap: status = %d, want 400", rec.Code)
+	}
+}
+
+// TestRequireAuthWrongAlg rejects tokens signed with a non-HS256 algorithm,
+// including the classic alg=none confusion attack.
+func TestRequireAuthWrongAlg(t *testing.T) {
+	a := newTestAPI(t)
+	_ = registerBuyer(t, a, "alg@example.com", "secret123")
+
+	claims := auth.Claims{
+		UserID: 1,
+		Role:   "client",
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    "pinolrent-api",
+			Audience:  jwt.ClaimStrings{"pinolrent-api"},
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+		},
+	}
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS384, claims).SignedString([]byte("test-secret-32-bytes-minimum-okay"))
+	if err != nil {
+		t.Fatalf("sign token: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("GET /auth/me", a.Auth.RequireAuth(func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
+	}))
+
+	req := httptest.NewRequestWithContext(context.Background(), "GET", "/auth/me", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("HS384 token: status = %d, want 401", rec.Code)
+	}
+}
+
+// TestRequireAuthMissingIssuer rejects tokens that lack the iss/aud claims,
+// so a token signed with the same secret by another service is not accepted.
+func TestRequireAuthMissingIssuer(t *testing.T) {
+	a := newTestAPI(t)
+	_ = registerBuyer(t, a, "iss@example.com", "secret123")
+
+	claims := auth.Claims{
+		UserID: 1,
+		Role:   "client",
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+		},
+	}
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte("test-secret-32-bytes-minimum-okay"))
+	if err != nil {
+		t.Fatalf("sign token: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("GET /auth/me", a.Auth.RequireAuth(func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
+	}))
+
+	req := httptest.NewRequestWithContext(context.Background(), "GET", "/auth/me", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("no iss token: status = %d, want 401", rec.Code)
 	}
 }

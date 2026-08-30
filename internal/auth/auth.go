@@ -7,7 +7,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -17,6 +16,14 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/pinolrent/pinolrent-api/internal/models"
+)
+
+// jwtIssuer and jwtAudience are the iss/aud claims set on every token and
+// required by the parser. They scope tokens to this service so a token signed
+// with the same secret by another service is rejected.
+const (
+	jwtIssuer   = "pinolrent-api"
+	jwtAudience = "pinolrent-api"
 )
 
 // Auth signs and validates HS256 JWTs and provides HTTP auth middleware.
@@ -56,6 +63,8 @@ func (a *Auth) SignToken(u *models.User) (string, error) {
 		Role:   u.Role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   strconv.FormatInt(u.ID, 10),
+			Issuer:    jwtIssuer,
+			Audience:  jwt.ClaimStrings{jwtAudience},
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
@@ -63,12 +72,19 @@ func (a *Auth) SignToken(u *models.User) (string, error) {
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(a.secret)
 }
 
+// tokenParser enforces the signing algorithm, requires the iss/aud claims,
+// and rejects tokens without an expiry. Built once and reused for every
+// parse so each check is done by the library, not the keyfunc.
+var tokenParser = jwt.NewParser(
+	jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
+	jwt.WithIssuer(jwtIssuer),
+	jwt.WithAudience(jwtAudience),
+	jwt.WithExpirationRequired(),
+)
+
 func (a *Auth) parseToken(token string) (*Claims, error) {
 	claims := &Claims{}
-	_, err := jwt.ParseWithClaims(token, claims, func(t *jwt.Token) (any, error) {
-		if t.Method != jwt.SigningMethodHS256 {
-			return nil, errors.New("unexpected signing method")
-		}
+	_, err := tokenParser.ParseWithClaims(token, claims, func(t *jwt.Token) (any, error) {
 		return a.secret, nil
 	})
 	if err != nil {

@@ -5,8 +5,10 @@ import (
 	"testing"
 )
 
+const testJWTSecret = "test-secret-32-bytes-minimum-okay"
+
 func TestLoadDefaults(t *testing.T) {
-	t.Setenv("JWT_SECRET", "s")
+	t.Setenv("JWT_SECRET", testJWTSecret)
 	cfg := Load()
 	if cfg.Port != "8080" || cfg.DatabaseURL != "pinolrent.db" || cfg.CORSAllowedOrigins != "*" {
 		t.Fatalf("defaults not applied: %+v", cfg)
@@ -16,7 +18,7 @@ func TestLoadDefaults(t *testing.T) {
 func TestLoadOverrides(t *testing.T) {
 	t.Setenv("PORT", "9999")
 	t.Setenv("DATABASE_URL", "custom.db")
-	t.Setenv("JWT_SECRET", "s")
+	t.Setenv("JWT_SECRET", testJWTSecret)
 	t.Setenv("CORS_ALLOWED_ORIGINS", "https://app.example.com")
 	cfg := Load()
 	if cfg.Port != "9999" || cfg.DatabaseURL != "custom.db" || cfg.CORSAllowedOrigins != "https://app.example.com" {
@@ -35,15 +37,26 @@ func TestValidateMissing(t *testing.T) {
 	}
 }
 
+func TestValidateShortSecret(t *testing.T) {
+	cfg := Config{JWTSecret: "too-short"}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for short JWT_SECRET")
+	}
+	if !strings.Contains(err.Error(), "32 bytes") {
+		t.Fatalf("error %q should mention 32 bytes", err.Error())
+	}
+}
+
 func TestValidateOK(t *testing.T) {
-	cfg := Config{Port: "8080", DatabaseURL: "x.db", JWTSecret: "s"}
+	cfg := Config{Port: "8080", DatabaseURL: "x.db", JWTSecret: testJWTSecret}
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
 func TestValidateBadCORS(t *testing.T) {
-	cfg := Config{JWTSecret: "s", CORSAllowedOrigins: "https://app.example.com/path"}
+	cfg := Config{JWTSecret: testJWTSecret, CORSAllowedOrigins: "https://app.example.com/path"}
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected error for malformed CORS origin")
 	}
