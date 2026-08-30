@@ -57,6 +57,13 @@ Todos los errores siguen el mismo shape:
 - **Rate limit por IP** (token bucket en memoria, `RemoteAddr` sin puerto) solo
   en rutas cuyo path empieza por `/auth/`: **30 req/60 s** con ráfaga de 30.
   Sobre el límite → `429 {"error":"too many requests"}`.
+- **CORS**: por defecto se acepta cualquier origen (`CORS_ALLOWED_ORIGINS=*`).
+  En producción conviene una lista explícita separada por comas, p. ej.
+  `CORS_ALLOWED_ORIGINS=https://app.example.com`. Los preflights `OPTIONS` se
+  responden `204` con `Access-Control-Allow-Methods: GET, POST, PATCH, OPTIONS`
+  y `Access-Control-Allow-Headers: Authorization, Content-Type`; los métodos
+  que usa la API son `GET`, `POST` y `PATCH` (no hay `DELETE` ni cookies, así
+  que tampoco `Access-Control-Allow-Credentials`).
 
 ## Paginación
 
@@ -82,6 +89,7 @@ siguiente página".
 | POST | `/auth/login` | no | [auth](auth.md) |
 | GET | `/auth/me` | buyer/seller | [auth](auth.md) |
 | GET | `/cars` | no | [cars](cars.md) |
+| GET | `/cars/{id}` | no | [cars](cars.md) |
 | GET | `/seller/cars` | seller | [cars](cars.md) |
 | POST | `/seller/cars` | seller | [cars](cars.md) |
 | PATCH | `/seller/cars/{id}` | seller | [cars](cars.md) |

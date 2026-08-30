@@ -43,6 +43,26 @@ Sin resultados → `[]`.
 
 ---
 
+## `GET /cars/{id}`
+
+Devuelve un auto **activo** del catálogo por id. Público; útil para la página
+de detalle.
+
+**Respuesta** — `200 OK` (misma shape que la lista):
+
+```json
+{"id":1,"owner_id":4,"name":"Toyota Yaris","photo_url":"https://...","price_per_day":45000,"active":true}
+```
+
+**Errores:**
+
+| Status | Mensaje | Cuándo |
+|--------|---------|--------|
+| `400` | `invalid car id` | `{id}` no es un entero |
+| `404` | `car not found` | No existe, **o** el auto está inactivo (oculto del catálogo público) |
+
+---
+
 ## `GET /seller/cars`
 
 Lista los autos del vendedor autenticado, más nuevos primero. Requiere rol

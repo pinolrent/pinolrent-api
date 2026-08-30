@@ -151,6 +151,20 @@ check "limit=1" "1" "$n"
 code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/cars?limit=0")
 check "limit inválido -> 400" "400" "$code"
 
+echo "== detalle de auto =="
+res=$(curl -s "$BASE/cars/$car")
+check "detalle auto -> id" "$car" "$(printf '%s' "$res" | jq -r .id)"
+code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/cars/999999")
+check "detalle inexistente -> 404" "404" "$code"
+code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/cars/abc")
+check "detalle id inválido -> 400" "400" "$code"
+curl -s -o /dev/null -X PATCH "$BASE/seller/cars/$car" -H "Authorization: Bearer $seller" \
+  -H 'Content-Type: application/json' -d '{"active":false}'
+code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/cars/$car")
+check "detalle inactivo -> 404" "404" "$code"
+curl -s -o /dev/null -X PATCH "$BASE/seller/cars/$car" -H "Authorization: Bearer $seller" \
+  -H 'Content-Type: application/json' -d '{"active":true}'
+
 echo "== /auth/me =="
 me=$(curl -s "$BASE/auth/me" -H "Authorization: Bearer $seller")
 check "auth/me rol seller" "seller" "$(printf '%s' "$me" | jq -r .role)"

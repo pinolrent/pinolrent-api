@@ -28,6 +28,7 @@ make watch   # hot-reload
 | POST | `/auth/login` | no | Login (JWT 24 h) |
 | GET | `/auth/me` | login | Tu perfil (`id`, `email`, `role`) |
 | GET | `/cars` | no | Autos activos; con fechas excluye reservados, con `owner_id` filtra vendedor |
+| GET | `/cars/{id}` | no | Detalle de un auto activo |
 | GET · POST | `/seller/cars` · `/seller/cars` | seller | Mis autos y alta |
 | PATCH | `/seller/cars/{id}` | seller | Activar/inactivar (solo tu auto) |
 | POST | `/reservations` | login | Crear reserva (overlap o >30 días → 409/400) |
@@ -52,8 +53,10 @@ make watch   # hot-reload
 
 Go 1.26 · `net/http` (stdlib) · SQLite (`modernc.org/sqlite`) · JWT HS256 ·
 bcrypt. Notas: `price_per_day` en **centavos**, fechas ISO `YYYY-MM-DD`,
-body máx. 1 MB, rate limit por IP en `/auth/*` (30 req/60 s), listas paginadas
-(`limit`/`offset`, default 50 · máx 200) y reservas de hasta 30 días.
+body máx. 1 MB, rate limit por IP en `/auth/*` (30 req/60 s), CORS habilitado
+por defecto para cualquier origen (restringible con `CORS_ALLOWED_ORIGINS`),
+listas paginadas (`limit`/`offset`, default 50 · máx 200) y reservas de hasta
+30 días.
 
 Convenciones del repo: documentación en español, comentarios del código en
 inglés.

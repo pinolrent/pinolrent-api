@@ -49,10 +49,11 @@ Herramientas instaladas: `air` y `golangci-lint` viven en `$(go env GOPATH)/bin`
 
 Corre la colección **en orden** (los requests dependen de los anteriores):
 Registrar comprador → Registrar vendedor → Login vendedor → Login comprador →
-Mi perfil → Listar autos → Crear auto → Activar auto → Listar mis autos →
-Crear reserva → Mis reservas → Detalle reserva → Registrar pago → Cancelar
-reserva (devuelve `409 payment already recorded, cannot cancel`, raro pero
-esperado en este punto) → Reservas de mis autos → Confirmar reserva. Ajusta
+Mi perfil → Listar autos → Crear auto → Detalle auto → Activar auto → Listar
+mis autos → Crear reserva → Mis reservas → Detalle reserva → Registrar pago →
+Cancelar reserva (devuelve `409 payment already recorded, cannot cancel`, raro
+pero esperado en este punto) → Reservas de mis autos → Confirmar reserva.
+Ajusta
 `baseUrl` si no es `http://localhost:8080`.
 
 ## Tests
