@@ -51,12 +51,14 @@ make watch   # hot-reload
 
 ## Stack
 
-Go 1.26 · `net/http` (stdlib) · SQLite (`modernc.org/sqlite`) · JWT HS256 ·
-bcrypt. Notas: `price_per_day` en **centavos**, fechas ISO `YYYY-MM-DD`,
-body máx. 1 MB, rate limit por IP en `/auth/*` (30 req/60 s), CORS habilitado
-por defecto para cualquier origen (restringible con `CORS_ALLOWED_ORIGINS`),
-listas paginadas (`limit`/`offset`, default 50 · máx 200) y reservas de hasta
-30 días.
+Go 1.26 · `net/http` (stdlib) · SQLite (`modernc.org/sqlite`) + migraciones
+`goose` · JWT HS256 · bcrypt · rate limit `x/time/rate` · CORS `rs/cors`.
+Notas: `price_per_day` en **centavos**, fechas ISO `YYYY-MM-DD`, body máx.
+1 MB, rate limit por IP en `/auth/*` (30 req/60 s), CORS habilitado por defecto
+para cualquier origen (restringible con `CORS_ALLOWED_ORIGINS`), listas
+paginadas (`limit`/`offset`, default 50 · máx 200) y reservas de hasta 30 días.
+`GET /health` reporta versión y estado de la base; el binario se compila con
+`make build` inyectando la versión (`-ldflags "-X main.version=..."`).
 
 Convenciones del repo: documentación en español, comentarios del código en
 inglés.

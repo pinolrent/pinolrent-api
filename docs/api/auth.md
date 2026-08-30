@@ -2,12 +2,20 @@
 
 ## `GET /health`
 
-Healthcheck público.
+Healthcheck público. Reporta estado de la base, la versión del build (se
+inyecta al compilar con `-ldflags "-X main.version=<version>"`; en dev es
+`"dev"`) y responde `503` si la base no responde.
 
 **Respuesta** — `200 OK`:
 
 ```json
-{"status":"ok"}
+{"status":"ok","version":"dev"}
+```
+
+**Respuesta** — `503 Service Unavailable` (base caída):
+
+```json
+{"status":"degraded","version":"dev"}
 ```
 
 **Errores:** ninguno.

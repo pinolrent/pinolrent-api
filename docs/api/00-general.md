@@ -60,10 +60,12 @@ Todos los errores siguen el mismo shape:
 - **CORS**: por defecto se acepta cualquier origen (`CORS_ALLOWED_ORIGINS=*`).
   En producción conviene una lista explícita separada por comas, p. ej.
   `CORS_ALLOWED_ORIGINS=https://app.example.com`. Los preflights `OPTIONS` se
-  responden `204` con `Access-Control-Allow-Methods: GET, POST, PATCH, OPTIONS`
-  y `Access-Control-Allow-Headers: Authorization, Content-Type`; los métodos
-  que usa la API son `GET`, `POST` y `PATCH` (no hay `DELETE` ni cookies, así
-  que tampoco `Access-Control-Allow-Credentials`).
+  responden `204` sin invocar al handler, espejando el método y las cabeceras
+  solicitadas dentro de los permitidos: métodos `GET`, `POST`, `PATCH`,
+  `OPTIONS` y cabeceras `Authorization`, `Content-Type`. Los orígenes no
+  permitidos reciben `204` sin `Access-Control-Allow-Origin`, así que el
+  navegador bloquea la petición. No hay `DELETE` ni cookies, por eso no se
+  envía `Access-Control-Allow-Credentials`.
 
 ## Paginación
 

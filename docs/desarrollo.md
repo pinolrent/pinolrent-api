@@ -16,7 +16,7 @@ make dev          # arranca el server con defaults de desarrollo
 | `make dev` | Arranca el server vía `scripts/dev.sh` (defaults de dev, carga `.env`) |
 | `make watch` | Hot-reload con `air`: rebuild automático al editar `.go`, `.env` o `.toml` |
 | `make run` | `go run ./cmd/api` directo (fail-fast real de variables) |
-| `make build` | Compila el binario a `bin/api` |
+| `make build` | Compila el binario a `bin/pinolrent-api` inyectando la versión (`git describe`, o `dev` si no hay repo) |
 | `make test` | `go test -count=1 -timeout 120s ./...` |
 | `make vet` | `go vet ./...` |
 | `make lint` | `golangci-lint run ./...` (debe quedar en **0 issues**) |
@@ -36,6 +36,25 @@ Herramientas instaladas: `air` y `golangci-lint` viven en `$(go env GOPATH)/bin`
   - Comentarios/docstrings en **inglés**; docs y README en **español**.
   - Todo símbolo exportado lleva doc comment (`revive` lo exige).
   - `gofmt` siempre limpio; los archivos terminan con newline final.
+
+## Migraciones
+
+El esquema vive en `internal/db/migrations/*.sql` y se aplica **automáticamente
+al arrancar** el server (azure goose embebido) — no hay paso manual en dev.
+Para crear una migración nueva:
+
+```sh
+go run github.com/pressly/goose/v3/cmd/goose@latest create add_<algo> sql
+```
+
+Mueve el archivo generado (timestamp) a `internal/db/migrations/` y edita las
+secciones `-- +goose Up` / `-- +goose Down`. goose registra el historial en la
+tabla `goose_db_version` y **no borra datos**. Al migrar desde la versión
+pre-goose, la `dev.db` conserva sus tablas y filas; no hace falta borrarla.
+
+Si no tenés GNU make en tu shell de WSL (o Windows), podés correr los mismos
+comandos directo con `go`: `go test ./...`, `go build ./...`,
+`go run ./cmd/api`, etc.
 
 ## Collection de Bruno
 

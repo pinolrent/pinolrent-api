@@ -6,6 +6,13 @@
   placeholders, p. ej. `"PATCH /seller/cars/{id}"`), `database/sql` y `log/slog`.
 - **SQLite** embebido vía `modernc.org/sqlite` (implementación 100% Go, no
   requiere CGO ni binarios externos).
+- **Migraciones** con `pressly/goose/v3`: SQL versionado embebido en el binario
+  (`internal/db/migrations/`) y aplicado al arrancar; la tabla `goose_db_version`
+  guarda el historial y las migraciones **nunca borran datos**.
+- **Rate limit** con `golang.org/x/time/rate` (token bucket audited), con una
+  capa propia keyed por IP.
+- **CORS** con `rs/cors` (`internal/handlers/cors.go`).
+- **Config** con `caarlos0/env/v11` (tags de struct + defaults).
 - **JWT HS256** (`golang-jwt/jwt/v5`) y **bcrypt** (`golang.org/x/crypto`).
 - **godotenv** (`joho/godotenv`) para cargar `.env` de forma opcional.
 
@@ -17,12 +24,12 @@ consultas son SQL directo.
 ```
 cmd/api/                  # main: configuración, servidor, middleware, graceful shutdown
 internal/
-  config/                 # carga y validación de variables de entorno
-  db/                     # esquema SQLite, conexión, migración versionada, predicado de overlap
+  config/                 # carga tipada y validación de variables de entorno
+  db/                     # conexión SQLite, migraciones goose, predicado de overlap
   auth/                   # bcrypt, JWT, middleware de autenticación y roles
   models/                 # tipos de dominio compartidos (User, Car, Reservation, Payment)
   handlers/               # API, rutas, middleware HTTP y handlers por recurso
-  ratelimit/              # token bucket en memoria limitado por IP
+  ratelimit/              # token bucket (x/time/rate) limitado por IP
 scripts/                  # dev.sh y demo.sh
 bruno/                    # colección API para Bruno
 ```
@@ -75,9 +82,10 @@ Puntos clave del esquema (`internal/db/db.go`):
 - `cars.price_per_day` está en **centavos** (entero) y no puede ser negativo.
 - `payments.reservation_id` es único: **una reserva tiene a lo sumo un pago**.
 - Las fechas son strings ISO `YYYY-MM-DD` en texto.
-- La base usa `PRAGMA user_version` (v2): si el archivo tiene un esquema viejo,
-  se reconstruye de forma destructiva al abrir. Como no hay datos de producción,
-  eso mantiene las bases de desarrollo funcionando tras un upgrade.
+- El esquema se gestiona con **migraciones goose** (`internal/db/migrations/*.sql`),
+  embebidas con `go:embed` y aplicadas al arrancar (`db.Open`). goose registra el
+  historial en `goose_db_version`; solo se aplican las pendientes y **los datos
+  nunca se borran** (se corrige el rebuild destructivo de versiones anteriores).
 
 ## Máquina de estados
 
@@ -165,8 +173,8 @@ Operaciones atómicas:
 
 ## Rate limiting
 
-- Token bucket **en memoria**, por IP (`RemoteAddr` sin puerto), solo para rutas
-  cuyo path empieza por `/auth/`.
+- Token bucket **en memoria** (`golang.org/x/time/rate`), por IP
+  (`RemoteAddr` sin puerto), solo para rutas cuyo path empieza por `/auth/`.
 - Configuración actual: refill de `0.5` tokens/s (**30 por minuto**), ráfaga de
   `30`; sobre el límite → `429 {"error":"too many requests"}`.
 - Es un límite de un solo proceso: **no es distribuido**. Los buckets expiran
@@ -178,6 +186,9 @@ Operaciones atómicas:
   idle 60 s) y `MaxHeaderBytes` 1 MB.
 - `WithRequestLog` registra una línea por request con método, path, status y
   duración en ms usando `log/slog` (formato texto).
+- `GET /health` responde `{"status":"ok","version":"..."}` tras hacer ping a la
+  base (`503 degraded` si falla). La versión del build se inyecta con
+  `-ldflags "-X main.version=<version>"` (ver `make build`).
 - Shutdown graceful ante `SIGINT`/`SIGTERM` con un límite de 10 s.
 - Los errores internos se loguean con detalle y se devuelven como
   `500 {"error":"server error"}` sin filtrar detalles internos al cliente.
