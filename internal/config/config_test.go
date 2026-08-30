@@ -5,6 +5,25 @@ import (
 	"testing"
 )
 
+func TestLoadDefaults(t *testing.T) {
+	t.Setenv("JWT_SECRET", "s")
+	cfg := Load()
+	if cfg.Port != "8080" || cfg.DatabaseURL != "pinolrent.db" || cfg.CORSAllowedOrigins != "*" {
+		t.Fatalf("defaults not applied: %+v", cfg)
+	}
+}
+
+func TestLoadOverrides(t *testing.T) {
+	t.Setenv("PORT", "9999")
+	t.Setenv("DATABASE_URL", "custom.db")
+	t.Setenv("JWT_SECRET", "s")
+	t.Setenv("CORS_ALLOWED_ORIGINS", "https://app.example.com")
+	cfg := Load()
+	if cfg.Port != "9999" || cfg.DatabaseURL != "custom.db" || cfg.CORSAllowedOrigins != "https://app.example.com" {
+		t.Fatalf("overrides not applied: %+v", cfg)
+	}
+}
+
 func TestValidateMissing(t *testing.T) {
 	cfg := Config{Port: "8080", DatabaseURL: "x.db"}
 	err := cfg.Validate()

@@ -4,27 +4,26 @@ package config
 import (
 	"fmt"
 	"net/url"
-	"os"
 	"strings"
+
+	"github.com/caarlos0/env/v11"
 )
 
 // Config holds all runtime settings for the server.
 type Config struct {
-	Port               string
-	DatabaseURL        string
-	JWTSecret          string
-	CORSAllowedOrigins string
+	Port               string `env:"PORT" envDefault:"8080"`
+	DatabaseURL        string `env:"DATABASE_URL" envDefault:"pinolrent.db"`
+	JWTSecret          string `env:"JWT_SECRET"`
+	CORSAllowedOrigins string `env:"CORS_ALLOWED_ORIGINS" envDefault:"*"`
 }
 
 // Load reads the configuration from the environment, applying defaults for
-// optional values.
+// optional values. All fields are strings, so parsing cannot fail here;
+// semantic validation happens in Validate.
 func Load() Config {
-	return Config{
-		Port:               getenv("PORT", "8080"),
-		DatabaseURL:        getenv("DATABASE_URL", "pinolrent.db"),
-		JWTSecret:          os.Getenv("JWT_SECRET"),
-		CORSAllowedOrigins: getenv("CORS_ALLOWED_ORIGINS", "*"),
-	}
+	cfg := Config{}
+	_ = env.Parse(&cfg)
+	return cfg
 }
 
 // Validate returns an error when a required setting is missing or malformed.
@@ -72,11 +71,4 @@ func validOrigin(s string) bool {
 		return false
 	}
 	return true
-}
-
-func getenv(key, def string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return def
 }
