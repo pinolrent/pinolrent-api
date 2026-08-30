@@ -1,26 +1,46 @@
 package main
 
 import (
-	"encoding/json"
+	"crypto/rand"
+	"encoding/base64"
 	"log"
 	"net/http"
-	"os"
+
+	"github.com/pinolrent/pinolrent-api/internal/auth"
+	"github.com/pinolrent/pinolrent-api/internal/config"
+	"github.com/pinolrent/pinolrent-api/internal/db"
+	"github.com/pinolrent/pinolrent-api/internal/handlers"
 )
 
 func main() {
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
+	cfg := config.Load()
+
+	if cfg.JWTSecret == "" {
+		buf := make([]byte, 32)
+		if _, err := rand.Read(buf); err != nil {
+			log.Fatal("generate jwt secret: ", err)
+		}
+		cfg.JWTSecret = base64.RawURLEncoding.EncodeToString(buf)
+		log.Println("JWT_SECRET not set; generated a random ephemeral secret")
 	}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-	})
+	d, err := db.Open(cfg.DatabaseURL)
+	if err != nil {
+		log.Fatal("db: ", err)
+	}
+	defer d.Close()
 
-	log.Printf("listening on :%s", port)
-	if err := http.ListenAndServe(":"+port, mux); err != nil {
+	if err := db.SeedAdmin(d, cfg.AdminEmail, cfg.AdminPassword); err != nil {
+		log.Fatal("seed admin: ", err)
+	}
+
+	a := auth.New(cfg.JWTSecret, d)
+	h := handlers.New(d, a)
+	mux := handlers.Routes(h)
+
+	addr := ":" + cfg.Port
+	log.Printf("listening on %s", addr)
+	if err := http.ListenAndServe(addr, mux); err != nil {
 		log.Fatal(err)
 	}
 }
