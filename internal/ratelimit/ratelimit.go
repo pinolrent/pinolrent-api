@@ -1,5 +1,5 @@
-// Package ratelimit provides a simple in-memory token bucket rate limiter
-// keyed by client IP.
+// Package ratelimit provides an in-memory token bucket rate limiter keyed by
+// client IP, built on the audited golang.org/x/time/rate limiter.
 package ratelimit
 
 import (
@@ -8,19 +8,21 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/time/rate"
 )
 
-type bucket struct {
-	tokens float64
-	last   time.Time
+type entry struct {
+	limiter *rate.Limiter
+	last    time.Time
 }
 
 // Limiter is a token bucket rate limiter with per-key refill and expiry.
 type Limiter struct {
 	mu       sync.Mutex
 	rate     float64
-	burst    float64
-	buckets  map[string]*bucket
+	burst    int
+	limits   map[string]*entry
 	lastGC   time.Time
 	gcEvery  time.Duration
 	tokenTTL time.Duration
@@ -31,8 +33,8 @@ type Limiter struct {
 func New(rate float64, burst int) *Limiter {
 	return &Limiter{
 		rate:     rate,
-		burst:    float64(burst),
-		buckets:  make(map[string]*bucket),
+		burst:    burst,
+		limits:   make(map[string]*entry),
 		lastGC:   time.Now(),
 		gcEvery:  time.Minute,
 		tokenTTL: 10 * time.Minute,
@@ -46,29 +48,23 @@ func (l *Limiter) Allow(key string) bool {
 	defer l.mu.Unlock()
 
 	now := time.Now()
-	b, ok := l.buckets[key]
+	e, ok := l.limits[key]
 	if !ok {
-		b = &bucket{tokens: l.burst, last: now}
-		l.buckets[key] = b
+		e = &entry{
+			limiter: rate.NewLimiter(rate.Limit(l.rate), l.burst),
+			last:    now,
+		}
+		l.limits[key] = e
 	}
+	e.last = now
 
-	b.tokens += now.Sub(b.last).Seconds() * l.rate
-	if b.tokens > l.burst {
-		b.tokens = l.burst
-	}
-	b.last = now
-
-	if b.tokens < 1 {
-		return false
-	}
-	b.tokens--
-	return true
+	return e.limiter.Allow()
 }
 
 func (l *Limiter) gc(now time.Time) {
-	for k, b := range l.buckets {
-		if now.Sub(b.last) > l.tokenTTL {
-			delete(l.buckets, k)
+	for k, e := range l.limits {
+		if now.Sub(e.last) > l.tokenTTL {
+			delete(l.limits, k)
 		}
 	}
 }
