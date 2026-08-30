@@ -84,9 +84,11 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/seller/cars" \
   -d '{"name":"X","price_per_day":1}')
 check "comprador no crea autos -> 403" "403" "$code"
 
-car=$(curl -s -X POST "$BASE/seller/cars" -H "Authorization: Bearer $seller" \
+car_json=$(curl -s -X POST "$BASE/seller/cars" -H "Authorization: Bearer $seller" \
   -H 'Content-Type: application/json' \
-  -d '{"name":"Honda Fit","price_per_day":25000,"photo_url":"https://example.com/fit.jpg"}' | jq -r .id)
+  -d '{"name":"Honda Fit","price_per_day":25000,"photo_url":"https://example.com/fit.jpg"}')
+car=$(printf '%s' "$car_json" | jq -r .id)
+car_owner=$(printf '%s' "$car_json" | jq -r .owner_id)
 check "crear auto" "numero" "$([ "$car" != "null" ] && echo numero)"
 curl -s -X PATCH "$BASE/seller/cars/$car" -H "Authorization: Bearer $seller" \
   -H 'Content-Type: application/json' -d '{"active":true}' > /dev/null
@@ -116,6 +118,43 @@ check "registrar pago -> 201" "201" "$code"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/seller/reservations/$res/confirm" \
   -H "Authorization: Bearer $seller")
 check "confirmar -> 200" "200" "$code"
+
+echo "== cancelación =="
+res2=$(curl -s -X POST "$BASE/reservations" -H "Authorization: Bearer $buyer" \
+  -H 'Content-Type: application/json' \
+  -d "{\"car_id\":$car,\"start_date\":\"2027-02-01\",\"end_date\":\"2027-02-03\"}" | jq -r .id)
+check "reserva para cancelar" "numero" "$([ "$res2" != "null" ] && echo numero)"
+status=$(curl -s -X PATCH "$BASE/reservations/$res2/cancel" -H "Authorization: Bearer $buyer" | jq -r .status)
+check "cancelar -> cancelled" "cancelled" "$status"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/reservations/$res2/cancel" -H "Authorization: Bearer $buyer")
+check "re-cancelar -> 409" "409" "$code"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/reservations" -H "Authorization: Bearer $buyer" \
+  -H 'Content-Type: application/json' \
+  -d "{\"car_id\":$car,\"start_date\":\"2027-02-01\",\"end_date\":\"2027-02-03\"}")
+check "re-reservar rango liberado -> 201" "201" "$code"
+
+echo "== límite de días =="
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/reservations" -H "Authorization: Bearer $buyer" \
+  -H 'Content-Type: application/json' \
+  -d "{\"car_id\":$car,\"start_date\":\"2027-03-01\",\"end_date\":\"2027-04-05\"}")
+check "rango > 30 días -> 400" "400" "$code"
+
+echo "== catálogo: dueño y paginación =="
+n=$(curl -s "$BASE/cars?owner_id=$car_owner" | jq 'length')
+check "filtro owner_id" "1" "$n"
+n=$(curl -s "$BASE/cars?owner_id=999999" | jq 'length')
+check "owner inexistente -> vacío" "0" "$n"
+code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/cars?owner_id=abc")
+check "owner_id inválido -> 400" "400" "$code"
+n=$(curl -s "$BASE/cars?limit=1" | jq 'length')
+check "limit=1" "1" "$n"
+code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/cars?limit=0")
+check "limit inválido -> 400" "400" "$code"
+
+echo "== /auth/me =="
+me=$(curl -s "$BASE/auth/me" -H "Authorization: Bearer $seller")
+check "auth/me rol seller" "seller" "$(printf '%s' "$me" | jq -r .role)"
+check "auth/me email" "seller@example.com" "$(printf '%s' "$me" | jq -r .email)"
 
 echo "== reglas de hardening =="
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/seller/cars" -H "Authorization: Bearer $seller" \

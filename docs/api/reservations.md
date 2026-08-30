@@ -46,6 +46,7 @@ otro.
 | `400` | `invalid end_date, expected YYYY-MM-DD` | Formato inválido |
 | `400` | `end_date must be on or after start_date` | Rango invertido |
 | `400` | `start_date cannot be in the past` | Fecha anterior a hoy |
+| `400` | `reservation cannot be longer than 30 days` | El rango supera los 30 días |
 | `400` | `car_id is required` | Campo ausente (o `0`) |
 | `404` | `car not found` | El auto no existe |
 | `409` | `car is not active` | El auto existe pero está inactivo |
@@ -58,7 +59,8 @@ otro.
 
 ## `GET /reservations`
 
-Lista las reservas del comprador autenticado, más recientes primero.
+Lista las reservas del comprador autenticado, más recientes primero. Acepta
+`limit`/`offset` (ver [convenciones](00-general.md)).
 
 **Respuesta** — `200 OK`:
 
@@ -94,9 +96,34 @@ reservas de **sus** autos.
 
 ---
 
+## `PATCH /reservations/{id}/cancel`
+
+Cancela la reserva del comprador autenticado. Requiere login.
+
+Reglas: la reserva debe **pertenecer al comprador autenticado**; debe estar en
+estado `pending`; y **no debe tener un pago registrado** (una vez que se pagó,
+la cancelación se tramita con el vendedor).
+
+**Respuesta** — `200 OK` (reservation view ya `cancelled`).
+
+**Errores:**
+
+| Status | Mensaje | Cuándo |
+|--------|---------|--------|
+| `400` | `invalid reservation id` | `{id}` no es un entero |
+| `404` | `reservation not found` | No existe, **o** pertenece a otro comprador (se oculta) |
+| `409` | `reservation is not pending` | Ya fue confirmada o cancelada |
+| `409` | `payment already recorded, cannot cancel` | La reserva ya tiene pago |
+
+Tras cancelar, el rango vuelve a quedar **reservable** en `GET /cars` y
+`POST /reservations` (las `cancelled` no bloquean el overlap).
+
+---
+
 ## `GET /seller/reservations`
 
 Lista las reservas de los autos del vendedor autenticado, más recientes
-primero. Requiere rol `seller`.
+primero. Requiere rol `seller`. Acepta `limit`/`offset` (ver
+[convenciones](00-general.md)).
 
 **Respuesta** — `200 OK` (array de reservation views). Sin reservas → `[]`.

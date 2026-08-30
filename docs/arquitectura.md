@@ -86,7 +86,7 @@ stateDiagram-v2
     direction LR
     [*] --> pending: POST /reservations
     pending --> confirmed: seller confirma (con pago)
-    pending --> cancelled
+    pending --> cancelled: buyer cancela (sin pago)
     confirmed --> [*]
     cancelled --> [*]
 
@@ -98,7 +98,8 @@ stateDiagram-v2
 ```
 
 - Una reserva nace en `pending`; el vendedor la confirma con `confirmed` tras
-  aprobar el pago. La cancelación (`cancelled`) no se expone hoy vía API.
+  aprobar el pago, o el comprador la cancela (`cancelled`) con
+  `PATCH /reservations/{id}/cancel` mientras esté `pending` y sin pago.
 - Un pago nace en `pending`; pasa a `approved` cuando el vendedor confirma la
   reserva. Un pago `rejected` no tiene endpoint en el MVP.
 
@@ -112,6 +113,9 @@ Disponibilidad y solapamiento (`GET /cars`, `POST /reservations`):
   [`db.OverlapPredicate`](../internal/db/db.go)); las `cancelled` **no** bloquean.
 - `start_date` no puede ser anterior a hoy (comparación UTC) y
   `end_date >= start_date`.
+- El rango de una reserva no puede superar los **30 días**
+  (`end_date - start_date <= 30 días`); las listas devuelven un array plano y
+  aceptan `limit`/`offset` para paginar (ver [00-general](api/00-general.md)).
 
 Validaciones de entrada:
 
@@ -149,10 +153,12 @@ Operaciones atómicas:
 |---------|--------------------|--------------------|---------|
 | `GET /cars` | sí | sí | sí |
 | `POST /auth/register*`, `POST /auth/login` | sí | sí | sí |
+| `GET /auth/me` | su perfil | su perfil | no (401) |
 | `GET /seller/cars`, `POST /seller/cars` | no (403) | **solo sus autos** | no (401) |
 | `PATCH /seller/cars/{id}` | no (403) | **solo sus autos** | no (401) |
 | `POST /reservations`, `GET /reservations` | sí (sus reservas) | sí (si reserva) | no (401) |
 | `GET /reservations/{id}` | sus reservas | **dueño del auto** | no (401) |
+| `PATCH /reservations/{id}/cancel` | **sus reservas** | su reserva | no (401) |
 | `POST /reservations/{id}/payment` | **sus reservas** | su reserva | no (401) |
 | `GET /seller/reservations` | no (403) | **sus autos** | no (401) |
 | `PATCH /seller/reservations/{id}/confirm` | no (403) | **dueño del auto** | no (401) |
@@ -179,5 +185,4 @@ Operaciones atómicas:
 ## Fuera de alcance (MVP)
 
 Uploads reales de imágenes, gateway POS, integración con WhatsApp,
-paginator, frontend, rate limiting distribuido y multi-instancia, y
-cancelación de reservas vía API.
+frontend, rate limiting distribuido y multi-instancia, y un pago `rejected`.

@@ -79,6 +79,23 @@ Valida credenciales y devuelve un token JWT (válido 24 h). Público
 {"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."}
 ```
 
+---
+
+## `GET /auth/me`
+
+Devuelve el perfil del usuario autenticado. Útil para que el frontend muestre
+el email y el rol sin decodificar el JWT. Requiere login.
+
+**Respuesta** — `200 OK`:
+
+```json
+{"id":3,"email":"demo@example.com","role":"buyer"}
+```
+
+**Errores:** `401` igual que las demás rutas protegidas (token ausente,
+inválido o vencido). Nota: al vivir bajo `/auth/`, hereda el rate limit de ese
+prefijo; cacheá la respuesta en el cliente en vez de pollearla.
+
 Usa el token como `Authorization: Bearer <token>`.
 
 **Errores:**

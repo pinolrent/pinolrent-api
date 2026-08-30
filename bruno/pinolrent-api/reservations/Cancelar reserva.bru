@@ -1,0 +1,14 @@
+meta {
+  name: Cancelar reserva
+  type: http
+  seq: 14
+}
+
+patch {
+  url: {{baseUrl}}/reservations/{{reservationId}}/cancel
+  body: none
+}
+
+headers {
+  Authorization: Bearer {{buyerToken}}
+}

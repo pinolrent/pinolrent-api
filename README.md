@@ -26,11 +26,13 @@ make watch   # hot-reload
 | GET | `/health` | no | Healthcheck |
 | POST | `/auth/register` · `/auth/register/seller` | no | Registro de comprador / vendedor |
 | POST | `/auth/login` | no | Login (JWT 24 h) |
-| GET | `/cars` | no | Autos activos; con `start_date`/`end_date` excluye reservados |
+| GET | `/auth/me` | login | Tu perfil (`id`, `email`, `role`) |
+| GET | `/cars` | no | Autos activos; con fechas excluye reservados, con `owner_id` filtra vendedor |
 | GET · POST | `/seller/cars` · `/seller/cars` | seller | Mis autos y alta |
 | PATCH | `/seller/cars/{id}` | seller | Activar/inactivar (solo tu auto) |
-| POST | `/reservations` | login | Crear reserva (overlap → 409) |
+| POST | `/reservations` | login | Crear reserva (overlap o >30 días → 409/400) |
 | GET | `/reservations` · `/reservations/{id}` | login | Mis reservas y detalle |
+| PATCH | `/reservations/{id}/cancel` | login | Cancelar tu reserva (si está `pending` y sin pago) |
 | POST | `/reservations/{id}/payment` | login | Registrar pago (`pos`\|`cash`) |
 | GET | `/seller/reservations` | seller | Reservas de tus autos |
 | PATCH | `/seller/reservations/{id}/confirm` | seller | Aprobar pago y confirmar (solo tu auto) |
@@ -50,7 +52,8 @@ make watch   # hot-reload
 
 Go 1.26 · `net/http` (stdlib) · SQLite (`modernc.org/sqlite`) · JWT HS256 ·
 bcrypt. Notas: `price_per_day` en **centavos**, fechas ISO `YYYY-MM-DD`,
-body máx. 1 MB, rate limit por IP en `/auth/*` (30 req/60 s).
+body máx. 1 MB, rate limit por IP en `/auth/*` (30 req/60 s), listas paginadas
+(`limit`/`offset`, default 50 · máx 200) y reservas de hasta 30 días.
 
 Convenciones del repo: documentación en español, comentarios del código en
 inglés.

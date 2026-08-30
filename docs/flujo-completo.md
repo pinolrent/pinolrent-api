@@ -49,6 +49,13 @@ Cada login devuelve (`200 OK`):
 {"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."}
 ```
 
+Con el token, el perfil se consulta en `GET /auth/me`:
+
+```sh
+curl -s "$BASE/auth/me" -H "Authorization: Bearer $BUYER"
+# {"id":4,"email":"compra@example.com","role":"buyer"}
+```
+
 ## 3 · El vendedor crea un auto
 
 ```sh
@@ -162,6 +169,37 @@ en una transacción:
 }
 ```
 
+## Cancelación (antes de pagar)
+
+Mientras una reserva esté `pending` y **sin pago**, el comprador la cancela;
+
+```sh
+curl -s -X PATCH "$BASE/reservations/1/cancel" -H "Authorization: Bearer $BUYER"
+```
+
+Recibido (`200 OK`) — la reserva queda `cancelled` y su rango vuelve a estar
+disponible:
+
+```json
+{
+  "id":1,
+  "user_id":3,
+  "car_id":1,
+  "start_date":"2026-10-01",
+  "end_date":"2026-10-05",
+  "status":"cancelled",
+  "car":{"id":1,"owner_id":4,"name":"Toyota Yaris","price_per_day":45000,"active":true}
+}
+```
+
+Una reserva **con pago registrado** no se cancela por API:
+
+```sh
+curl -s -o /dev/null -w '%{http_code}\n' \
+  -X PATCH "$BASE/reservations/2/cancel" -H "Authorization: Bearer $BUYER"
+# → 409 {"error":"payment already recorded, cannot cancel"}
+```
+
 ## Aislamiento entre vendedores
 
 `vende@example.com` no puede tocar los autos de otro vendedor:
@@ -178,8 +216,11 @@ curl -s -o /dev/null -w '%{http_code}\n' \
 
 - El auto 1 ya no aparece al listar con el rango reservado:
   `GET /cars?start_date=2026-10-01&end_date=2026-10-05` → `[]`.
-- El vendedor ve sus reservas en `GET /seller/reservations`.
+- El vendedor ve sus reservas en `GET /seller/reservations`. Las listas
+  aceptan `limit`/`offset` (default 50, máx 200) y `GET /cars` filtra por
+  `owner_id`.
 - El mismo flujo está automatizado en `scripts/demo.sh` (`make demo`), que
   además comprueba hardening: body demasiado grande (`413`), fechas pasadas
-  (`400`), overlap (`409`), comprador sin permisos de vendedor (`403`) y rate
-  limit sobre `/auth/*` (`429`).
+  (`400`), overlap (`409`), rango > 30 días (`400`), paginación inválida
+  (`400`), cancelación y re-reserva, comprador sin permisos de vendedor
+  (`403`) y rate limit sobre `/auth/*` (`429`).

@@ -58,6 +58,20 @@ Todos los errores siguen el mismo shape:
   en rutas cuyo path empieza por `/auth/`: **30 req/60 s** con ráfaga de 30.
   Sobre el límite → `429 {"error":"too many requests"}`.
 
+## Paginación
+
+Las listas (`GET /cars`, `GET /seller/cars`, `GET /reservations`,
+`GET /seller/reservations`) aceptan:
+
+| Parámetro | Default | Reglas |
+|-----------|---------|--------|
+| `limit` | `50` | `1..200`; inválido → `400 "invalid limit"` |
+| `offset` | `0` | `>= 0`; inválido → `400 "invalid offset"` |
+
+La respuesta es un **array plano** (sin metadata). Para saber si hay más
+resultados pedí `limit+1` y usá el resultado extra como indicador de "hay
+siguiente página".
+
 ## Índice de endpoints
 
 | Método | Ruta | Auth | Documento |
@@ -66,6 +80,7 @@ Todos los errores siguen el mismo shape:
 | POST | `/auth/register` | no | [auth](auth.md) |
 | POST | `/auth/register/seller` | no | [auth](auth.md) |
 | POST | `/auth/login` | no | [auth](auth.md) |
+| GET | `/auth/me` | buyer/seller | [auth](auth.md) |
 | GET | `/cars` | no | [cars](cars.md) |
 | GET | `/seller/cars` | seller | [cars](cars.md) |
 | POST | `/seller/cars` | seller | [cars](cars.md) |
@@ -73,6 +88,7 @@ Todos los errores siguen el mismo shape:
 | POST | `/reservations` | buyer/seller | [reservations](reservations.md) |
 | GET | `/reservations` | buyer/seller | [reservations](reservations.md) |
 | GET | `/reservations/{id}` | buyer/seller | [reservations](reservations.md) |
+| PATCH | `/reservations/{id}/cancel` | buyer/seller | [reservations](reservations.md) |
 | POST | `/reservations/{id}/payment` | buyer/seller | [payments](payments.md) |
 | GET | `/seller/reservations` | seller | [payments](payments.md) |
 | PATCH | `/seller/reservations/{id}/confirm` | seller | [payments](payments.md) |

@@ -2,15 +2,18 @@
 
 ## `GET /cars`
 
-Lista los autos **activos** de todos los vendedores, opcionalmente excluyendo
-los ya reservados en un rango. Público.
+Lista los autos **activos** de todos los vendedores, opcionalmente filtrados
+por vendedor y excluyendo los ya reservados en un rango. Público.
 
-**Query params** (opcionales, van juntos o ninguno):
+**Query params** (todos opcionales, combinables):
 
 | Parámetro | Formato | Reglas |
 |-----------|---------|--------|
 | `start_date` | `YYYY-MM-DD` | debe acompañarse de `end_date` |
 | `end_date` | `YYYY-MM-DD` | `>= start_date` |
+| `owner_id` | entero | solo autos del vendedor con ese id |
+| `limit` | entero | `1..200`, default `50` |
+| `offset` | entero | `>= 0`, default `0` |
 
 ¿Como funciona el filtro? Solo se listan autos con `active=1` y sin reserva
 `pending`/`confirmed` que **solape** el rango `[start_date, end_date]`. Las
@@ -35,13 +38,15 @@ Sin resultados → `[]`.
 | `400` | `invalid start_date, expected YYYY-MM-DD` | Formato inválido |
 | `400` | `invalid end_date, expected YYYY-MM-DD` | Formato inválido |
 | `400` | `end_date must be on or after start_date` | Rango invertido |
+| `400` | `invalid owner_id` | `owner_id` no es un entero positivo |
+| `400` | `invalid limit` / `invalid offset` | Parámetros de paginación inválidos |
 
 ---
 
 ## `GET /seller/cars`
 
 Lista los autos del vendedor autenticado, más nuevos primero. Requiere rol
-`seller`.
+`seller`. Acepta `limit`/`offset` (ver [convenciones](00-general.md)).
 
 **Respuesta** — `200 OK`:
 
