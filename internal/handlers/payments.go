@@ -34,15 +34,21 @@ func (a *API) RecordPayment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "method must be pos or cash")
 		return
 	}
-	if in.ProofURL != "" && !validURL(in.ProofURL) {
-		writeError(w, http.StatusBadRequest, "invalid proof_url")
-		return
+	if in.ProofURL != "" {
+		if len(in.ProofURL) > maxURLLen {
+			writeError(w, http.StatusBadRequest, "proof_url is too long")
+			return
+		}
+		if !validURL(in.ProofURL) {
+			writeError(w, http.StatusBadRequest, "invalid proof_url")
+			return
+		}
 	}
 
-	var ownerID int64
+	var buyerID int64
 	var status string
 	err = a.DB.QueryRowContext(r.Context(),
-		`SELECT user_id, status FROM reservations WHERE id = ?`, id).Scan(&ownerID, &status)
+		`SELECT user_id, status FROM reservations WHERE id = ?`, id).Scan(&buyerID, &status)
 	if errors.Is(err, sql.ErrNoRows) {
 		writeError(w, http.StatusNotFound, "reservation not found")
 		return
@@ -51,7 +57,7 @@ func (a *API) RecordPayment(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	if ownerID != u.ID {
+	if buyerID != u.ID {
 		writeError(w, http.StatusNotFound, "reservation not found")
 		return
 	}

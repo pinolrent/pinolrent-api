@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/pinolrent/pinolrent-api/internal/models"
@@ -60,6 +61,7 @@ func TestRecordPaymentValidates(t *testing.T) {
 		{"bad method", map[string]any{"method": "card"}},
 		{"missing method", map[string]any{}},
 		{"bad url", map[string]any{"method": "cash", "proof_url": "::not-url::"}},
+		{"url too long", map[string]any{"method": "cash", "proof_url": "https://x.com/" + strings.Repeat("a", 3000)}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

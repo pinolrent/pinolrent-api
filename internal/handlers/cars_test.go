@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/pinolrent/pinolrent-api/internal/models"
@@ -48,6 +49,8 @@ func TestCreateCarValidates(t *testing.T) {
 		{"empty name", map[string]any{"name": "  ", "price_per_day": 45000}},
 		{"negative price", map[string]any{"name": "Toyota", "price_per_day": -1}},
 		{"bad photo url", map[string]any{"name": "Toyota", "photo_url": "::not-a-url::", "price_per_day": 1}},
+		{"name too long", map[string]any{"name": strings.Repeat("x", 201), "price_per_day": 1}},
+		{"photo url too long", map[string]any{"name": "Toyota", "photo_url": "https://x.com/" + strings.Repeat("a", 3000), "price_per_day": 1}},
 		{"malformed", nil},
 	}
 	for _, tc := range cases {

@@ -17,6 +17,29 @@ import (
 
 const maxBodyBytes = 1 << 20
 
+// Field length caps. Per-request body size is bounded separately by
+// maxBodyBytes; these caps reject oversized individual fields before they
+// reach the database.
+const (
+	maxEmailLen    = 254 // RFC 5321
+	minPasswordLen = 8
+	maxPasswordLen = 72 // bcrypt silently truncates beyond this
+	maxNameLen     = 200
+	maxURLLen      = 2048
+)
+
+// lenBetween reports whether n is within [min, max] inclusive. max <= 0
+// means "no upper bound".
+func lenBetween(s string, min, max int) bool {
+	if len(s) < min {
+		return false
+	}
+	if max > 0 && len(s) > max {
+		return false
+	}
+	return true
+}
+
 // API bundles the shared dependencies used by every handler: the database
 // pool and the auth provider.
 type API struct {

@@ -48,10 +48,16 @@ Crea una cuenta `buyer`. Público (rate-limited).
 | Status | Mensaje | Cuándo |
 |--------|---------|--------|
 | `400` | `invalid email` | El email no pasa la validación de formato |
-| `400` | `password must be at least 6 characters` | Password muy corto |
-| `409` | `email already registered` | El email ya existe |
+| `400` | `email is too long` | Email > 254 caracteres |
+| `400` | `password must be 8-72 characters` | Password fuera de rango (bcrypt trunca a 72 bytes) |
 | `400` | `invalid JSON body` | JSON malformado / campos desconocidos |
 | `413` | `request body too large` | Body > 1 MB |
+
+> Si el email ya existe, el endpoint responde `201` con `{"id":0,"email":"..."}`
+> en vez de `409`, para no permitir enumerar cuentas registradas. La
+> diferenciación se hace vía `/auth/login` con un mensaje uniforme y un
+> bcrypt dummy en el camino de "no existe" para igualar el tiempo de
+> respuesta.
 
 ---
 

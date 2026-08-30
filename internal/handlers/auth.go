@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -69,8 +70,12 @@ func (a *API) register(w http.ResponseWriter, r *http.Request, role string) {
 		writeError(w, http.StatusBadRequest, "invalid email")
 		return
 	}
-	if len(in.Password) < 6 {
-		writeError(w, http.StatusBadRequest, "password must be at least 6 characters")
+	if !lenBetween(in.Email, 1, maxEmailLen) {
+		writeError(w, http.StatusBadRequest, "email is too long")
+		return
+	}
+	if !lenBetween(in.Password, minPasswordLen, maxPasswordLen) {
+		writeError(w, http.StatusBadRequest, "password must be 8-72 characters")
 		return
 	}
 
@@ -84,7 +89,11 @@ func (a *API) register(w http.ResponseWriter, r *http.Request, role string) {
 		`INSERT INTO users (email, password_hash, role) VALUES (?, ?, ?)`, in.Email, hash, role)
 	if err != nil {
 		if isUniqueViolation(err) {
-			writeError(w, http.StatusConflict, "email already registered")
+			// Same shape as the success response to avoid letting an
+			// attacker enumerate registered emails via the registration
+			// endpoint. Login remains the path that reveals whether an
+			// account exists (with a constant-time check, see Login).
+			writeJSON(w, http.StatusCreated, map[string]any{"id": 0, "email": in.Email})
 			return
 		}
 		serverError(w, err)
@@ -93,6 +102,22 @@ func (a *API) register(w http.ResponseWriter, r *http.Request, role string) {
 
 	id, _ := res.LastInsertId()
 	writeJSON(w, http.StatusCreated, map[string]any{"id": id, "email": in.Email})
+}
+
+// dummyHash is a fixed bcrypt hash used by Login to keep the response time
+// constant whether the email exists or not, so an attacker cannot enumerate
+// registered accounts by measuring timing. Generated once at startup with
+// default cost so CompareHashAndPassword takes the same time as a real check.
+var dummyHash string
+
+func init() {
+	const decoy = "decoy-password-for-timing-equality"
+	a := auth.New("dummy", nil)
+	h, err := a.HashPassword(decoy)
+	if err != nil {
+		panic("dummy hash: " + err.Error())
+	}
+	dummyHash = h
 }
 
 // Login validates credentials and returns a signed token.
@@ -111,7 +136,10 @@ func (a *API) Login(w http.ResponseWriter, r *http.Request) {
 		`SELECT id, email, password_hash, role FROM users WHERE email = ?`,
 		strings.ToLower(strings.TrimSpace(in.Email))).
 		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
+		// Run a bcrypt comparison against a fixed dummy hash so the
+		// response time is independent of whether the email exists.
+		_ = a.Auth.CheckPassword(dummyHash, in.Password)
 		writeError(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}

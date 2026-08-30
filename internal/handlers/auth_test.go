@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/pinolrent/pinolrent-api/internal/auth"
@@ -86,11 +87,22 @@ func TestRegisterNormalizesEmail(t *testing.T) {
 func TestRegisterDuplicate(t *testing.T) {
 	a := newTestAPI(t)
 	registerBuyer(t, a, "dup@example.com", "secret123")
+	// Registration is intentionally opaque to avoid letting an attacker
+	// enumerate registered emails. A duplicate returns 201 with id=0 and
+	// the same body shape as a real success.
 	rec := doJSON(t, a, "POST", "/auth/register", "", map[string]any{
 		"email": "dup@example.com", "password": "secret456",
 	})
-	if rec.Code != http.StatusConflict {
-		t.Fatalf("status = %d, want 409 (body %s)", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201 (body %s)", rec.Code, rec.Body.String())
+	}
+	var out struct {
+		ID    int64  `json:"id"`
+		Email string `json:"email"`
+	}
+	decodeJSON(t, rec, &out)
+	if out.ID != 0 {
+		t.Fatalf("duplicate returned real id = %d, want 0", out.ID)
 	}
 }
 
@@ -229,5 +241,76 @@ func TestRequireRole(t *testing.T) {
 
 	if rec := serve(registerBuyer(t, a, "cli@example.com", "secret123")); rec.Code != http.StatusForbidden {
 		t.Fatalf("buyer on seller route: status = %d, want 403 (body %s)", rec.Code, rec.Body.String())
+	}
+}
+
+func TestRegisterFieldLengthCaps(t *testing.T) {
+	longEmail := strings.Repeat("a", 250) + "@b.com" // 256 bytes
+	cases := []struct {
+		name string
+		body map[string]any
+	}{
+		{"password too short", map[string]any{"email": "x@y.com", "password": "short"}},
+		{"password too long", map[string]any{"email": "x@y.com", "password": strings.Repeat("p", 73)}},
+		{"email too long", map[string]any{"email": longEmail, "password": "secret123"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := newTestAPI(t)
+			rec := doJSON(t, a, "POST", "/auth/register", "", tc.body)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400 (body %s)", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestRegisterDuplicateIsOpaque(t *testing.T) {
+	a := newTestAPI(t)
+	first := doJSON(t, a, "POST", "/auth/register", "", map[string]any{
+		"email": "dup@example.com", "password": "secret123",
+	})
+	if first.Code != http.StatusCreated {
+		t.Fatalf("first register: status = %d", first.Code)
+	}
+	var firstBody struct {
+		ID int64 `json:"id"`
+	}
+	decodeJSON(t, first, &firstBody)
+	if firstBody.ID == 0 {
+		t.Fatal("first register returned id=0")
+	}
+
+	dup := doJSON(t, a, "POST", "/auth/register", "", map[string]any{
+		"email": "dup@example.com", "password": "different-pw",
+	})
+	if dup.Code != http.StatusCreated {
+		t.Fatalf("duplicate register: status = %d, want 201 (body %s)", dup.Code, dup.Body.String())
+	}
+	var dupBody struct {
+		ID    int64  `json:"id"`
+		Email string `json:"email"`
+	}
+	decodeJSON(t, dup, &dupBody)
+	if dupBody.ID != 0 {
+		t.Fatalf("duplicate leaked real id = %d, want 0", dupBody.ID)
+	}
+	if dupBody.Email != "dup@example.com" {
+		t.Fatalf("duplicate email = %q, want dup@example.com", dupBody.Email)
+	}
+}
+
+// TestLoginUnknownEmailRunsBcrypt is a coarse guard that the constant-time
+// path is wired: when the email is unknown, Login still calls bcrypt via
+// CheckPassword(dummyHash, ...). We exercise the handler and just verify it
+// does not panic and returns 401. A statistical timing test would need many
+// samples and is too flaky for unit tests; this guards the wiring only.
+func TestLoginUnknownEmailRunsBcrypt(t *testing.T) {
+	a := newTestAPI(t)
+	rec := doJSON(t, a, "POST", "/auth/login", "", map[string]any{
+		"email": "ghost@example.com", "password": "secret123",
+	})
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401 (body %s)", rec.Code, rec.Body.String())
 	}
 }

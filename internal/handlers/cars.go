@@ -161,6 +161,10 @@ func (a *API) CreateCar(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "name is required")
 		return
 	}
+	if !lenBetween(in.Name, 1, maxNameLen) {
+		writeError(w, http.StatusBadRequest, "name is too long (max "+strconv.Itoa(maxNameLen)+" characters)")
+		return
+	}
 	if in.PricePerDay < 0 {
 		writeError(w, http.StatusBadRequest, "price_per_day must be >= 0")
 		return
@@ -169,9 +173,15 @@ func (a *API) CreateCar(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "price_per_day must be <= "+strconv.FormatInt(maxPricePerDay, 10))
 		return
 	}
-	if in.PhotoURL != "" && !validURL(in.PhotoURL) {
-		writeError(w, http.StatusBadRequest, "invalid photo_url")
-		return
+	if in.PhotoURL != "" {
+		if len(in.PhotoURL) > maxURLLen {
+			writeError(w, http.StatusBadRequest, "photo_url is too long")
+			return
+		}
+		if !validURL(in.PhotoURL) {
+			writeError(w, http.StatusBadRequest, "invalid photo_url")
+			return
+		}
 	}
 
 	res, err := a.DB.ExecContext(r.Context(),
