@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: test (ubuntu, go ${{ matrix.go-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go-version: ["1.26"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache: true
+
+      - name: Verify modules
+        run: go mod verify
+
+      - name: go vet
+        run: make vet
+
+      - name: go test (no race)
+        run: make test
+
+      - name: go test -race
+        run: make test-race
+
+      - name: golangci-lint
+        run: make lint
+
+      - name: Build
+        run: make build
+
+      - name: End-to-end smoke
+        run: make demo

@@ -1,4 +1,4 @@
-.PHONY: help tools run dev watch build test vet lint fmt tidy demo clean
+.PHONY: help tools run dev watch build test test-race cover vet lint fmt tidy demo clean
 
 .DEFAULT_GOAL := help
 
@@ -28,6 +28,14 @@ build: ## Builds the binary at bin/pinolrent-api with the build version baked in
 
 test: ## Runs the test suite (no cache of results)
 	go test -count=1 -timeout 120s ./...
+
+test-race: ## Runs the test suite with the race detector (requires CGO/gcc)
+	CGO_ENABLED=1 go test -count=1 -race -timeout 180s ./...
+
+cover: ## Runs the test suite and prints a one-line coverage summary
+	go test -count=1 -timeout 120s -coverprofile=cover.out -covermode=atomic ./...
+	@go tool cover -func=cover.out | tail -n1
+	@rm -f cover.out
 
 vet: ## Runs go vet
 	go vet ./...
