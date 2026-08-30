@@ -3,6 +3,7 @@ package handlers
 import (
 	"log/slog"
 	"net/http"
+	"runtime/debug"
 	"time"
 )
 
@@ -29,5 +30,24 @@ func WithRequestLog(next http.Handler) http.Handler {
 			"status", rec.status,
 			"duration_ms", time.Since(start).Milliseconds(),
 		)
+	})
+}
+
+// WithRecover wraps a handler so panics are caught, logged, and turned into a
+// 500 JSON response instead of closing the connection.
+func WithRecover(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				slog.Error("panic recovered",
+					"method", r.Method,
+					"path", r.URL.Path,
+					"error", rec,
+					"stack", string(debug.Stack()),
+				)
+				writeError(w, http.StatusInternalServerError, "server error")
+			}
+		}()
+		next.ServeHTTP(w, r)
 	})
 }

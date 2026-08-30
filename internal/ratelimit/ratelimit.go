@@ -3,6 +3,7 @@
 package ratelimit
 
 import (
+	"encoding/json"
 	"net"
 	"net/http"
 	"strings"
@@ -11,6 +12,12 @@ import (
 
 	"golang.org/x/time/rate"
 )
+
+func writeJSONError(w http.ResponseWriter, status int, msg string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
+}
 
 type entry struct {
 	limiter *rate.Limiter
@@ -82,7 +89,7 @@ func (l *Limiter) Middleware(next http.Handler, limitPaths ...string) http.Handl
 			l.mu.Unlock()
 
 			if !l.Allow(clientIP(r)) {
-				http.Error(w, `{"error":"too many requests"}`, http.StatusTooManyRequests)
+				writeJSONError(w, http.StatusTooManyRequests, "too many requests")
 				return
 			}
 		}
