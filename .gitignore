@@ -1,6 +1,3 @@
-# AI stuff
-.codegraph
-
 # Local env and database
 .env
 *.db
@@ -12,3 +9,6 @@ dev.db*
 bin/
 tmp/
 air.log
+
+# AI stuff
+.codegraph
