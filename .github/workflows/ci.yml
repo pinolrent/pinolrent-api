@@ -38,7 +38,6 @@ jobs:
         uses: golangci/golangci-lint-action@v8
         with:
           version: v2.13.2
-          args: run ./...
 
       - name: Build
         run: make build
