@@ -41,9 +41,16 @@ func main() {
 	a := auth.New(cfg.JWTSecret, d)
 	h := handlers.New(d, a)
 
-	var mux http.Handler = handlers.Routes(h)
-	mux = handlers.WithRequestLog(mux)
-	mux = ratelimit.New(0.5, 30).Middleware(mux, "/auth/")
+	origins, err := cfg.CORSOrigins()
+	if err != nil {
+		slog.Error("invalid config", "error", err)
+		os.Exit(1)
+	}
+
+	// Nest inside-out so that CORS ends up outermost: preflights short-circuit
+	// before reaching the rate limiter, and every response (even 429) ships the
+	// CORS headers the browser needs to read it.
+	mux := handlers.WithCORS(origins)(handlers.WithRequestLog(ratelimit.New(0.5, 30).Middleware(handlers.Routes(h), "/auth/")))
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
