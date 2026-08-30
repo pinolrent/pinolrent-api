@@ -1,0 +1,21 @@
+meta {
+  name: Registrar cliente
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/auth/register
+  body: json
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "email": "{{clientEmail}}",
+    "password": "{{clientPassword}}"
+  }
+}

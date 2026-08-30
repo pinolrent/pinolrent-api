@@ -1,0 +1,28 @@
+meta {
+  name: Login cliente
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/auth/login
+  body: json
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "email": "{{clientEmail}}",
+    "password": "{{clientPassword}}"
+  }
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (body.token) {
+    bru.setVar("clientToken", body.token);
+  }
+}

@@ -1,0 +1,30 @@
+meta {
+  name: Crear reserva
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/reservations
+  body: json
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{clientToken}}
+}
+
+body:json {
+  {
+    "car_id": {{carId}},
+    "start_date": "2027-01-10",
+    "end_date": "2027-01-12"
+  }
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (body.id) {
+    bru.setVar("reservationId", body.id);
+  }
+}

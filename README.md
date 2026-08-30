@@ -34,6 +34,23 @@ go run ./cmd/api
 export JWT_SECRET="$(openssl rand -base64 32)"
 ```
 
+## Entorno de desarrollo
+
+El proyecto incluye un Makefile y scripts de dev para no depender de memoria:
+
+```sh
+make tools        # una vez: instala air (hot-reload) y golangci-lint v2
+make dev          # arranca el server con defaults de dev (sin .env)
+make watch        # hot-reload: rebuild automático al editar (usa air)
+make lint         # golangci-lint (build, vet y lint deben quedar limpios)
+make demo         # smoke end-to-end autocontenido en :8132 con DB efímera
+make test         # go test -count=1 ./...
+```
+
+- **`.env`**: si existe `.env`, `make dev` lo carga (vía `godotenv`). Copia `.env.example` y edita los valores; lo que está en el shell pisa al archivo. Sin `.env`, `make dev` usa defaults de desarrollo (`JWT_SECRET`, `ADMIN_PASSWORD=admin123`, `DATABASE_URL=dev.db`). El fail-fast de producción se conserva: `go run ./cmd/api` directo sin vars sigue abortando.
+- **Colección Bruno**: `bruno/pinolrent-api/` tiene requests listos (register, login, autos, reservas, pago, confirmar). Los login capturan el token automáticamente en variables runtime (`adminToken`, `clientToken`, `carId`, `reservationId`); corre la colección en orden. Ajusta `baseUrl` (por defecto `http://localhost:8080`).
+- **Documentación de código en inglés**, doc del proyecto en español.
+
 ## Endpoints
 
 | Método | Ruta | Auth | Descripción |
@@ -64,8 +81,8 @@ Estados: reserva `pending` → `confirmed`; pago `pending` → `approved`.
 ## Tests
 
 ```sh
-go test ./...
-go vet ./...
+make test
+make lint
 ```
 
 ## Fuera de alcance

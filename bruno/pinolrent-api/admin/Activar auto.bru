@@ -1,0 +1,21 @@
+meta {
+  name: Activar/desactivar auto
+  type: http
+  seq: 6
+}
+
+patch {
+  url: {{baseUrl}}/admin/cars/{{carId}}
+  body: json
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{adminToken}}
+}
+
+body:json {
+  {
+    "active": true
+  }
+}

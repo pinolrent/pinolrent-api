@@ -1,0 +1,22 @@
+meta {
+  name: Registrar pago
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/reservations/{{reservationId}}/payment
+  body: json
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{clientToken}}
+}
+
+body:json {
+  {
+    "method": "pos",
+    "proof_url": "https://example.com/recibo.jpg"
+  }
+}

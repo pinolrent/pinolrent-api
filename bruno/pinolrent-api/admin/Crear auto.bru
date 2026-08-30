@@ -1,0 +1,30 @@
+meta {
+  name: Crear auto
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/admin/cars
+  body: json
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{adminToken}}
+}
+
+body:json {
+  {
+    "name": "Honda Fit",
+    "price_per_day": 25000,
+    "photo_url": "https://example.com/fit.jpg"
+  }
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (body.id) {
+    bru.setVar("carId", body.id);
+  }
+}
