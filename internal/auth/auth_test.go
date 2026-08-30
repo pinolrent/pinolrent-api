@@ -16,6 +16,7 @@ import (
 	"github.com/pinolrent/pinolrent-api/internal/models"
 )
 
+//nolint:gosec // test-only JWT secret, never used in production
 const testSecret = "test-secret-32-bytes-minimum-okay"
 
 func TestMain(m *testing.M) {

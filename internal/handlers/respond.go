@@ -28,13 +28,13 @@ const (
 	maxURLLen      = 2048
 )
 
-// lenBetween reports whether n is within [min, max] inclusive. max <= 0
-// means "no upper bound".
-func lenBetween(s string, min, max int) bool {
-	if len(s) < min {
+// lenBetween reports whether s length is within [minLen, maxLen] inclusive.
+// maxLen <= 0 means "no upper bound".
+func lenBetween(s string, minLen, maxLen int) bool {
+	if len(s) < minLen {
 		return false
 	}
-	if max > 0 && len(s) > max {
+	if maxLen > 0 && len(s) > maxLen {
 		return false
 	}
 	return true

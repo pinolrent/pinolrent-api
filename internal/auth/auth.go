@@ -84,6 +84,7 @@ var tokenParser = jwt.NewParser(
 
 func (a *Auth) parseToken(token string) (*Claims, error) {
 	claims := &Claims{}
+	//nolint:revive // t is part of the jwt.Keyfunc signature, even if unused here
 	_, err := tokenParser.ParseWithClaims(token, claims, func(t *jwt.Token) (any, error) {
 		return a.secret, nil
 	})

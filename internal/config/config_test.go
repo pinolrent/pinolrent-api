@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+//nolint:gosec // test-only JWT secret, never used in production
 const testJWTSecret = "test-secret-32-bytes-minimum-okay"
 
 func TestLoadDefaults(t *testing.T) {
