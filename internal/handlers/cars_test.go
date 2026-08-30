@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strconv"
 	"testing"
@@ -223,6 +224,95 @@ func TestListCarsEmpty(t *testing.T) {
 	decodeJSON(t, rec, &cars)
 	if cars == nil || len(cars) != 0 {
 		t.Fatalf("expected empty non-nil list, got %#v", cars)
+	}
+}
+
+func TestListCarsPagination(t *testing.T) {
+	a := newTestAPI(t)
+	seller := newSeller(t, a)
+	for i := 0; i < 5; i++ {
+		createCar(t, a, seller, map[string]any{
+			"name": fmt.Sprintf("C%d", i), "price_per_day": i * 100,
+		})
+	}
+
+	get := func(q string) []models.Car {
+		rec := doJSON(t, a, "GET", "/cars"+q, "", nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d body %s", rec.Code, rec.Body.String())
+		}
+		var cars []models.Car
+		decodeJSON(t, rec, &cars)
+		return cars
+	}
+
+	if cars := get("?limit=2"); len(cars) != 2 || cars[0].ID != 1 || cars[1].ID != 2 {
+		t.Fatalf("limit=2: got %+v", cars)
+	}
+	if cars := get("?limit=2&offset=2"); len(cars) != 2 || cars[0].ID != 3 || cars[1].ID != 4 {
+		t.Fatalf("offset=2: got %+v", cars)
+	}
+	if cars := get("?offset=4"); len(cars) != 1 || cars[0].ID != 5 {
+		t.Fatalf("offset=4: got %+v", cars)
+	}
+}
+
+func TestListCarsPaginationValidation(t *testing.T) {
+	a := newTestAPI(t)
+	cases := []struct{ name, q string }{
+		{"bad limit", "/cars?limit=abc"},
+		{"zero limit", "/cars?limit=0"},
+		{"negative limit", "/cars?limit=-1"},
+		{"over max", "/cars?limit=201"},
+		{"bad offset", "/cars?offset=-2"},
+		{"non-numeric offset", "/cars?offset=x"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := doJSON(t, a, "GET", tc.q, "", nil)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want 400 (body %s)", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestListCarsByOwner(t *testing.T) {
+	a := newTestAPI(t)
+	sellerA := newSeller(t, a)
+	sellerB := newSeller(t, a)
+	ca := createCar(t, a, sellerA, map[string]any{"name": "A1", "price_per_day": 100})
+	createCar(t, a, sellerA, map[string]any{"name": "A2", "price_per_day": 200})
+	cb := createCar(t, a, sellerB, map[string]any{"name": "B1", "price_per_day": 300})
+
+	get := func(q string) []models.Car {
+		rec := doJSON(t, a, "GET", "/cars"+q, "", nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d body %s", rec.Code, rec.Body.String())
+		}
+		var cars []models.Car
+		decodeJSON(t, rec, &cars)
+		return cars
+	}
+
+	if cars := get("?owner_id=" + itoa(ca.OwnerID)); len(cars) != 2 || cars[0].OwnerID != ca.OwnerID || cars[1].OwnerID != ca.OwnerID {
+		t.Fatalf("owner filter: got %+v", cars)
+	}
+	if cars := get("?owner_id=999"); len(cars) != 0 {
+		t.Fatalf("unknown owner should be empty, got %+v", cars)
+	}
+
+	// combined with the date filter: bookings still exclude the car
+	buyerToken := registerBuyer(t, a, "cli@example.com", "secret123")
+	createReservation(t, a, buyerToken, map[string]any{
+		"car_id": cb.ID, "start_date": "2026-09-05", "end_date": "2026-09-10",
+	})
+	if cars := get("?owner_id=" + itoa(cb.OwnerID) + "&start_date=2026-09-07&end_date=2026-09-08"); len(cars) != 0 {
+		t.Fatalf("owner+dates should exclude booked car, got %+v", cars)
+	}
+
+	if rec := doJSON(t, a, "GET", "/cars?owner_id=abc", "", nil); rec.Code != http.StatusBadRequest {
+		t.Fatalf("bad owner_id: status = %d, want 400", rec.Code)
 	}
 }
 

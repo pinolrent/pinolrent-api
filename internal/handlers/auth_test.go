@@ -130,6 +130,38 @@ func TestLoginRejects(t *testing.T) {
 	}
 }
 
+func TestMe(t *testing.T) {
+	a := newTestAPI(t)
+
+	if rec := doJSON(t, a, "GET", "/auth/me", "", nil); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("no token: status = %d, want 401", rec.Code)
+	}
+
+	token := registerBuyer(t, a, "me@example.com", "secret123")
+	rec := doJSON(t, a, "GET", "/auth/me", token, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body %s", rec.Code, rec.Body.String())
+	}
+	var out struct {
+		ID    int64  `json:"id"`
+		Email string `json:"email"`
+		Role  string `json:"role"`
+	}
+	decodeJSON(t, rec, &out)
+	if out.ID == 0 || out.Email != "me@example.com" || out.Role != "buyer" {
+		t.Fatalf("unexpected profile: %+v", out)
+	}
+
+	rec = doJSON(t, a, "GET", "/auth/me", newSeller(t, a), nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("seller status = %d body %s", rec.Code, rec.Body.String())
+	}
+	decodeJSON(t, rec, &out)
+	if out.Role != "seller" {
+		t.Fatalf("seller role = %q, want seller", out.Role)
+	}
+}
+
 func TestRequireAuth(t *testing.T) {
 	a := newTestAPI(t)
 

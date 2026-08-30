@@ -114,8 +114,9 @@ func TestCreateReservationPastStart(t *testing.T) {
 	}
 
 	today := time.Now().UTC().Format(dateLayout)
+	later := time.Now().UTC().AddDate(0, 0, 5).Format(dateLayout)
 	rec = doJSON(t, a, "POST", "/reservations", token, map[string]any{
-		"car_id": car.ID, "start_date": today, "end_date": "2099-01-01",
+		"car_id": car.ID, "start_date": today, "end_date": later,
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("today start: status = %d, want 201 (body %s)", rec.Code, rec.Body.String())

@@ -141,6 +141,132 @@ func TestCreateReservationAllowsCancelled(t *testing.T) {
 	}
 }
 
+func TestCreateReservationMaxDays(t *testing.T) {
+	a := newTestAPI(t)
+	car := seedCar(t, a)
+	token := registerBuyer(t, a, "user@example.com", "secret123")
+
+	if rec := doJSON(t, a, "POST", "/reservations", token, map[string]any{
+		"car_id": car.ID, "start_date": "2026-09-01", "end_date": "2026-10-01",
+	}); rec.Code != http.StatusCreated {
+		t.Fatalf("30 days: status = %d, want 201 (body %s)", rec.Code, rec.Body.String())
+	}
+
+	if rec := doJSON(t, a, "POST", "/reservations", token, map[string]any{
+		"car_id": car.ID, "start_date": "2026-11-01", "end_date": "2026-12-02",
+	}); rec.Code != http.StatusBadRequest {
+		t.Fatalf("31 days: status = %d, want 400 (body %s)", rec.Code, rec.Body.String())
+	}
+}
+
+func TestCancelReservation(t *testing.T) {
+	a := newTestAPI(t)
+	car := seedCar(t, a)
+	token := registerBuyer(t, a, "user@example.com", "secret123")
+
+	v := createReservation(t, a, token, map[string]any{
+		"car_id": car.ID, "start_date": "2026-09-10", "end_date": "2026-09-12",
+	})
+
+	rec := doJSON(t, a, "PATCH", "/reservations/"+itoa(v.ID)+"/cancel", token, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body %s", rec.Code, rec.Body.String())
+	}
+	var out reservationView
+	decodeJSON(t, rec, &out)
+	if out.ID != v.ID || out.Status != "cancelled" {
+		t.Fatalf("unexpected view: %+v", out)
+	}
+
+	// the freed range is bookable again
+	rec = doJSON(t, a, "POST", "/reservations", token, map[string]any{
+		"car_id": car.ID, "start_date": "2026-09-10", "end_date": "2026-09-12",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("rebook after cancel: status = %d, want 201 (body %s)", rec.Code, rec.Body.String())
+	}
+}
+
+func TestCancelReservationRules(t *testing.T) {
+	a := newTestAPI(t)
+	seller := newSeller(t, a)
+	car := createCar(t, a, seller, map[string]any{"name": "Toyota Yaris", "price_per_day": 45000})
+	tokenA := registerBuyer(t, a, "a@example.com", "secret123")
+	tokenB := registerBuyer(t, a, "b@example.com", "secret123")
+
+	v := createReservation(t, a, tokenA, map[string]any{
+		"car_id": car.ID, "start_date": "2026-09-10", "end_date": "2026-09-12",
+	})
+	path := "/reservations/" + itoa(v.ID) + "/cancel"
+
+	if rec := doJSON(t, a, "PATCH", path, "", nil); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("no token: status = %d, want 401", rec.Code)
+	}
+	if rec := doJSON(t, a, "PATCH", path, tokenB, nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("foreign buyer: status = %d, want 404", rec.Code)
+	}
+	if rec := doJSON(t, a, "PATCH", "/reservations/garbage/cancel", tokenA, nil); rec.Code != http.StatusBadRequest {
+		t.Fatalf("bad id: status = %d, want 400", rec.Code)
+	}
+	if rec := doJSON(t, a, "PATCH", "/reservations/99999/cancel", tokenA, nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown: status = %d, want 404", rec.Code)
+	}
+
+	// cancellation is one-shot: a second attempt sees a non-pending status
+	doJSON(t, a, "PATCH", path, tokenA, nil)
+	if rec := doJSON(t, a, "PATCH", path, tokenA, nil); rec.Code != http.StatusConflict {
+		t.Fatalf("re-cancel: status = %d, want 409 (body %s)", rec.Code, rec.Body.String())
+	}
+
+	// a paid reservation cannot be cancelled
+	paid := createReservation(t, a, tokenA, map[string]any{
+		"car_id": car.ID, "start_date": "2026-10-01", "end_date": "2026-10-02",
+	})
+	if rec := doJSON(t, a, "POST", "/reservations/"+itoa(paid.ID)+"/payment", tokenA, map[string]any{"method": "pos"}); rec.Code != http.StatusCreated {
+		t.Fatalf("payment: status = %d body %s", rec.Code, rec.Body.String())
+	}
+	if rec := doJSON(t, a, "PATCH", "/reservations/"+itoa(paid.ID)+"/cancel", tokenA, nil); rec.Code != http.StatusConflict {
+		t.Fatalf("cancel paid: status = %d, want 409 (body %s)", rec.Code, rec.Body.String())
+	}
+
+	// a confirmed reservation cannot be cancelled
+	confirmed := createReservation(t, a, tokenA, map[string]any{
+		"car_id": car.ID, "start_date": "2026-11-01", "end_date": "2026-11-02",
+	})
+	doJSON(t, a, "POST", "/reservations/"+itoa(confirmed.ID)+"/payment", tokenA, map[string]any{"method": "cash"})
+	if rec := doJSON(t, a, "PATCH", "/seller/reservations/"+itoa(confirmed.ID)+"/confirm", seller, nil); rec.Code != http.StatusOK {
+		t.Fatalf("confirm: status = %d body %s", rec.Code, rec.Body.String())
+	}
+	if rec := doJSON(t, a, "PATCH", "/reservations/"+itoa(confirmed.ID)+"/cancel", tokenA, nil); rec.Code != http.StatusConflict {
+		t.Fatalf("cancel confirmed: status = %d, want 409 (body %s)", rec.Code, rec.Body.String())
+	}
+}
+
+func TestListReservationsPagination(t *testing.T) {
+	a := newTestAPI(t)
+	car := seedCar(t, a)
+	token := registerBuyer(t, a, "user@example.com", "secret123")
+	createReservation(t, a, token, map[string]any{"car_id": car.ID, "start_date": "2026-09-01", "end_date": "2026-09-02"})
+	createReservation(t, a, token, map[string]any{"car_id": car.ID, "start_date": "2026-09-03", "end_date": "2026-09-04"})
+	createReservation(t, a, token, map[string]any{"car_id": car.ID, "start_date": "2026-09-05", "end_date": "2026-09-06"})
+
+	rec := doJSON(t, a, "GET", "/reservations?limit=2", token, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body %s", rec.Code, rec.Body.String())
+	}
+	var views []reservationView
+	decodeJSON(t, rec, &views)
+	if len(views) != 2 || views[0].ID != 3 || views[1].ID != 2 {
+		t.Fatalf("limit=2 newest first: got %+v", views)
+	}
+
+	rec = doJSON(t, a, "GET", "/reservations?limit=2&offset=2", token, nil)
+	decodeJSON(t, rec, &views)
+	if len(views) != 1 || views[0].ID != 1 {
+		t.Fatalf("offset=2: got %+v", views)
+	}
+}
+
 func TestListReservationsOwn(t *testing.T) {
 	a := newTestAPI(t)
 	car := seedCar(t, a)
