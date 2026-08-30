@@ -1,0 +1,14 @@
+meta {
+  name: Listar mis autos
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/seller/cars
+  body: none
+}
+
+headers {
+  Authorization: Bearer {{sellerToken}}
+}

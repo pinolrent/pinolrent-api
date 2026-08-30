@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Self-contained end-to-end smoke test. Builds the API, boots it on a
-# temporary port with a throwaway database, exercises the whole flow and
-# asserts the hardened edge cases. Exits non-zero on any failure.
+# temporary port with a throwaway database, exercises the seller/buyer flow
+# and asserts the hardened edge cases. Exits non-zero on any failure.
 set -u
 
 cd "$(dirname "$0")/.."
@@ -48,7 +48,7 @@ echo "== build =="
 go build -o "$BIN" ./cmd/api || { echo "build FAIL"; exit 1; }
 
 echo "== start =="
-DATABASE_URL="$DB" ADMIN_PASSWORD=admin123 JWT_SECRET=demo-secret-not-for-production PORT="$PORT" \
+DATABASE_URL="$DB" JWT_SECRET=demo-secret-not-for-production PORT="$PORT" \
   "$BIN" > "$LOG" 2>&1 &
 PID=$!
 sleep 1
@@ -57,61 +57,72 @@ if ! curl -sf "$BASE/health" > /dev/null; then
 fi
 
 echo "== fail-fast sin JWT_SECRET =="
-DATABASE_URL="$DB" ADMIN_PASSWORD=x PORT=9999 "$BIN" > /dev/null 2>&1
+DATABASE_URL="$DB" PORT=9999 "$BIN" > /dev/null 2>&1
 check "aborta sin JWT_SECRET" "1" "$?"
 
 echo "== auth =="
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/auth/register" \
   -H 'Content-Type: application/json' \
-  -d '{"email":"demo@example.com","password":"secret123"}')
-check "registro cliente -> 201" "201" "$code"
-client=$(curl -s -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
-  -d '{"email":"demo@example.com","password":"secret123"}' | jq -r .token)
-admin=$(curl -s -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
-  -d '{"email":"admin@pinolrent.com","password":"admin123"}' | jq -r .token)
-[ -n "$client" ] && [ "$client" != "null" ]; cond "token cliente" $?
-[ -n "$admin" ] && [ "$admin" != "null" ]; cond "token admin" $?
+  -d '{"email":"buyer@example.com","password":"secret123"}')
+check "registro comprador -> 201" "201" "$code"
 
-echo "== cars =="
-car=$(curl -s -X POST "$BASE/admin/cars" -H "Authorization: Bearer $admin" \
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/auth/register/seller" \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"seller@example.com","password":"secret123"}')
+check "registro vendedor -> 201" "201" "$code"
+
+buyer=$(curl -s -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
+  -d '{"email":"buyer@example.com","password":"secret123"}' | jq -r .token)
+seller=$(curl -s -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
+  -d '{"email":"seller@example.com","password":"secret123"}' | jq -r .token)
+[ -n "$buyer" ] && [ "$buyer" != "null" ]; cond "token comprador" $?
+[ -n "$seller" ] && [ "$seller" != "null" ]; cond "token vendedor" $?
+
+echo "== seller =="
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/seller/cars" \
+  -H "Authorization: Bearer $buyer" -H 'Content-Type: application/json' \
+  -d '{"name":"X","price_per_day":1}')
+check "comprador no crea autos -> 403" "403" "$code"
+
+car=$(curl -s -X POST "$BASE/seller/cars" -H "Authorization: Bearer $seller" \
   -H 'Content-Type: application/json' \
   -d '{"name":"Honda Fit","price_per_day":25000,"photo_url":"https://example.com/fit.jpg"}' | jq -r .id)
 check "crear auto" "numero" "$([ "$car" != "null" ] && echo numero)"
-curl -s -X PATCH "$BASE/admin/cars/$car" -H "Authorization: Bearer $admin" \
+curl -s -X PATCH "$BASE/seller/cars/$car" -H "Authorization: Bearer $seller" \
   -H 'Content-Type: application/json' -d '{"active":true}' > /dev/null
 
 echo "== reservas =="
-res=$(curl -s -X POST "$BASE/reservations" -H "Authorization: Bearer $client" \
+res=$(curl -s -X POST "$BASE/reservations" -H "Authorization: Bearer $buyer" \
   -H 'Content-Type: application/json' \
   -d "{\"car_id\":$car,\"start_date\":\"2027-01-10\",\"end_date\":\"2027-01-12\"}" | jq -r .id)
 check "crear reserva" "numero" "$([ "$res" != "null" ] && echo numero)"
 
-code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/reservations" -H "Authorization: Bearer $client" \
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/reservations" -H "Authorization: Bearer $buyer" \
   -H 'Content-Type: application/json' \
   -d "{\"car_id\":$car,\"start_date\":\"2027-01-10\",\"end_date\":\"2027-01-12\"}")
 check "overlap -> 409" "409" "$code"
 
-code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/reservations" -H "Authorization: Bearer $client" \
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/reservations" -H "Authorization: Bearer $buyer" \
   -H 'Content-Type: application/json' \
   -d "{\"car_id\":$car,\"start_date\":\"2020-01-01\",\"end_date\":\"2020-01-02\"}")
 check "fecha pasada -> 400" "400" "$code"
 
 echo "== pagos =="
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/reservations/$res/payment" \
-  -H "Authorization: Bearer $client" -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $buyer" -H 'Content-Type: application/json' \
   -d '{"method":"pos","proof_url":"https://example.com/recibo.jpg"}')
 check "registrar pago -> 201" "201" "$code"
 
-code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/admin/reservations/$res/confirm" \
-  -H "Authorization: Bearer $admin")
+code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/seller/reservations/$res/confirm" \
+  -H "Authorization: Bearer $seller")
 check "confirmar -> 200" "200" "$code"
 
 echo "== reglas de hardening =="
-code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/admin/cars" -H "Authorization: Bearer $admin" \
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/seller/cars" -H "Authorization: Bearer $seller" \
   -H 'Content-Type: application/json' -d '{"name":"X","price_per_day":1,"photo_url":"mailto:a@b.c"}')
 check "photo_url mailto -> 400" "400" "$code"
 
-code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/admin/cars" -H "Authorization: Bearer $admin" \
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/seller/cars" -H "Authorization: Bearer $seller" \
   -H 'Content-Type: application/json' -d '{"name":"X","price_per_day":100000001}')
 check "precio > tope -> 400" "400" "$code"
 

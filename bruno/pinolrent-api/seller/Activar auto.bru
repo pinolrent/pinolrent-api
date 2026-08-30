@@ -1,17 +1,17 @@
 meta {
   name: Activar/desactivar auto
   type: http
-  seq: 6
+  seq: 7
 }
 
 patch {
-  url: {{baseUrl}}/admin/cars/{{carId}}
+  url: {{baseUrl}}/seller/cars/{{carId}}
   body: json
 }
 
 headers {
   Content-Type: application/json
-  Authorization: Bearer {{adminToken}}
+  Authorization: Bearer {{sellerToken}}
 }
 
 body:json {

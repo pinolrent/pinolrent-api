@@ -1,5 +1,5 @@
 meta {
-  name: Login cliente
+  name: Login vendedor
   type: http
   seq: 3
 }
@@ -15,14 +15,14 @@ headers {
 
 body:json {
   {
-    "email": "{{clientEmail}}",
-    "password": "{{clientPassword}}"
+    "email": "{{sellerEmail}}",
+    "password": "{{sellerPassword}}"
   }
 }
 
 script:post-response {
   const body = res.getBody();
   if (body.token) {
-    bru.setVar("clientToken", body.token);
+    bru.setVar("sellerToken", body.token);
   }
 }

@@ -1,7 +1,7 @@
 meta {
-  name: Login admin
+  name: Login comprador
   type: http
-  seq: 2
+  seq: 4
 }
 
 post {
@@ -15,14 +15,14 @@ headers {
 
 body:json {
   {
-    "email": "{{adminEmail}}",
-    "password": "{{adminPassword}}"
+    "email": "{{buyerEmail}}",
+    "password": "{{buyerPassword}}"
   }
 }
 
 script:post-response {
   const body = res.getBody();
   if (body.token) {
-    bru.setVar("adminToken", body.token);
+    bru.setVar("buyerToken", body.token);
   }
 }

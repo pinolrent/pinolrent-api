@@ -1,7 +1,7 @@
 meta {
   name: Registrar pago
   type: http
-  seq: 10
+  seq: 12
 }
 
 post {
@@ -11,7 +11,7 @@ post {
 
 headers {
   Content-Type: application/json
-  Authorization: Bearer {{clientToken}}
+  Authorization: Bearer {{buyerToken}}
 }
 
 body:json {

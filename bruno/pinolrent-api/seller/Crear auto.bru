@@ -1,17 +1,17 @@
 meta {
   name: Crear auto
   type: http
-  seq: 5
+  seq: 6
 }
 
 post {
-  url: {{baseUrl}}/admin/cars
+  url: {{baseUrl}}/seller/cars
   body: json
 }
 
 headers {
   Content-Type: application/json
-  Authorization: Bearer {{adminToken}}
+  Authorization: Bearer {{sellerToken}}
 }
 
 body:json {

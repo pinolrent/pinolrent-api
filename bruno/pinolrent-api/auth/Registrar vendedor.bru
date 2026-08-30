@@ -1,0 +1,21 @@
+meta {
+  name: Registrar vendedor
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/auth/register/seller
+  body: json
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "email": "{{sellerEmail}}",
+    "password": "{{sellerPassword}}"
+  }
+}
