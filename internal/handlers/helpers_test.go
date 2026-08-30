@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/pinolrent/pinolrent-api/internal/auth"
@@ -20,10 +22,6 @@ func newTestAPI(t *testing.T) *API {
 		t.Fatalf("open db: %v", err)
 	}
 	t.Cleanup(func() { _ = d.Close() })
-
-	if err := db.SeedAdmin(d, "admin@pinolrent.com", "admin123"); err != nil {
-		t.Fatalf("seed admin: %v", err)
-	}
 
 	a := auth.New("test-secret", d)
 	return New(d, a)
@@ -61,7 +59,7 @@ func decodeJSON(t *testing.T, rec *httptest.ResponseRecorder, dst any) {
 	}
 }
 
-func registerClient(t *testing.T, a *API, email, password string) string {
+func registerBuyer(t *testing.T, a *API, email, password string) string {
 	t.Helper()
 	rec := doJSON(t, a, "POST", "/auth/register", "", map[string]any{
 		"email": email, "password": password,
@@ -69,10 +67,35 @@ func registerClient(t *testing.T, a *API, email, password string) string {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("register: status %d body %s", rec.Code, rec.Body.String())
 	}
-	return loginClient(t, a, email, password)
+	return loginBuyer(t, a, email, password)
 }
 
-func loginClient(t *testing.T, a *API, email, password string) string {
+func loginBuyer(t *testing.T, a *API, email, password string) string {
+	return login(t, a, email, password)
+}
+
+// registerSeller registers a seller account and returns its login token.
+func registerSeller(t *testing.T, a *API, email, password string) string {
+	t.Helper()
+	rec := doJSON(t, a, "POST", "/auth/register/seller", "", map[string]any{
+		"email": email, "password": password,
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("register seller: status %d body %s", rec.Code, rec.Body.String())
+	}
+	return login(t, a, email, password)
+}
+
+// newSeller registers a fresh seller with a unique email and returns its token.
+func newSeller(t *testing.T, a *API) string {
+	t.Helper()
+	sellerSeq.Add(1)
+	return registerSeller(t, a, fmt.Sprintf("seller-%d@example.com", sellerSeq.Load()), "secret123")
+}
+
+var sellerSeq atomic.Int64
+
+func login(t *testing.T, a *API, email, password string) string {
 	t.Helper()
 	rec := doJSON(t, a, "POST", "/auth/login", "", map[string]any{
 		"email": email, "password": password,
@@ -88,9 +111,4 @@ func loginClient(t *testing.T, a *API, email, password string) string {
 		t.Fatal("login: empty token")
 	}
 	return out.Token
-}
-
-func loginAdmin(t *testing.T, a *API) string {
-	t.Helper()
-	return loginClient(t, a, "admin@pinolrent.com", "admin123")
 }

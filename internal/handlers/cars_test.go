@@ -11,7 +11,7 @@ import (
 
 func createCar(t *testing.T, a *API, token string, body map[string]any) models.Car {
 	t.Helper()
-	rec := doJSON(t, a, "POST", "/admin/cars", token, body)
+	rec := doJSON(t, a, "POST", "/seller/cars", token, body)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create car: status %d body %s", rec.Code, rec.Body.String())
 	}
@@ -22,7 +22,7 @@ func createCar(t *testing.T, a *API, token string, body map[string]any) models.C
 
 func TestCreateCar(t *testing.T) {
 	a := newTestAPI(t)
-	token := loginAdmin(t, a)
+	token := newSeller(t, a)
 
 	car := createCar(t, a, token, map[string]any{
 		"name": "Toyota Yaris", "photo_url": "https://example.com/yaris.jpg", "price_per_day": 45000,
@@ -30,11 +30,14 @@ func TestCreateCar(t *testing.T) {
 	if car.Name != "Toyota Yaris" || car.PhotoURL == "" || car.PricePerDay != 45000 || !car.Active {
 		t.Fatalf("unexpected car: %+v", car)
 	}
+	if car.OwnerID == 0 {
+		t.Fatalf("car has no owner_id: %+v", car)
+	}
 }
 
 func TestCreateCarValidates(t *testing.T) {
 	a := newTestAPI(t)
-	token := loginAdmin(t, a)
+	token := newSeller(t, a)
 
 	cases := []struct {
 		name string
@@ -48,7 +51,7 @@ func TestCreateCarValidates(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			rec := doJSON(t, a, "POST", "/admin/cars", token, tc.body)
+			rec := doJSON(t, a, "POST", "/seller/cars", token, tc.body)
 			if rec.Code != http.StatusBadRequest {
 				t.Fatalf("status = %d, want 400 (body %s)", rec.Code, rec.Body.String())
 			}
@@ -56,25 +59,25 @@ func TestCreateCarValidates(t *testing.T) {
 	}
 }
 
-func TestCreateCarRequiresAdmin(t *testing.T) {
+func TestCreateCarRequiresSeller(t *testing.T) {
 	a := newTestAPI(t)
 
-	if rec := doJSON(t, a, "POST", "/admin/cars", "", map[string]any{"name": "X", "price_per_day": 1}); rec.Code != http.StatusUnauthorized {
+	if rec := doJSON(t, a, "POST", "/seller/cars", "", map[string]any{"name": "X", "price_per_day": 1}); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("no token: status = %d, want 401", rec.Code)
 	}
 
-	clientToken := registerClient(t, a, "cli@example.com", "secret123")
-	if rec := doJSON(t, a, "POST", "/admin/cars", clientToken, map[string]any{"name": "X", "price_per_day": 1}); rec.Code != http.StatusForbidden {
-		t.Fatalf("client: status = %d, want 403", rec.Code)
+	buyerToken := registerBuyer(t, a, "cli@example.com", "secret123")
+	if rec := doJSON(t, a, "POST", "/seller/cars", buyerToken, map[string]any{"name": "X", "price_per_day": 1}); rec.Code != http.StatusForbidden {
+		t.Fatalf("buyer: status = %d, want 403", rec.Code)
 	}
 }
 
 func TestPatchCar(t *testing.T) {
 	a := newTestAPI(t)
-	token := loginAdmin(t, a)
+	token := newSeller(t, a)
 	car := createCar(t, a, token, map[string]any{"name": "Toyota Yaris", "price_per_day": 45000})
 
-	rec := doJSON(t, a, "PATCH", "/admin/cars/"+itoa(car.ID), token, map[string]any{"active": false})
+	rec := doJSON(t, a, "PATCH", "/seller/cars/"+itoa(car.ID), token, map[string]any{"active": false})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body %s", rec.Code, rec.Body.String())
 	}
@@ -95,34 +98,75 @@ func TestPatchCar(t *testing.T) {
 	}
 }
 
+func TestPatchCarOwnership(t *testing.T) {
+	a := newTestAPI(t)
+	owner := newSeller(t, a)
+	car := createCar(t, a, owner, map[string]any{"name": "Toyota Yaris", "price_per_day": 45000})
+
+	other := newSeller(t, a)
+	rec := doJSON(t, a, "PATCH", "/seller/cars/"+itoa(car.ID), other, map[string]any{"active": false})
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("other seller: status = %d, want 404 (body %s)", rec.Code, rec.Body.String())
+	}
+
+	rec = doJSON(t, a, "GET", "/seller/cars", other, nil)
+	var mine []models.Car
+	decodeJSON(t, rec, &mine)
+	if len(mine) != 0 {
+		t.Fatalf("other seller sees foreign car: %+v", mine)
+	}
+}
+
+func TestListMyCars(t *testing.T) {
+	a := newTestAPI(t)
+	seller := newSeller(t, a)
+	createCar(t, a, seller, map[string]any{"name": "A", "price_per_day": 100})
+	createCar(t, a, seller, map[string]any{"name": "B", "price_per_day": 200})
+
+	rec := doJSON(t, a, "GET", "/seller/cars", seller, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body %s", rec.Code, rec.Body.String())
+	}
+	var cars []models.Car
+	decodeJSON(t, rec, &cars)
+	if len(cars) != 2 {
+		t.Fatalf("my cars = %d, want 2 (%+v)", len(cars), cars)
+	}
+}
+
 func TestPatchCarValidates(t *testing.T) {
 	a := newTestAPI(t)
-	token := loginAdmin(t, a)
+	token := newSeller(t, a)
 	car := createCar(t, a, token, map[string]any{"name": "Toyota Yaris", "price_per_day": 45000})
 
-	if rec := doJSON(t, a, "PATCH", "/admin/cars/garbage", token, map[string]any{"active": true}); rec.Code != http.StatusBadRequest {
+	if rec := doJSON(t, a, "PATCH", "/seller/cars/garbage", token, map[string]any{"active": true}); rec.Code != http.StatusBadRequest {
 		t.Fatalf("bad id: status = %d, want 400", rec.Code)
 	}
-	if rec := doJSON(t, a, "PATCH", "/admin/cars/999999", token, map[string]any{"active": true}); rec.Code != http.StatusNotFound {
+	if rec := doJSON(t, a, "PATCH", "/seller/cars/999999", token, map[string]any{"active": true}); rec.Code != http.StatusNotFound {
 		t.Fatalf("missing car: status = %d, want 404", rec.Code)
 	}
-	if rec := doJSON(t, a, "PATCH", "/admin/cars/"+itoa(car.ID), token, map[string]any{}); rec.Code != http.StatusBadRequest {
+	if rec := doJSON(t, a, "PATCH", "/seller/cars/"+itoa(car.ID), token, map[string]any{}); rec.Code != http.StatusBadRequest {
 		t.Fatalf("missing active: status = %d, want 400", rec.Code)
 	}
 }
 
 func TestListCarsByDates(t *testing.T) {
 	a := newTestAPI(t)
-	token := loginAdmin(t, a)
+	token := newSeller(t, a)
 
 	free := createCar(t, a, token, map[string]any{"name": "Free", "price_per_day": 100})
 	booked := createCar(t, a, token, map[string]any{"name": "Booked", "price_per_day": 200})
 
-	clientToken := registerClient(t, a, "cli@example.com", "secret123")
-	_ = clientToken
+	buyerToken := registerBuyer(t, a, "cli@example.com", "secret123")
+	_ = buyerToken
+	var buyerID int64
+	if err := a.DB.QueryRowContext(context.Background(),
+		`SELECT id FROM users WHERE email = 'cli@example.com'`).Scan(&buyerID); err != nil {
+		t.Fatalf("buyer id: %v", err)
+	}
 	if _, err := a.DB.ExecContext(context.Background(),
 		`INSERT INTO reservations (user_id, car_id, start_date, end_date, status) VALUES (?, ?, '2026-09-05', '2026-09-10', 'pending')`,
-		1, booked.ID,
+		buyerID, booked.ID,
 	); err != nil {
 		t.Fatalf("seed reservation: %v", err)
 	}

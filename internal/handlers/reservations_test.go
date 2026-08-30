@@ -10,7 +10,7 @@ import (
 
 func seedCar(t *testing.T, a *API) models.Car {
 	t.Helper()
-	return createCar(t, a, loginAdmin(t, a), map[string]any{
+	return createCar(t, a, newSeller(t, a), map[string]any{
 		"name": "Toyota Yaris", "price_per_day": 45000,
 	})
 }
@@ -29,7 +29,7 @@ func createReservation(t *testing.T, a *API, token string, body map[string]any) 
 func TestCreateReservation(t *testing.T) {
 	a := newTestAPI(t)
 	car := seedCar(t, a)
-	token := registerClient(t, a, "user@example.com", "secret123")
+	token := registerBuyer(t, a, "user@example.com", "secret123")
 
 	v := createReservation(t, a, token, map[string]any{
 		"car_id": car.ID, "start_date": "2026-09-10", "end_date": "2026-09-12",
@@ -42,7 +42,7 @@ func TestCreateReservation(t *testing.T) {
 func TestCreateReservationValidates(t *testing.T) {
 	a := newTestAPI(t)
 	car := seedCar(t, a)
-	token := registerClient(t, a, "user@example.com", "secret123")
+	token := registerBuyer(t, a, "user@example.com", "secret123")
 
 	if rec := doJSON(t, a, "POST", "/reservations", "", map[string]any{
 		"car_id": car.ID, "start_date": "2026-09-10", "end_date": "2026-09-12",
@@ -73,8 +73,9 @@ func TestCreateReservationValidates(t *testing.T) {
 		t.Fatalf("unknown car: status = %d, want 404", rec.Code)
 	}
 
-	inactive := createCar(t, a, loginAdmin(t, a), map[string]any{"name": "Off", "price_per_day": 100})
-	doJSON(t, a, "PATCH", "/admin/cars/"+itoa(inactive.ID), loginAdmin(t, a), map[string]any{"active": false})
+	inactiveOwner := newSeller(t, a)
+	inactive := createCar(t, a, inactiveOwner, map[string]any{"name": "Off", "price_per_day": 100})
+	doJSON(t, a, "PATCH", "/seller/cars/"+itoa(inactive.ID), inactiveOwner, map[string]any{"active": false})
 	if rec := doJSON(t, a, "POST", "/reservations", token, map[string]any{
 		"car_id": inactive.ID, "start_date": "2026-09-10", "end_date": "2026-09-12",
 	}); rec.Code != http.StatusConflict {
@@ -85,7 +86,7 @@ func TestCreateReservationValidates(t *testing.T) {
 func TestCreateReservationOverlap(t *testing.T) {
 	a := newTestAPI(t)
 	car := seedCar(t, a)
-	token := registerClient(t, a, "user@example.com", "secret123")
+	token := registerBuyer(t, a, "user@example.com", "secret123")
 
 	createReservation(t, a, token, map[string]any{
 		"car_id": car.ID, "start_date": "2026-09-10", "end_date": "2026-09-12",
@@ -124,7 +125,7 @@ func TestCreateReservationOverlap(t *testing.T) {
 func TestCreateReservationAllowsCancelled(t *testing.T) {
 	a := newTestAPI(t)
 	car := seedCar(t, a)
-	token := registerClient(t, a, "user@example.com", "secret123")
+	token := registerBuyer(t, a, "user@example.com", "secret123")
 
 	if _, err := a.DB.ExecContext(context.Background(),
 		`INSERT INTO reservations (user_id, car_id, start_date, end_date, status) VALUES (1, ?, '2026-09-10', '2026-09-12', 'cancelled')`, car.ID,
@@ -144,8 +145,8 @@ func TestListReservationsOwn(t *testing.T) {
 	a := newTestAPI(t)
 	car := seedCar(t, a)
 
-	tokenA := registerClient(t, a, "a@example.com", "secret123")
-	tokenB := registerClient(t, a, "b@example.com", "secret123")
+	tokenA := registerBuyer(t, a, "a@example.com", "secret123")
+	tokenB := registerBuyer(t, a, "b@example.com", "secret123")
 
 	createReservation(t, a, tokenA, map[string]any{
 		"car_id": car.ID, "start_date": "2026-09-10", "end_date": "2026-09-11",
@@ -170,10 +171,11 @@ func TestListReservationsOwn(t *testing.T) {
 
 func TestGetReservationAccess(t *testing.T) {
 	a := newTestAPI(t)
-	car := seedCar(t, a)
+	seller := newSeller(t, a)
+	car := createCar(t, a, seller, map[string]any{"name": "Toyota Yaris", "price_per_day": 45000})
 
-	tokenA := registerClient(t, a, "a@example.com", "secret123")
-	tokenB := registerClient(t, a, "b@example.com", "secret123")
+	tokenA := registerBuyer(t, a, "a@example.com", "secret123")
+	tokenB := registerBuyer(t, a, "b@example.com", "secret123")
 	v := createReservation(t, a, tokenA, map[string]any{
 		"car_id": car.ID, "start_date": "2026-09-10", "end_date": "2026-09-11",
 	})
@@ -184,14 +186,19 @@ func TestGetReservationAccess(t *testing.T) {
 		t.Fatalf("owner: status = %d body %s", rec.Code, rec.Body.String())
 	}
 
-	// other client cannot (404, no leak)
+	// other buyer cannot (404, no leak)
 	if rec := doJSON(t, a, "GET", "/reservations/"+itoa(v.ID), tokenB, nil); rec.Code != http.StatusNotFound {
-		t.Fatalf("other client: status = %d, want 404", rec.Code)
+		t.Fatalf("other buyer: status = %d, want 404", rec.Code)
 	}
 
-	// admin can read any
-	if rec := doJSON(t, a, "GET", "/reservations/"+itoa(v.ID), loginAdmin(t, a), nil); rec.Code != http.StatusOK {
-		t.Fatalf("admin: status = %d body %s", rec.Code, rec.Body.String())
+	// the seller that owns the car can read the reservation
+	if rec := doJSON(t, a, "GET", "/reservations/"+itoa(v.ID), seller, nil); rec.Code != http.StatusOK {
+		t.Fatalf("car owner: status = %d body %s", rec.Code, rec.Body.String())
+	}
+
+	// a seller that does not own the car cannot (404, no leak)
+	if rec := doJSON(t, a, "GET", "/reservations/"+itoa(v.ID), newSeller(t, a), nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("foreign seller: status = %d, want 404", rec.Code)
 	}
 
 	if rec := doJSON(t, a, "GET", "/reservations/garbage", tokenA, nil); rec.Code != http.StatusBadRequest {
@@ -199,5 +206,34 @@ func TestGetReservationAccess(t *testing.T) {
 	}
 	if rec := doJSON(t, a, "GET", "/reservations/99999", tokenA, nil); rec.Code != http.StatusNotFound {
 		t.Fatalf("unknown: status = %d, want 404", rec.Code)
+	}
+}
+
+func TestListSellerReservations(t *testing.T) {
+	a := newTestAPI(t)
+	seller := newSeller(t, a)
+	car := createCar(t, a, seller, map[string]any{"name": "Toyota Yaris", "price_per_day": 45000})
+
+	tokenA := registerBuyer(t, a, "a@example.com", "secret123")
+	tokenB := registerBuyer(t, a, "b@example.com", "secret123")
+	createReservation(t, a, tokenA, map[string]any{
+		"car_id": car.ID, "start_date": "2026-09-10", "end_date": "2026-09-11",
+	})
+	createReservation(t, a, tokenB, map[string]any{
+		"car_id": car.ID, "start_date": "2026-09-20", "end_date": "2026-09-21",
+	})
+
+	rec := doJSON(t, a, "GET", "/seller/reservations", seller, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body %s", rec.Code, rec.Body.String())
+	}
+	var views []reservationView
+	decodeJSON(t, rec, &views)
+	if len(views) != 2 {
+		t.Fatalf("seller reservations = %d, want 2 (%+v)", len(views), views)
+	}
+
+	if rec := doJSON(t, a, "GET", "/seller/reservations", newSeller(t, a), nil); rec.Code != http.StatusOK {
+		t.Fatalf("seller without cars: status = %d body %s", rec.Code, rec.Body.String())
 	}
 }

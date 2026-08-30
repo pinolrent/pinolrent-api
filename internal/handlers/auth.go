@@ -16,8 +16,18 @@ func (a *API) Health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// Register creates a new client account.
+// Register creates a new buyer account.
 func (a *API) Register(w http.ResponseWriter, r *http.Request) {
+	a.register(w, r, "buyer")
+}
+
+// RegisterSeller creates a new seller account that can publish and manage its
+// own cars.
+func (a *API) RegisterSeller(w http.ResponseWriter, r *http.Request) {
+	a.register(w, r, "seller")
+}
+
+func (a *API) register(w http.ResponseWriter, r *http.Request, role string) {
 	var in struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
@@ -44,7 +54,7 @@ func (a *API) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res, err := a.DB.ExecContext(r.Context(),
-		`INSERT INTO users (email, password_hash, role) VALUES (?, ?, 'client')`, in.Email, hash)
+		`INSERT INTO users (email, password_hash, role) VALUES (?, ?, ?)`, in.Email, hash, role)
 	if err != nil {
 		if isUniqueViolation(err) {
 			writeError(w, http.StatusConflict, "email already registered")

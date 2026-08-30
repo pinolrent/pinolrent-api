@@ -94,8 +94,11 @@ func (a *API) RecordPayment(w http.ResponseWriter, r *http.Request) {
 }
 
 // ConfirmReservation approves the reservation payment and marks the
-// reservation as confirmed, atomically.
+// reservation as confirmed, atomically. Only the seller that owns the car can
+// confirm its reservations.
 func (a *API) ConfirmReservation(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.CurrentUser(r.Context())
+
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid reservation id")
@@ -122,13 +125,21 @@ func (a *API) ConfirmReservation(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	var status string
-	err = conn.QueryRowContext(ctx, `SELECT status FROM reservations WHERE id = ?`, id).Scan(&status)
+	var ownerID int64
+	err = conn.QueryRowContext(ctx, `
+		SELECT r.status, c.owner_id FROM reservations r
+		JOIN cars c ON c.id = r.car_id
+		WHERE r.id = ?`, id).Scan(&status, &ownerID)
 	if errors.Is(err, sql.ErrNoRows) {
 		writeError(w, http.StatusNotFound, "reservation not found")
 		return
 	}
 	if err != nil {
 		serverError(w, err)
+		return
+	}
+	if ownerID != u.ID {
+		writeError(w, http.StatusNotFound, "reservation not found")
 		return
 	}
 	if status != "pending" {

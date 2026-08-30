@@ -81,7 +81,7 @@ func TestRegisterNormalizesEmail(t *testing.T) {
 
 func TestRegisterDuplicate(t *testing.T) {
 	a := newTestAPI(t)
-	registerClient(t, a, "dup@example.com", "secret123")
+	registerBuyer(t, a, "dup@example.com", "secret123")
 	rec := doJSON(t, a, "POST", "/auth/register", "", map[string]any{
 		"email": "dup@example.com", "password": "secret456",
 	})
@@ -92,7 +92,7 @@ func TestRegisterDuplicate(t *testing.T) {
 
 func TestLogin(t *testing.T) {
 	a := newTestAPI(t)
-	registerClient(t, a, "user@example.com", "secret123")
+	registerBuyer(t, a, "user@example.com", "secret123")
 
 	rec := doJSON(t, a, "POST", "/auth/login", "", map[string]any{
 		"email": "user@example.com", "password": "secret123",
@@ -111,7 +111,7 @@ func TestLogin(t *testing.T) {
 
 func TestLoginRejects(t *testing.T) {
 	a := newTestAPI(t)
-	registerClient(t, a, "user@example.com", "secret123")
+	registerBuyer(t, a, "user@example.com", "secret123")
 
 	cases := []struct {
 		name string
@@ -156,7 +156,7 @@ func TestRequireAuth(t *testing.T) {
 		t.Fatalf("bad token: status = %d, want 401", rec.Code)
 	}
 
-	token := registerClient(t, a, "me@example.com", "secret123")
+	token := registerBuyer(t, a, "me@example.com", "secret123")
 	rec := serve("GET", "/auth/me", token)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("valid token: status = %d body %s", rec.Code, rec.Body.String())
@@ -166,7 +166,7 @@ func TestRequireAuth(t *testing.T) {
 		Role  string `json:"role"`
 	}
 	decodeJSON(t, rec, &out)
-	if out.Email != "me@example.com" || out.Role != "client" {
+	if out.Email != "me@example.com" || out.Role != "buyer" {
 		t.Fatalf("unexpected user: %+v", out)
 	}
 }
@@ -175,23 +175,23 @@ func TestRequireRole(t *testing.T) {
 	a := newTestAPI(t)
 
 	mux := http.NewServeMux()
-	mux.Handle("GET /admin/probe", a.Auth.RequireRole("admin", func(w http.ResponseWriter, _ *http.Request) {
+	mux.Handle("GET /seller/probe", a.Auth.RequireRole("seller", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
 	}))
 
 	serve := func(token string) *httptest.ResponseRecorder {
-		req := httptest.NewRequestWithContext(context.Background(), "GET", "/admin/probe", nil)
+		req := httptest.NewRequestWithContext(context.Background(), "GET", "/seller/probe", nil)
 		req.Header.Set("Authorization", "Bearer "+token)
 		rec := httptest.NewRecorder()
 		mux.ServeHTTP(rec, req)
 		return rec
 	}
 
-	if rec := serve(loginAdmin(t, a)); rec.Code != http.StatusOK {
-		t.Fatalf("admin: status = %d body %s", rec.Code, rec.Body.String())
+	if rec := serve(newSeller(t, a)); rec.Code != http.StatusOK {
+		t.Fatalf("seller: status = %d body %s", rec.Code, rec.Body.String())
 	}
 
-	if rec := serve(registerClient(t, a, "cli@example.com", "secret123")); rec.Code != http.StatusForbidden {
-		t.Fatalf("client on admin route: status = %d, want 403 (body %s)", rec.Code, rec.Body.String())
+	if rec := serve(registerBuyer(t, a, "cli@example.com", "secret123")); rec.Code != http.StatusForbidden {
+		t.Fatalf("buyer on seller route: status = %d, want 403 (body %s)", rec.Code, rec.Body.String())
 	}
 }

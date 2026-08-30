@@ -8,19 +8,20 @@ import (
 	"github.com/pinolrent/pinolrent-api/internal/models"
 )
 
-func seedReservation(t *testing.T, a *API) (string, reservationView) {
+func seedReservation(t *testing.T, a *API) (buyerToken, sellerToken string, v reservationView) {
 	t.Helper()
-	car := seedCar(t, a)
-	token := registerClient(t, a, "user@example.com", "secret123")
-	v := createReservation(t, a, token, map[string]any{
+	sellerToken = newSeller(t, a)
+	car := createCar(t, a, sellerToken, map[string]any{"name": "Toyota Yaris", "price_per_day": 45000})
+	buyerToken = registerBuyer(t, a, "user@example.com", "secret123")
+	v = createReservation(t, a, buyerToken, map[string]any{
 		"car_id": car.ID, "start_date": "2026-10-01", "end_date": "2026-10-03",
 	})
-	return token, v
+	return buyerToken, sellerToken, v
 }
 
 func TestRecordPayment(t *testing.T) {
 	a := newTestAPI(t)
-	token, v := seedReservation(t, a)
+	token, _, v := seedReservation(t, a)
 
 	rec := doJSON(t, a, "POST", "/reservations/"+itoa(v.ID)+"/payment", token, map[string]any{
 		"method": "cash", "proof_url": "https://example.com/proof.jpg",
@@ -44,7 +45,7 @@ func TestRecordPayment(t *testing.T) {
 
 func TestRecordPaymentValidates(t *testing.T) {
 	a := newTestAPI(t)
-	token, v := seedReservation(t, a)
+	token, _, v := seedReservation(t, a)
 
 	if rec := doJSON(t, a, "POST", "/reservations/"+itoa(v.ID)+"/payment", "", map[string]any{
 		"method": "cash",
@@ -83,8 +84,8 @@ func TestRecordPaymentValidates(t *testing.T) {
 
 func TestRecordPaymentOwnership(t *testing.T) {
 	a := newTestAPI(t)
-	_, v := seedReservation(t, a)
-	other := registerClient(t, a, "other@example.com", "secret123")
+	_, _, v := seedReservation(t, a)
+	other := registerBuyer(t, a, "other@example.com", "secret123")
 
 	rec := doJSON(t, a, "POST", "/reservations/"+itoa(v.ID)+"/payment", other, map[string]any{
 		"method": "pos",
@@ -96,7 +97,7 @@ func TestRecordPaymentOwnership(t *testing.T) {
 
 func TestRecordPaymentDuplicate(t *testing.T) {
 	a := newTestAPI(t)
-	token, v := seedReservation(t, a)
+	token, _, v := seedReservation(t, a)
 
 	doJSON(t, a, "POST", "/reservations/"+itoa(v.ID)+"/payment", token, map[string]any{"method": "cash"})
 	rec := doJSON(t, a, "POST", "/reservations/"+itoa(v.ID)+"/payment", token, map[string]any{"method": "pos"})
@@ -108,7 +109,7 @@ func TestRecordPaymentDuplicate(t *testing.T) {
 func TestRecordPaymentCancelled(t *testing.T) {
 	a := newTestAPI(t)
 	car := seedCar(t, a)
-	token := registerClient(t, a, "user@example.com", "secret123")
+	token := registerBuyer(t, a, "user@example.com", "secret123")
 	v := createReservation(t, a, token, map[string]any{
 		"car_id": car.ID, "start_date": "2026-10-01", "end_date": "2026-10-03",
 	})
@@ -125,12 +126,12 @@ func TestRecordPaymentCancelled(t *testing.T) {
 
 func TestConfirmReservation(t *testing.T) {
 	a := newTestAPI(t)
-	token, v := seedReservation(t, a)
+	token, seller, v := seedReservation(t, a)
 	doJSON(t, a, "POST", "/reservations/"+itoa(v.ID)+"/payment", token, map[string]any{
 		"method": "cash", "proof_url": "https://example.com/proof.jpg",
 	})
 
-	rec := doJSON(t, a, "PATCH", "/admin/reservations/"+itoa(v.ID)+"/confirm", loginAdmin(t, a), nil)
+	rec := doJSON(t, a, "PATCH", "/seller/reservations/"+itoa(v.ID)+"/confirm", seller, nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body %s", rec.Code, rec.Body.String())
 	}
@@ -141,7 +142,7 @@ func TestConfirmReservation(t *testing.T) {
 	}
 
 	// now confirmed -> 409
-	if rec := doJSON(t, a, "PATCH", "/admin/reservations/"+itoa(v.ID)+"/confirm", loginAdmin(t, a), nil); rec.Code != http.StatusConflict {
+	if rec := doJSON(t, a, "PATCH", "/seller/reservations/"+itoa(v.ID)+"/confirm", seller, nil); rec.Code != http.StatusConflict {
 		t.Fatalf("re-confirm: status = %d, want 409", rec.Code)
 	}
 
@@ -156,24 +157,27 @@ func TestConfirmReservation(t *testing.T) {
 
 func TestConfirmReservationRequires(t *testing.T) {
 	a := newTestAPI(t)
-	token, v := seedReservation(t, a)
+	token, seller, v := seedReservation(t, a)
 
-	if rec := doJSON(t, a, "PATCH", "/admin/reservations/"+itoa(v.ID)+"/confirm", token, nil); rec.Code != http.StatusForbidden {
-		t.Fatalf("client: status = %d, want 403", rec.Code)
+	if rec := doJSON(t, a, "PATCH", "/seller/reservations/"+itoa(v.ID)+"/confirm", token, nil); rec.Code != http.StatusForbidden {
+		t.Fatalf("buyer: status = %d, want 403", rec.Code)
 	}
-	if rec := doJSON(t, a, "PATCH", "/admin/reservations/"+itoa(v.ID)+"/confirm", "", nil); rec.Code != http.StatusUnauthorized {
+	if rec := doJSON(t, a, "PATCH", "/seller/reservations/"+itoa(v.ID)+"/confirm", "", nil); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("no auth: status = %d, want 401", rec.Code)
+	}
+	if rec := doJSON(t, a, "PATCH", "/seller/reservations/"+itoa(v.ID)+"/confirm", newSeller(t, a), nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("foreign seller: status = %d, want 404", rec.Code)
 	}
 
 	// no payment yet
-	if rec := doJSON(t, a, "PATCH", "/admin/reservations/"+itoa(v.ID)+"/confirm", loginAdmin(t, a), nil); rec.Code != http.StatusConflict {
+	if rec := doJSON(t, a, "PATCH", "/seller/reservations/"+itoa(v.ID)+"/confirm", seller, nil); rec.Code != http.StatusConflict {
 		t.Fatalf("no payment: status = %d, want 409", rec.Code)
 	}
 
-	if rec := doJSON(t, a, "PATCH", "/admin/reservations/99999/confirm", loginAdmin(t, a), nil); rec.Code != http.StatusNotFound {
+	if rec := doJSON(t, a, "PATCH", "/seller/reservations/99999/confirm", seller, nil); rec.Code != http.StatusNotFound {
 		t.Fatalf("unknown: status = %d, want 404", rec.Code)
 	}
-	if rec := doJSON(t, a, "PATCH", "/admin/reservations/garbage/confirm", loginAdmin(t, a), nil); rec.Code != http.StatusBadRequest {
+	if rec := doJSON(t, a, "PATCH", "/seller/reservations/garbage/confirm", seller, nil); rec.Code != http.StatusBadRequest {
 		t.Fatalf("bad id: status = %d, want 400", rec.Code)
 	}
 }

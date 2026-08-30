@@ -38,11 +38,6 @@ func main() {
 	}
 	defer func() { _ = d.Close() }()
 
-	if err := db.SeedAdmin(d, cfg.AdminEmail, cfg.AdminPassword); err != nil {
-		slog.Error("seed admin", "error", err)
-		os.Exit(1)
-	}
-
 	a := auth.New(cfg.JWTSecret, d)
 	h := handlers.New(d, a)
 

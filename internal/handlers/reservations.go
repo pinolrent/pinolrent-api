@@ -20,7 +20,7 @@ type reservationView struct {
 
 const reservationSelect = `
 SELECT r.id, r.user_id, r.car_id, r.start_date, r.end_date, r.status,
-	c.id, c.name, c.photo_url, c.price_per_day, c.active,
+	c.id, c.owner_id, c.name, c.photo_url, c.price_per_day, c.active,
 	p.id, p.reservation_id, p.method, p.status, p.proof_url
 FROM reservations r
 JOIN cars c ON c.id = r.car_id
@@ -40,7 +40,7 @@ func scanReservation(row rowScanner, v *reservationView) error {
 
 	err := row.Scan(
 		&v.ID, &v.UserID, &v.CarID, &v.StartDate, &v.EndDate, &v.Status,
-		&c.ID, &c.Name, &c.PhotoURL, &c.PricePerDay, &active,
+		&c.ID, &c.OwnerID, &c.Name, &c.PhotoURL, &c.PricePerDay, &active,
 		&pID, &pResID, &pMethod, &pStatus, &pProof,
 	)
 	if err != nil {
@@ -201,7 +201,8 @@ func (a *API) ListReservations(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, views)
 }
 
-// GetReservation returns one reservation; clients can only access their own.
+// GetReservation returns one reservation; buyers can access their own and
+// sellers can access reservations for cars they own.
 func (a *API) GetReservation(w http.ResponseWriter, r *http.Request) {
 	u, _ := auth.CurrentUser(r.Context())
 
@@ -221,12 +222,42 @@ func (a *API) GetReservation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if u.Role != "admin" && v.UserID != u.ID {
+	if u.ID != v.UserID && u.ID != v.Car.OwnerID {
 		writeError(w, http.StatusNotFound, "reservation not found")
 		return
 	}
 
 	writeJSON(w, http.StatusOK, v)
+}
+
+// ListSellerReservations returns the reservations for the authenticated
+// seller's cars, newest first.
+func (a *API) ListSellerReservations(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.CurrentUser(r.Context())
+
+	rows, err := a.DB.QueryContext(r.Context(), reservationSelect+`
+		WHERE c.owner_id = ? ORDER BY r.id DESC`, u.ID)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	defer func() { _ = rows.Close() }()
+
+	views := []reservationView{}
+	for rows.Next() {
+		var v reservationView
+		if err := scanReservation(rows, &v); err != nil {
+			serverError(w, err)
+			return
+		}
+		views = append(views, v)
+	}
+	if err := rows.Err(); err != nil {
+		serverError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, views)
 }
 
 func (a *API) reservationView(ctx context.Context, id int64) (reservationView, error) {

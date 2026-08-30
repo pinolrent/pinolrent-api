@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pinolrent/pinolrent-api/internal/auth"
 	"github.com/pinolrent/pinolrent-api/internal/db"
 	"github.com/pinolrent/pinolrent-api/internal/models"
 )
@@ -14,6 +15,8 @@ import (
 const dateLayout = "2006-01-02"
 
 const maxPricePerDay = 100_000_000
+
+const carColumns = "id, owner_id, name, photo_url, price_per_day, active"
 
 // ListCars returns active cars, optionally excluding those already reserved
 // in the [start_date, end_date] range.
@@ -29,7 +32,7 @@ func (a *API) ListCars(w http.ResponseWriter, r *http.Request) {
 	var cars []models.Car
 	if startStr == "" {
 		rows, err := a.DB.QueryContext(r.Context(),
-			`SELECT id, name, photo_url, price_per_day, active FROM cars WHERE active = 1 ORDER BY id`)
+			`SELECT `+carColumns+` FROM cars WHERE active = 1 ORDER BY id`)
 		if err != nil {
 			serverError(w, err)
 			return
@@ -58,7 +61,7 @@ func (a *API) ListCars(w http.ResponseWriter, r *http.Request) {
 		// #nosec G202 -- db.OverlapPredicate is a fixed internal SQL fragment,
 		// not user input.
 		rows, err := a.DB.QueryContext(r.Context(), `
-			SELECT c.id, c.name, c.photo_url, c.price_per_day, c.active
+			SELECT c.`+carColumns+`
 			FROM cars c
 			WHERE c.active = 1
 			AND NOT EXISTS (
@@ -85,8 +88,10 @@ func (a *API) ListCars(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, cars)
 }
 
-// CreateCar adds a new car to the catalog.
+// CreateCar adds a new car to the catalog, owned by the authenticated seller.
 func (a *API) CreateCar(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.CurrentUser(r.Context())
+
 	var in struct {
 		Name        string `json:"name"`
 		PhotoURL    string `json:"photo_url"`
@@ -116,8 +121,8 @@ func (a *API) CreateCar(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res, err := a.DB.ExecContext(r.Context(),
-		`INSERT INTO cars (name, photo_url, price_per_day) VALUES (?, ?, ?)`,
-		in.Name, in.PhotoURL, in.PricePerDay)
+		`INSERT INTO cars (owner_id, name, photo_url, price_per_day) VALUES (?, ?, ?, ?)`,
+		u.ID, in.Name, in.PhotoURL, in.PricePerDay)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -126,6 +131,7 @@ func (a *API) CreateCar(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusCreated, models.Car{
 		ID:          id,
+		OwnerID:     u.ID,
 		Name:        in.Name,
 		PhotoURL:    in.PhotoURL,
 		PricePerDay: in.PricePerDay,
@@ -133,8 +139,31 @@ func (a *API) CreateCar(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// PatchCar toggles the active flag of an existing car.
+// ListMyCars returns the cars owned by the authenticated seller, newest first.
+func (a *API) ListMyCars(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.CurrentUser(r.Context())
+
+	rows, err := a.DB.QueryContext(r.Context(),
+		`SELECT `+carColumns+` FROM cars WHERE owner_id = ? ORDER BY id DESC`, u.ID)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	cars, err := scanCars(rows)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	if cars == nil {
+		cars = []models.Car{}
+	}
+	writeJSON(w, http.StatusOK, cars)
+}
+
+// PatchCar toggles the active flag of a car owned by the authenticated seller.
 func (a *API) PatchCar(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.CurrentUser(r.Context())
+
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid car id")
@@ -153,7 +182,7 @@ func (a *API) PatchCar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := a.DB.ExecContext(r.Context(), `UPDATE cars SET active = ? WHERE id = ?`, *in.Active, id)
+	res, err := a.DB.ExecContext(r.Context(), `UPDATE cars SET active = ? WHERE id = ? AND owner_id = ?`, *in.Active, id, u.ID)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -165,7 +194,7 @@ func (a *API) PatchCar(w http.ResponseWriter, r *http.Request) {
 
 	var car models.Car
 	if err := scanCar(a.DB.QueryRowContext(r.Context(),
-		`SELECT id, name, photo_url, price_per_day, active FROM cars WHERE id = ?`, id), &car); err != nil {
+		`SELECT `+carColumns+` FROM cars WHERE id = ? AND owner_id = ?`, id, u.ID), &car); err != nil {
 		serverError(w, err)
 		return
 	}
@@ -183,7 +212,7 @@ func todayStart() time.Time {
 
 func scanCar(row *sql.Row, c *models.Car) error {
 	var active int
-	err := row.Scan(&c.ID, &c.Name, &c.PhotoURL, &c.PricePerDay, &active)
+	err := row.Scan(&c.ID, &c.OwnerID, &c.Name, &c.PhotoURL, &c.PricePerDay, &active)
 	c.Active = active == 1
 	return err
 }
@@ -194,7 +223,7 @@ func scanCars(rows *sql.Rows) ([]models.Car, error) {
 	for rows.Next() {
 		var c models.Car
 		var active int
-		if err := rows.Scan(&c.ID, &c.Name, &c.PhotoURL, &c.PricePerDay, &active); err != nil {
+		if err := rows.Scan(&c.ID, &c.OwnerID, &c.Name, &c.PhotoURL, &c.PricePerDay, &active); err != nil {
 			return nil, err
 		}
 		c.Active = active == 1

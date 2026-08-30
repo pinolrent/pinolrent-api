@@ -25,14 +25,10 @@ func TestCreateReservationConcurrent(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = d.Close() })
 
-	if err := db.SeedAdmin(d, "admin@pinolrent.com", "admin123"); err != nil {
-		t.Fatalf("seed admin: %v", err)
-	}
-
 	a := auth.New("test-secret", d)
 	api := New(d, a)
-	car := createCar(t, api, loginAdmin(t, api), map[string]any{"name": "Toyota Yaris", "price_per_day": 100})
-	token := registerClient(t, api, "user@example.com", "secret123")
+	car := createCar(t, api, newSeller(t, api), map[string]any{"name": "Toyota Yaris", "price_per_day": 100})
+	token := registerBuyer(t, api, "user@example.com", "secret123")
 
 	const workers = 20
 	var created, conflicts, failures atomic.Int64
@@ -76,7 +72,7 @@ func TestCreateReservationConcurrent(t *testing.T) {
 
 func TestRequireAuthExpired(t *testing.T) {
 	a := newTestAPI(t)
-	_ = registerClient(t, a, "exp@example.com", "secret123")
+	_ = registerBuyer(t, a, "exp@example.com", "secret123")
 
 	claims := auth.Claims{
 		UserID: 1,
@@ -107,7 +103,7 @@ func TestRequireAuthExpired(t *testing.T) {
 func TestCreateReservationPastStart(t *testing.T) {
 	a := newTestAPI(t)
 	car := seedCar(t, a)
-	token := registerClient(t, a, "user@example.com", "secret123")
+	token := registerBuyer(t, a, "user@example.com", "secret123")
 
 	yesterday := time.Now().UTC().AddDate(0, 0, -1).Format(dateLayout)
 	rec := doJSON(t, a, "POST", "/reservations", token, map[string]any{
@@ -145,10 +141,10 @@ func TestBodyTooLarge(t *testing.T) {
 
 func TestCarURLStrict(t *testing.T) {
 	a := newTestAPI(t)
-	token := loginAdmin(t, a)
+	token := newSeller(t, a)
 
 	for _, u := range []string{"mailto:a@b.com", "/relative", "ftp://x/y.jpg", "::bad::"} {
-		rec := doJSON(t, a, "POST", "/admin/cars", token, map[string]any{
+		rec := doJSON(t, a, "POST", "/seller/cars", token, map[string]any{
 			"name": "X", "price_per_day": 1, "photo_url": u,
 		})
 		if rec.Code != http.StatusBadRequest {
@@ -156,7 +152,7 @@ func TestCarURLStrict(t *testing.T) {
 		}
 	}
 
-	rec := doJSON(t, a, "POST", "/admin/cars", token, map[string]any{
+	rec := doJSON(t, a, "POST", "/seller/cars", token, map[string]any{
 		"name": "X", "price_per_day": 1, "photo_url": "https://example.com/x.jpg",
 	})
 	if rec.Code != http.StatusCreated {
@@ -166,7 +162,7 @@ func TestCarURLStrict(t *testing.T) {
 
 func TestProofURLStrict(t *testing.T) {
 	a := newTestAPI(t)
-	token, v := seedReservation(t, a)
+	token, _, v := seedReservation(t, a)
 
 	rec := doJSON(t, a, "POST", "/reservations/"+itoa(v.ID)+"/payment", token, map[string]any{
 		"method": "cash", "proof_url": "ftp://x/y.jpg",
@@ -178,8 +174,8 @@ func TestProofURLStrict(t *testing.T) {
 
 func TestCarPriceCap(t *testing.T) {
 	a := newTestAPI(t)
-	token := loginAdmin(t, a)
-	rec := doJSON(t, a, "POST", "/admin/cars", token, map[string]any{
+	token := newSeller(t, a)
+	rec := doJSON(t, a, "POST", "/seller/cars", token, map[string]any{
 		"name": "X", "price_per_day": maxPricePerDay + 1,
 	})
 	if rec.Code != http.StatusBadRequest {
