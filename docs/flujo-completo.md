@@ -2,7 +2,7 @@
 
 Recorrido end-to-end con `curl`: un **vendedor** publica un auto, un
 **comprador** lo reserva y paga, y el vendedor confirma. La respuesta de
-ejemplo de cada paso es la que devuelve la API hoy.
+ejemplo de cada paso es la salida real de la API.
 
 Presupuestos:
 

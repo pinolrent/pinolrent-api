@@ -87,25 +87,6 @@ Valida credenciales y devuelve un token JWT (válido 24 h). Público
 {"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."}
 ```
 
----
-
-## `GET /auth/me`
-
-Devuelve el perfil del usuario autenticado. Útil para que el frontend muestre
-el email y el rol sin decodificar el JWT. Requiere login.
-
-**Respuesta** — `200 OK`:
-
-```json
-{"id":3,"email":"demo@example.com","role":"buyer"}
-```
-
-**Errores:** `401` igual que las demás rutas protegidas (token ausente,
-inválido o vencido). Nota: al vivir bajo `/auth/`, hereda el rate limit de ese
-prefijo; cacheá la respuesta en el cliente en vez de pollearla.
-
-Usa el token como `Authorization: Bearer <token>`.
-
 **Errores:**
 
 | Status | Mensaje | Cuándo |
@@ -113,6 +94,32 @@ Usa el token como `Authorization: Bearer <token>`.
 | `401` | `invalid credentials` | El email no existe o el password no coincide (mismo mensaje en ambos casos) |
 | `400` | `invalid JSON body` | JSON malformado / campos desconocidos |
 | `413` | `request body too large` | Body > 1 MB |
+
+---
+
+## `GET /auth/me`
+
+Devuelve el perfil del usuario autenticado. Útil para que el frontend muestre
+el email y el rol sin decodificar el JWT. Requiere login.
+
+Usa el token como `Authorization: Bearer <token>`.
+
+**Respuesta** — `200 OK`:
+
+```json
+{"id":3,"email":"demo@example.com","role":"buyer"}
+```
+
+**Errores:**
+
+| Status | Mensaje | Cuándo |
+|--------|---------|--------|
+| `401` | `missing bearer token` | Sin cabecera `Authorization` o sin prefijo `Bearer` |
+| `401` | `invalid or expired token` | Token inválido o vencido |
+| `401` | `user not found` | El `uid` del token no existe en la base |
+
+Nota: al vivir bajo `/auth/`, hereda el rate limit de ese prefijo; cacheá la
+respuesta en el cliente en vez de pollearla.
 
 ---
 

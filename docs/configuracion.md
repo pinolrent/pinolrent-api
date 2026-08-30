@@ -7,6 +7,7 @@
 | `PORT` | `8080` | no | Puerto del servidor |
 | `DATABASE_URL` | `pinolrent.db` | no | Ruta/DSN del archivo SQLite |
 | `JWT_SECRET` | — | **sí** | Secreto HS256 para firmar tokens; el proceso **aborta si falta** |
+| `CORS_ALLOWED_ORIGINS` | `*` | no | Orígenes permitidos, separados por coma; `*` acepta cualquiera. Ver [00-general](api/00-general.md) |
 
 Precedencia de valores: **variables del shell > `.env` > defaults**. Las
 variables que están vacías en el entorno se tratan como ausentes.
@@ -40,10 +41,10 @@ Secuencia de arranque:
 
 1. `godotenv.Load()` — carga `.env` si existe (los valores del shell ganan).
 2. `config.Load()` + `config.Validate()` — aborta si falta `JWT_SECRET`.
-3. `db.Open(DATABASE_URL)` — crea el esquema si no existe y lo migra a v2
-   (si el archivo es de un esquema viejo, se reconstruye); SQLite con WAL, busy
-   timeout de 5 s y un pool pequeño (8 conexiones). La URL `:memory:` usa una
-   sola conexión.
+3. `db.Open(DATABASE_URL)` — abre SQLite con WAL, busy timeout de 5 s y un pool
+   pequeño (8 conexiones) y aplica las **migraciones goose** embebidas si hay
+   pendientes (historial en `goose_db_version`; las migraciones **nunca borran
+   datos**). La URL `:memory:` usa una sola conexión.
 4. Se inicia el servidor HTTP y se espera `SIGINT`/`SIGTERM` para un shutdown
    graceful (10 s de tope).
 

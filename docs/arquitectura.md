@@ -74,7 +74,7 @@ erDiagram
     reservations ||--o| payments : "tiene a lo sumo uno"
 ```
 
-Puntos clave del esquema (`internal/db/db.go`):
+Puntos clave del esquema (`internal/db/migrations/`):
 
 - `users.email` es único; `role` solo admite `buyer` (comprador) y `seller`
   (vendedor). No existe cuenta admin global: cada vendedor es dueño de sus autos.
@@ -85,7 +85,7 @@ Puntos clave del esquema (`internal/db/db.go`):
 - El esquema se gestiona con **migraciones goose** (`internal/db/migrations/*.sql`),
   embebidas con `go:embed` y aplicadas al arrancar (`db.Open`). goose registra el
   historial en `goose_db_version`; solo se aplican las pendientes y **los datos
-  nunca se borran** (se corrige el rebuild destructivo de versiones anteriores).
+  nunca se borran**.
 
 ## Máquina de estados
 

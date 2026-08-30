@@ -40,7 +40,7 @@ Herramientas instaladas: `air` y `golangci-lint` viven en `$(go env GOPATH)/bin`
 ## Migraciones
 
 El esquema vive en `internal/db/migrations/*.sql` y se aplica **automáticamente
-al arrancar** el server (azure goose embebido) — no hay paso manual en dev.
+al arrancar** el server vía goose embebido — no hay paso manual en dev.
 Para crear una migración nueva:
 
 ```sh
@@ -49,12 +49,8 @@ go run github.com/pressly/goose/v3/cmd/goose@latest create add_<algo> sql
 
 Mueve el archivo generado (timestamp) a `internal/db/migrations/` y edita las
 secciones `-- +goose Up` / `-- +goose Down`. goose registra el historial en la
-tabla `goose_db_version` y **no borra datos**. Al migrar desde la versión
-pre-goose, la `dev.db` conserva sus tablas y filas; no hace falta borrarla.
-
-Si no tenés GNU make en tu shell de WSL (o Windows), podés correr los mismos
-comandos directo con `go`: `go test ./...`, `go build ./...`,
-`go run ./cmd/api`, etc.
+tabla `goose_db_version` y **no borra datos**: una base existente conserva sus
+tablas y filas al abrir la API; no hace falta borrarla al actualizar.
 
 ## Collection de Bruno
 
