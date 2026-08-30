@@ -11,6 +11,7 @@ func Routes(a *API) *http.ServeMux {
 	mux.HandleFunc("POST /auth/login", a.Login)
 	mux.Handle("GET /auth/me", a.Auth.RequireAuth(a.Me))
 	mux.HandleFunc("GET /cars", a.ListCars)
+	mux.HandleFunc("GET /cars/{id}", a.GetCar)
 	mux.Handle("GET /seller/cars", a.Auth.RequireRole("seller", a.ListMyCars))
 	mux.Handle("POST /seller/cars", a.Auth.RequireRole("seller", a.CreateCar))
 	mux.Handle("PATCH /seller/cars/{id}", a.Auth.RequireRole("seller", a.PatchCar))

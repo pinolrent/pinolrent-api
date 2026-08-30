@@ -73,6 +73,34 @@ func TestCreateCarRequiresSeller(t *testing.T) {
 	}
 }
 
+func TestGetCar(t *testing.T) {
+	a := newTestAPI(t)
+	token := newSeller(t, a)
+	car := createCar(t, a, token, map[string]any{"name": "Toyota Yaris", "photo_url": "https://example.com/yaris.jpg", "price_per_day": 45000})
+
+	rec := doJSON(t, a, "GET", "/cars/"+itoa(car.ID), "", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body %s", rec.Code, rec.Body.String())
+	}
+	var out models.Car
+	decodeJSON(t, rec, &out)
+	if out.ID != car.ID || out.Name != "Toyota Yaris" || out.PricePerDay != 45000 || !out.Active {
+		t.Fatalf("unexpected car: %+v", out)
+	}
+
+	if rec := doJSON(t, a, "GET", "/cars/999999", "", nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("missing: status = %d, want 404", rec.Code)
+	}
+	if rec := doJSON(t, a, "GET", "/cars/garbage", "", nil); rec.Code != http.StatusBadRequest {
+		t.Fatalf("bad id: status = %d, want 400", rec.Code)
+	}
+
+	doJSON(t, a, "PATCH", "/seller/cars/"+itoa(car.ID), token, map[string]any{"active": false})
+	if rec := doJSON(t, a, "GET", "/cars/"+itoa(car.ID), "", nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("inactive: status = %d, want 404", rec.Code)
+	}
+}
+
 func TestPatchCar(t *testing.T) {
 	a := newTestAPI(t)
 	token := newSeller(t, a)

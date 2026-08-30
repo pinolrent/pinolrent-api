@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"database/sql"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -117,6 +118,28 @@ func (a *API) ListCars(w http.ResponseWriter, r *http.Request) {
 		cars = []models.Car{}
 	}
 	writeJSON(w, http.StatusOK, cars)
+}
+
+// GetCar returns a single active car from the catalog by id. Inactive cars are
+// hidden from the public catalog, so they 404 here too.
+func (a *API) GetCar(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid car id")
+		return
+	}
+
+	var car models.Car
+	if err := scanCar(a.DB.QueryRowContext(r.Context(),
+		`SELECT `+carColumns+` FROM cars WHERE id = ? AND active = 1`, id), &car); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "car not found")
+			return
+		}
+		serverError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, car)
 }
 
 // CreateCar adds a new car to the catalog, owned by the authenticated seller.
