@@ -82,8 +82,9 @@ erDiagram
 
 Puntos clave del esquema (`internal/db/migrations/`):
 
-- `users.email` es único; `role` solo admite `buyer` (comprador) y `seller`
-  (vendedor). No existe cuenta admin global: cada vendedor es dueño de sus autos.
+- `users.email` es único (índice case-insensitive sobre `lower(email)`);
+  `role` solo admite `buyer` (comprador) y `seller` (vendedor). No existe
+  cuenta admin global: cada vendedor es dueño de sus autos.
 - `cars.owner_id` apunta al `users.id` del vendedor que lo publica (NOT NULL).
 - `cars.price_per_day` está en **centavos** (entero) y no puede ser negativo.
 - `payments.reservation_id` es único: **una reserva tiene a lo sumo un pago**.

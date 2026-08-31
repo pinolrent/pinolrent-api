@@ -266,3 +266,25 @@ func TestCarOwnerRequired(t *testing.T) {
 		t.Fatal("expected NOT NULL violation for missing owner_id")
 	}
 }
+
+func TestEmailCaseInsensitiveUnique(t *testing.T) {
+	d, err := Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = d.Close() })
+
+	ctx := context.Background()
+	if _, err := d.ExecContext(ctx,
+		`INSERT INTO users (email, password_hash, role) VALUES ('User@Example.COM', 'h', 'buyer')`); err != nil {
+		t.Fatalf("first insert: %v", err)
+	}
+
+	// The case-insensitive unique index (lower(email)) must reject a
+	// second row that differs only in casing.
+	_, err = d.ExecContext(ctx,
+		`INSERT INTO users (email, password_hash, role) VALUES ('user@example.com', 'h', 'buyer')`)
+	if err == nil {
+		t.Fatal("expected UNIQUE violation for case-different email")
+	}
+}
