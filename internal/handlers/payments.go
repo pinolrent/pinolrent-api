@@ -45,9 +45,28 @@ func (a *API) RecordPayment(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	ctx := r.Context()
+	conn, err := a.DB.Conn(ctx)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	defer func() { _ = conn.Close() }()
+
+	if _, err := conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
+		serverError(w, err)
+		return
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_, _ = conn.ExecContext(ctx, "ROLLBACK")
+		}
+	}()
+
 	var buyerID int64
 	var status string
-	err = a.DB.QueryRowContext(r.Context(),
+	err = conn.QueryRowContext(ctx,
 		`SELECT user_id, status FROM reservations WHERE id = ?`, id).Scan(&buyerID, &status)
 	if errors.Is(err, sql.ErrNoRows) {
 		writeError(w, http.StatusNotFound, "reservation not found")
@@ -67,7 +86,7 @@ func (a *API) RecordPayment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var count int
-	if err := a.DB.QueryRowContext(r.Context(),
+	if err := conn.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM payments WHERE reservation_id = ?`, id).Scan(&count); err != nil {
 		serverError(w, err)
 		return
@@ -77,7 +96,7 @@ func (a *API) RecordPayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := a.DB.ExecContext(r.Context(),
+	res, err := conn.ExecContext(ctx,
 		`INSERT INTO payments (reservation_id, method, proof_url) VALUES (?, ?, ?)`,
 		id, in.Method, in.ProofURL)
 	if err != nil {
@@ -89,6 +108,13 @@ func (a *API) RecordPayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pid, _ := res.LastInsertId()
+
+	if _, err := conn.ExecContext(ctx, "COMMIT"); err != nil {
+		serverError(w, err)
+		return
+	}
+	committed = true
+	_ = conn.Close()
 
 	writeJSON(w, http.StatusCreated, models.Payment{
 		ID:            pid,

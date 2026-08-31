@@ -155,13 +155,13 @@ Validaciones de entrada:
 
 Operaciones atómicas:
 
-- `POST /reservations` y `PATCH /seller/reservations/{id}/confirm` corren dentro
-  de una transacción `BEGIN IMMEDIATE` (SQLite) para evitar carreras.
-- `POST /reservations/{id}/payment` y `PATCH /reservations/{id}/cancel`
-  actualmente no usan transacción: confían en el `UNIQUE(reservation_id)`
-  para doble pago y en el check `status = 'pending'` para cancelar. Es una
-  ventana TOCTOU menor (carrera entre el `SELECT` y el `UPDATE`) que queda
-  como deuda pendiente.
+- Todas las mutaciones multi-paso (`POST /reservations`,
+  `POST /reservations/{id}/payment`, `PATCH /reservations/{id}/cancel` y
+  `PATCH /seller/reservations/{id}/confirm`) corren dentro de una
+  transacción `BEGIN IMMEDIATE` (SQLite) con `defer ROLLBACK` por si el
+  handler retorna por un error de validación. Esto cierra la ventana
+  TOCTOU entre el `SELECT` y la mutación (por ejemplo, contar pagos y
+  luego insertar otro, o leer `status` y luego cambiarlo).
 
 ## Autenticación y autorización
 
