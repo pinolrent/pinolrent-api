@@ -219,6 +219,37 @@ func TestRequireAuth(t *testing.T) {
 	}
 }
 
+func TestLogoutRevokesToken(t *testing.T) {
+	a := newTestAPI(t)
+	token := registerBuyer(t, a, "logout@example.com", "secret123")
+
+	// Token works before logout.
+	rec := doJSON(t, a, "GET", "/auth/me", token, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("pre-logout: status = %d, want 200", rec.Code)
+	}
+
+	// Logout succeeds.
+	rec = doJSON(t, a, "POST", "/auth/logout", token, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("logout: status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
+	}
+
+	// Same token is now rejected.
+	rec = doJSON(t, a, "GET", "/auth/me", token, nil)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("post-logout: status = %d, want 401 (body %s)", rec.Code, rec.Body.String())
+	}
+}
+
+func TestLogoutRequiresAuth(t *testing.T) {
+	a := newTestAPI(t)
+	rec := doJSON(t, a, "POST", "/auth/logout", "", nil)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("no token: status = %d, want 401", rec.Code)
+	}
+}
+
 func TestRequireRole(t *testing.T) {
 	a := newTestAPI(t)
 

@@ -62,16 +62,22 @@ erDiagram
     }
     payments {
         int id PK
-        int reservation_id FK, UK "uno por reserva"
+        text reservation_id FK, UK "uno por reserva"
         text method "pos | cash"
         text status "pending | approved | rejected"
         text proof_url
+    }
+    revoked_tokens {
+        text jti PK
+        int user_id FK
+        int expires_at "ts unix del exp del token"
     }
 
     users ||--o{ reservations : "comprador reserva"
     users ||--o{ cars : "vendedor publica"
     cars ||--o{ reservations : "es reservado"
     reservations ||--o| payments : "tiene a lo sumo uno"
+    users ||--o{ revoked_tokens : "tokens revocados"
 ```
 
 Puntos clave del esquema (`internal/db/migrations/`):
@@ -81,6 +87,8 @@ Puntos clave del esquema (`internal/db/migrations/`):
 - `cars.owner_id` apunta al `users.id` del vendedor que lo publica (NOT NULL).
 - `cars.price_per_day` está en **centavos** (entero) y no puede ser negativo.
 - `payments.reservation_id` es único: **una reserva tiene a lo sumo un pago**.
+- `revoked_tokens.jti` es la clave primaria; un GC interno corre cada 10
+  minutos y borra filas cuyo `expires_at` ya pasó.
 - Las fechas son strings ISO `YYYY-MM-DD` en texto.
 - El esquema se gestiona con **migraciones goose** (`internal/db/migrations/*.sql`),
   embebidas con `go:embed` y aplicadas al arrancar (`db.Open`). goose registra el
@@ -170,11 +178,17 @@ Operaciones atómicas:
   autos).
 - El login valida credenciales (bcrypt) y emite un **JWT HS256 de 24 h** con
   los claims `uid` (id de usuario), `role`, `iss=pinolrent-api`, `aud=pinolrent-api`,
-  `iat`, `exp` y `sub` (id como string). El parser rechaza tokens con
-  algoritmo distinto de HS256, sin `exp`, sin `iss/aud`, o con firma
-  inválida. En el camino de "email no existe" corre un `bcrypt.Compare` contra
-  un hash fijo para que el tiempo de respuesta no filtre la enumeración de
-  cuentas.
+  `jti` (16 bytes random en hex), `iat`, `exp` y `sub` (id como string). El
+  parser rechaza tokens con algoritmo distinto de HS256, sin `exp`,
+  sin `iss/aud`/`jti`, o con firma inválida. En el camino de "email no
+  existe" corre un `bcrypt.Compare` contra un hash fijo para que el tiempo
+  de respuesta no filtre la enumeración de cuentas.
+- `POST /auth/logout` invalida el token actual: inserta su `jti` en
+  `revoked_tokens` con el `exp` como `expires_at`. El middleware de auth
+  consulta la tabla en cada request protegida; un `jti` presente es
+  rechazado con `401` (misma respuesta que un token inválido, para no
+  filtrar el motivo). El GC de la tabla corre cada 10 minutos y limpia
+  las filas cuyo token ya habría expirado igual.
 - `Authorization: Bearer <token>` en toda ruta protegida.
 - Los middleware `RequireAuth` y `RequireRole` resuelven el usuario desde el
   token, lo cargan en la base y lo inyectan en el contexto de la request.
@@ -191,6 +205,7 @@ Operaciones atómicas:
 | `GET /cars` | sí | sí | sí |
 | `POST /auth/register*`, `POST /auth/login` | sí | sí | sí |
 | `GET /auth/me` | su perfil | su perfil | no (401) |
+| `POST /auth/logout` | sí (revoca su propio token) | sí (revoca su propio token) | no (401) |
 | `GET /seller/cars`, `POST /seller/cars` | no (403) | **solo sus autos** | no (401) |
 | `PATCH /seller/cars/{id}` | no (403) | **solo sus autos** | no (401) |
 | `POST /reservations`, `GET /reservations` | sí (sus reservas) | sí (si reserva) | no (401) |

@@ -35,6 +35,7 @@ make watch   # hot-reload
 | GET | `/reservations` · `/reservations/{id}` | login | Mis reservas y detalle |
 | PATCH | `/reservations/{id}/cancel` | login | Cancelar tu reserva (si está `pending` y sin pago) |
 | POST | `/reservations/{id}/payment` | login | Registrar pago (`pos`\|`cash`) |
+| POST | `/auth/logout` | login | Revoca el token bearer actual (inserta su `jti` en `revoked_tokens`) |
 | GET | `/seller/reservations` | seller | Reservas de tus autos |
 | PATCH | `/seller/reservations/{id}/confirm` | seller | Aprobar pago y confirmar (solo tu auto) |
 

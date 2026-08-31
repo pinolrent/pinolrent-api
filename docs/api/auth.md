@@ -107,6 +107,36 @@ Valida credenciales y devuelve un token JWT (válido 24 h). Público
 
 ---
 
+## `POST /auth/logout`
+
+Revoca el token bearer usado en la request. El mismo token (o cualquier
+otro con el mismo `jti`) es rechazado con `401` por el middleware de auth
+desde ese momento. La revocación es **por token, no por usuario**: otros
+tokens del mismo usuario siguen siendo válidos hasta su `exp` natural.
+
+Requiere login. No tiene body.
+
+**Respuesta** — `200 OK`:
+
+```json
+{"status":"ok"}
+```
+
+**Errores:**
+
+| Status | Mensaje | Cuándo |
+|--------|---------|--------|
+| `401` | `missing bearer token` | Sin cabecera `Authorization` o sin prefijo `Bearer` |
+| `401` | `invalid or expired token` | Token inválido, vencido, o ya revocado |
+| `400` | `token cannot be revoked` | El token no lleva `jti` (imposible en tokens emitidos por esta versión) |
+| `500` | `server error` | Error de base de datos al insertar la revocación |
+
+Las filas de `revoked_tokens` se podan automáticamente cada 10 minutos (GC
+interno) una vez que el `exp` del token ya pasó, así la tabla se mantiene
+pequeña sin intervención manual.
+
+---
+
 ## `GET /auth/me`
 
 Devuelve el perfil del usuario autenticado. Útil para que el frontend muestre
@@ -145,14 +175,21 @@ válido por **24 h**. Claims incluidos:
 | `sub` | string | `id` del usuario como string |
 | `iss` | string | `pinolrent-api` (siempre) |
 | `aud` | string | `pinolrent-api` (siempre) |
+| `jti` | string | identificador único de 32 hex chars (16 bytes random) |
 | `iat` | número | timestamp de emisión (segundos UNIX) |
 | `exp` | número | timestamp de expiración (iat + 24 h) |
+
+El `jti` permite revocar un token específico antes de su `exp` natural vía
+`POST /auth/logout`. La revocación inserta el `jti` en la tabla
+`revoked_tokens`; el middleware de auth la consulta en cada request
+protegida.
 
 El parser rechaza explícitamente tokens con:
 
 - Algoritmo distinto de `HS256` (incluido el clásico `alg=none`).
-- Falta de `exp`, `iss` o `aud`.
-- Firma inválida, secret desconocido o `exp` vencido.
+- Falta de `exp`, `iss`, `aud` o `jti`.
+- Firma inválida, secret desconocido, `exp` vencido, o `jti` presente en
+  `revoked_tokens`.
 
 > Si tu cliente quiere decodificar el token para, por ejemplo, mostrar el
 > tiempo restante o el rol sin llamar a `/auth/me`, podés usar el header

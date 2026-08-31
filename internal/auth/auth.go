@@ -5,8 +5,11 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -45,6 +48,23 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
+// JTI returns the token's unique identifier, or "" if missing. Callers
+// that need the value should use this helper instead of reaching into
+// RegisteredClaims.ID directly so tests can mock it cleanly.
+func (c *Claims) JTI() string {
+	return c.ID
+}
+
+// ExpiresAtUnix returns the token's expiry as a Unix timestamp, or 0 if
+// the claim is missing. Used to store the expiry in revoked_tokens so the
+// GC can drop rows once the token would have expired anyway.
+func (c *Claims) ExpiresAtUnix() int64 {
+	if c.ExpiresAt == nil {
+		return 0
+	}
+	return c.ExpiresAt.Unix()
+}
+
 // HashPassword returns the bcrypt hash of pw.
 func (a *Auth) HashPassword(pw string) (string, error) {
 	b, err := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.DefaultCost)
@@ -56,8 +76,11 @@ func (a *Auth) CheckPassword(hash, pw string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(pw)) == nil
 }
 
-// SignToken issues a signed token for the user, valid for 24 hours.
+// SignToken issues a signed token for the user, valid for 24 hours. Every
+// token carries a unique jti (UUID) so it can be revoked before its natural
+// expiry via /auth/logout or any future invalidation path.
 func (a *Auth) SignToken(u *models.User) (string, error) {
+	now := time.Now()
 	claims := Claims{
 		UserID: u.ID,
 		Role:   u.Role,
@@ -65,11 +88,23 @@ func (a *Auth) SignToken(u *models.User) (string, error) {
 			Subject:   strconv.FormatInt(u.ID, 10),
 			Issuer:    jwtIssuer,
 			Audience:  jwt.ClaimStrings{jwtAudience},
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			ID:        newJTI(),
+			ExpiresAt: jwt.NewNumericDate(now.Add(24 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(now),
 		},
 	}
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(a.secret)
+}
+
+// newJTI returns a 16-byte random identifier encoded as 32 hex characters.
+// crypto/rand failures are treated as fatal because a non-random jti
+// defeats the entire revocation mechanism.
+func newJTI() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		panic("auth: read random: " + err.Error())
+	}
+	return hex.EncodeToString(b[:])
 }
 
 // tokenParser enforces the signing algorithm, requires the iss/aud claims,
@@ -104,6 +139,62 @@ func CurrentUser(ctx context.Context) (*models.User, bool) {
 	return u, ok
 }
 
+// Revoke marks the token identified by the given jti as no longer valid
+// until its natural expiry. Subsequent requests carrying the same token
+// (or a token with the same jti) are rejected by RequireAuth with 401.
+//
+// The expires_at argument is the Unix timestamp copied from the token's
+// exp claim; the revoked_tokens GC can drop the row once that time passes.
+func (a *Auth) Revoke(ctx context.Context, userID int64, jti string, expiresAtUnix int64) error {
+	_, err := a.db.ExecContext(ctx,
+		`INSERT INTO revoked_tokens (jti, user_id, expires_at) VALUES (?, ?, ?)`,
+		jti, userID, expiresAtUnix)
+	return err
+}
+
+// RevokeFromRequest parses the bearer token from r and inserts its jti
+// into revoked_tokens so it cannot be reused. Returns the (httpStatus,
+// message) pair to write back. Use this from the /auth/logout handler so
+// the caller can rely on a single helper instead of re-implementing the
+// header parsing and jti extraction.
+func (a *Auth) RevokeFromRequest(r *http.Request) (status int, msg string) {
+	token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if !ok || strings.TrimSpace(token) == "" {
+		return http.StatusUnauthorized, "missing bearer token"
+	}
+	claims, err := a.parseToken(strings.TrimSpace(token))
+	if err != nil {
+		return http.StatusUnauthorized, "invalid or expired token"
+	}
+	if claims.JTI() == "" {
+		// Tokens issued before the jti migration (or with a custom
+		// parser) cannot be revoked individually; treat as bad
+		// request so the operator knows to rotate the secret instead.
+		return http.StatusBadRequest, "token cannot be revoked"
+	}
+	if err := a.Revoke(r.Context(), claims.UserID, claims.JTI(), claims.ExpiresAtUnix()); err != nil {
+		return http.StatusInternalServerError, "server error"
+	}
+	return http.StatusOK, ""
+}
+
+// GCRevoked drops rows from revoked_tokens whose tokens would have
+// already expired. Runs in a background goroutine that owns the request
+// context for the lifetime of the process, so passing it here lets the
+// GC honor the same cancellation signal as the HTTP server.
+func (a *Auth) GCRevoked(ctx context.Context) error {
+	_, err := a.db.ExecContext(ctx, `DELETE FROM revoked_tokens WHERE expires_at < ?`, time.Now().Unix())
+	return err
+}
+
+// IsRevoked reports whether the given jti is in the revoked_tokens table.
+func (a *Auth) IsRevoked(ctx context.Context, jti string) (bool, error) {
+	var n int
+	err := a.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM revoked_tokens WHERE jti = ?`, jti).Scan(&n)
+	return n > 0, err
+}
+
 // RequireAuth wraps a handler so it only runs for valid, non-expired tokens.
 // The authenticated user is added to the request context.
 func (a *Auth) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
@@ -120,6 +211,20 @@ func (a *Auth) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
+		// Reject tokens that have been revoked before their natural
+		// expiry. The lookup is on the jti (primary key) so it is a
+		// single index hit. Same response shape as "user not found" so
+		// we do not leak whether the jti was real.
+		revoked, err := a.IsRevoked(r.Context(), claims.JTI())
+		if err != nil {
+			serverErrorFromAuth(w, err)
+			return
+		}
+		if revoked {
+			writeError(w, http.StatusUnauthorized, "invalid or expired token")
+			return
+		}
+
 		var u models.User
 		err = a.db.QueryRowContext(r.Context(),
 			`SELECT id, email, password_hash, role FROM users WHERE id = ?`, claims.UserID).
@@ -132,6 +237,14 @@ func (a *Auth) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 		ctx := context.WithValue(r.Context(), userKey, &u)
 		next(w, r.WithContext(ctx))
 	}
+}
+
+// serverErrorFromAuth is the auth package's analogue of handlers.serverError:
+// it logs the error and returns 500. The package is intentionally lean and
+// does not import handlers, so the helper is inlined.
+func serverErrorFromAuth(w http.ResponseWriter, err error) {
+	slog.Error("auth internal error", "error", err)
+	writeError(w, http.StatusInternalServerError, "server error")
 }
 
 // RequireRole wraps a handler so it only runs for authenticated users with the

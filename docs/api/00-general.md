@@ -93,6 +93,7 @@ siguiente página".
 | POST | `/auth/register/seller` | no | [auth](auth.md) |
 | POST | `/auth/login` | no | [auth](auth.md) |
 | GET | `/auth/me` | buyer/seller | [auth](auth.md) |
+| `POST` | `/auth/logout` | buyer/seller | [auth](auth.md) |
 | GET | `/cars` | no | [cars](cars.md) |
 | GET | `/cars/{id}` | no | [cars](cars.md) |
 | GET | `/seller/cars` | seller | [cars](cars.md) |

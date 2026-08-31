@@ -413,3 +413,180 @@ func contains(haystack, needle string) bool {
 	}
 	return false
 }
+
+// TestSignAndParseJTI confirms that a fresh jti is stamped on every token
+// and that ExpiresAtUnix is populated. This is the contract that logout
+// and the revoked_tokens check depend on.
+func TestSignAndParseJTI(t *testing.T) {
+	a := newTestAuth(t)
+	u := &models.User{ID: 1, Role: "buyer"}
+
+	tok1, err := a.SignToken(u)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	tok2, err := a.SignToken(u)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	if tok1 == tok2 {
+		t.Fatal("two tokens for the same user collided; jti not unique")
+	}
+
+	c1, err := a.parseToken(tok1)
+	if err != nil {
+		t.Fatalf("parse 1: %v", err)
+	}
+	c2, err := a.parseToken(tok2)
+	if err != nil {
+		t.Fatalf("parse 2: %v", err)
+	}
+	if c1.JTI() == "" || c2.JTI() == "" {
+		t.Fatal("jti claim missing")
+	}
+	if c1.JTI() == c2.JTI() {
+		t.Fatal("two tokens share the same jti")
+	}
+	if c1.ExpiresAtUnix() == 0 {
+		t.Fatal("exp claim missing or zero")
+	}
+	if c1.ExpiresAtUnix() <= time.Now().Unix() {
+		t.Fatalf("exp not in the future: %d", c1.ExpiresAtUnix())
+	}
+}
+
+func TestRevokeAndIsRevoked(t *testing.T) {
+	a := newTestAuth(t)
+	uid := seedUser(t, a, "u@example.com", "buyer")
+	tok, err := a.SignToken(&models.User{ID: uid, Role: "buyer"})
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	claims, err := a.parseToken(tok)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	// Token is not revoked yet.
+	revoked, err := a.IsRevoked(context.Background(), claims.JTI())
+	if err != nil {
+		t.Fatalf("isrevoked: %v", err)
+	}
+	if revoked {
+		t.Fatal("token is revoked before logout")
+	}
+
+	if err := a.Revoke(context.Background(), uid, claims.JTI(), claims.ExpiresAtUnix()); err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
+
+	revoked, err = a.IsRevoked(context.Background(), claims.JTI())
+	if err != nil {
+		t.Fatalf("isrevoked: %v", err)
+	}
+	if !revoked {
+		t.Fatal("token is not revoked after Revoke")
+	}
+}
+
+func TestGCRevokedDropsExpired(t *testing.T) {
+	a := newTestAuth(t)
+	uid := seedUser(t, a, "u@example.com", "buyer")
+
+	// Insert a row whose expires_at is in the past.
+	if err := a.Revoke(context.Background(), uid, "expired-jti", time.Now().Add(-time.Hour).Unix()); err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
+	// Insert a row whose expires_at is in the future.
+	if err := a.Revoke(context.Background(), uid, "live-jti", time.Now().Add(time.Hour).Unix()); err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
+
+	if err := a.GCRevoked(context.Background()); err != nil {
+		t.Fatalf("gc: %v", err)
+	}
+
+	revoked, err := a.IsRevoked(context.Background(), "expired-jti")
+	if err != nil {
+		t.Fatalf("isrevoked expired: %v", err)
+	}
+	if revoked {
+		t.Fatal("expired row should have been GC'd")
+	}
+	revoked, err = a.IsRevoked(context.Background(), "live-jti")
+	if err != nil {
+		t.Fatalf("isrevoked live: %v", err)
+	}
+	if !revoked {
+		t.Fatal("live row should still be present after GC")
+	}
+}
+
+func TestRequireAuthRejectsRevoked(t *testing.T) {
+	a := newTestAuth(t)
+	uid := seedUser(t, a, "u@example.com", "buyer")
+	tok, err := a.SignToken(&models.User{ID: uid, Role: "buyer"})
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	claims, err := a.parseToken(tok)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if err := a.Revoke(context.Background(), uid, claims.JTI(), claims.ExpiresAtUnix()); err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
+
+	rec, _ := runHandler(a.RequireAuth, "Bearer "+tok)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401 (body %s)", rec.Code, rec.Body.String())
+	}
+	if !contains(rec.Body.String(), "invalid or expired token") {
+		t.Fatalf("body = %s", rec.Body.String())
+	}
+}
+
+func TestRevokeFromRequest(t *testing.T) {
+	a := newTestAuth(t)
+	uid := seedUser(t, a, "u@example.com", "buyer")
+	tok, err := a.SignToken(&models.User{ID: uid, Role: "buyer"})
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+
+	req := httptest.NewRequestWithContext(context.Background(), "POST", "/auth/logout", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	status, msg := a.RevokeFromRequest(req)
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (msg %q)", status, msg)
+	}
+	if msg != "" {
+		t.Fatalf("msg = %q, want empty on success", msg)
+	}
+
+	// And the token is now rejected by RequireAuth.
+	rec, _ := runHandler(a.RequireAuth, "Bearer "+tok)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("after revoke: status = %d, want 401", rec.Code)
+	}
+}
+
+func TestRevokeFromRequestRejectsBadHeader(t *testing.T) {
+	a := newTestAuth(t)
+	req := httptest.NewRequestWithContext(context.Background(), "POST", "/auth/logout", nil)
+	status, _ := a.RevokeFromRequest(req)
+	if status != http.StatusUnauthorized {
+		t.Fatalf("no header: status = %d, want 401", status)
+	}
+}
+
+func TestClaimsHelpers(t *testing.T) {
+	// ExpiresAtUnix returns 0 when the claim is absent.
+	var c Claims
+	if c.JTI() != "" {
+		t.Fatalf("empty jti = %q, want empty", c.JTI())
+	}
+	if c.ExpiresAtUnix() != 0 {
+		t.Fatalf("empty exp = %d, want 0", c.ExpiresAtUnix())
+	}
+}

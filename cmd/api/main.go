@@ -35,6 +35,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Set up signal handling early so background goroutines (like the
+	// revoked_tokens GC) can listen on the same ctx.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	d, err := db.Open(cfg.DatabaseURL)
 	if err != nil {
 		slog.Error("open db", "error", err)
@@ -45,6 +50,24 @@ func main() {
 	a := auth.New(cfg.JWTSecret, d)
 	h := handlers.New(d, a)
 	h.Version = version
+
+	// Periodically drop rows from revoked_tokens whose tokens have
+	// already expired. Keeps the table small so the per-request
+	// IsRevoked check stays cheap.
+	go func() {
+		ticker := time.NewTicker(10 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := a.GCRevoked(ctx); err != nil {
+					slog.Error("revoked tokens gc", "error", err)
+				}
+			}
+		}
+	}()
 
 	origins, err := cfg.CORSOrigins()
 	if err != nil {
@@ -66,9 +89,6 @@ func main() {
 		IdleTimeout:       60 * time.Second,
 		MaxHeaderBytes:    1 << 20,
 	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	go func() {
 		slog.Info("listening", "addr", srv.Addr)

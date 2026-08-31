@@ -104,6 +104,22 @@ func (a *API) register(w http.ResponseWriter, r *http.Request, role string) {
 	writeJSON(w, http.StatusCreated, map[string]any{"id": id, "email": in.Email})
 }
 
+// Logout revokes the bearer token used on the request by inserting its
+// jti into revoked_tokens. The same token (or any token with the same
+// jti) is rejected with 401 by RequireAuth from then on. Other tokens
+// for the same user keep working: revocation is per-token, not per-user.
+func (a *API) Logout(w http.ResponseWriter, r *http.Request) {
+	status, msg := a.Auth.RevokeFromRequest(r)
+	switch status {
+	case http.StatusOK:
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	case http.StatusUnauthorized, http.StatusBadRequest:
+		writeError(w, status, msg)
+	default:
+		serverError(w, nil)
+	}
+}
+
 // dummyHash is a fixed bcrypt hash used by Login to keep the response time
 // constant whether the email exists or not, so an attacker cannot enumerate
 // registered accounts by measuring timing. Generated once at startup with
