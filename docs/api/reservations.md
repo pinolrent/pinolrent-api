@@ -1,30 +1,26 @@
 # Reservas
 
-Todas las rutas de reserva requieren `Authorization: Bearer <token>` (rol
-`buyer` o `seller`).
+Todas necesitan `Authorization: Bearer <token>`.
 
 ## `POST /reservations`
 
-Crea una reserva. Requiere login.
+Reserva un auto. Necesita login.
 
 **Body:**
 
-| Campo | Tipo | Requerido | Reglas |
-|-------|------|-----------|--------|
-| `car_id` | entero | sí | debe existir y estar activo |
+| Campo | Tipo | ¿Obligatorio? | Reglas |
+|-------|------|---------------|--------|
+| `car_id` | número | sí | debe existir y estar activo |
 | `start_date` | `YYYY-MM-DD` | sí | no puede ser anterior a hoy (UTC) |
-| `end_date` | `YYYY-MM-DD` | sí | `>= start_date` |
+| `end_date` | `YYYY-MM-DD` | sí | `>= start_date`, máximo 30 días de rango |
 
 ```json
 {"car_id":1,"start_date":"2026-10-01","end_date":"2026-10-05"}
 ```
 
-La operación corre en una transacción (`BEGIN IMMEDIATE`): verifica que el auto
-exista y esté activo, que no solape con reservas `pending`/`confirmed` y
-rechaza con `409` si algo falla. Un vendedor también puede reservar el auto de
-otro.
+Si dos personas intentan reservar el mismo auto en las mismas fechas, solo una pasa (usa transacción).
 
-**Respuesta** — `201 Created` (reservation view; `payment` ausente):
+**Responde** `201` (con el auto incluido, sin pago todavía):
 
 ```json
 {
@@ -40,29 +36,26 @@ otro.
 
 **Errores:**
 
-| Status | Mensaje | Cuándo |
+| Código | Mensaje | Cuándo |
 |--------|---------|--------|
-| `400` | `invalid start_date, expected YYYY-MM-DD` | Formato inválido |
-| `400` | `invalid end_date, expected YYYY-MM-DD` | Formato inválido |
-| `400` | `end_date must be on or after start_date` | Rango invertido |
-| `400` | `start_date cannot be in the past` | Fecha anterior a hoy |
-| `400` | `reservation cannot be longer than 30 days` | El rango supera los 30 días |
-| `400` | `car_id is required` | Campo ausente (o `0`) |
-| `404` | `car not found` | El auto no existe |
-| `409` | `car is not active` | El auto existe pero está inactivo |
-| `409` | `car already reserved for the requested dates` | Solapa con otra reserva no cancelada |
-| `400` | `invalid JSON body` | JSON malformado / campos desconocidos |
-| `413` | `request body too large` | Body > 1 MB |
-| `401` | ver [00-general](00-general.md) | Sin token / token inválido |
+| `400` | `invalid start_date, expected YYYY-MM-DD` | Formato mal |
+| `400` | `invalid end_date, expected YYYY-MM-DD` | Formato mal |
+| `400` | `end_date must be on or after start_date` | Rango al revés |
+| `400` | `start_date cannot be in the past` | Fecha pasada |
+| `400` | `reservation cannot be longer than 30 days` | Más de 30 días |
+| `400` | `car_id is required` | Falta o es 0 |
+| `404` | `car not found` | No existe |
+| `409` | `car is not active` | Existe pero está apagado |
+| `409` | `car already reserved for the requested dates` | Ya hay reserva en esas fechas |
+| `400` | `invalid JSON body` | JSON roto o campos desconocidos |
+| `413` | `request body too large` | Más de 1 MB |
+| `401` | ver [00-general](00-general.md) | Sin token |
 
 ---
 
 ## `GET /reservations`
 
-Lista las reservas del comprador autenticado, más recientes primero. Acepta
-`limit`/`offset` (ver [convenciones](00-general.md)).
-
-**Respuesta** — `200 OK`:
+Tus reservas, más nuevas primero. Acepta `limit`/`offset`.
 
 ```json
 [
@@ -82,48 +75,36 @@ Sin reservas → `[]`.
 
 ## `GET /reservations/{id}`
 
-Detalle de una reserva. Un comprador solo ve las suyas; un vendedor ve las
-reservas de **sus** autos.
+Detalle de una reserva. La puede ver el comprador que la hizo o el vendedor dueño del auto.
 
-**Respuesta** — `200 OK` (misma shape que el ejemplo anterior).
-
-**Errores:**
-
-| Status | Mensaje | Cuándo |
+| Código | Mensaje | Cuándo |
 |--------|---------|--------|
-| `400` | `invalid reservation id` | `{id}` no es un entero |
-| `404` | `reservation not found` | No existe, o no te pertenece ni al comprador ni al vendedor dueño (se oculta) |
+| `400` | `invalid reservation id` | `{id}` no es número |
+| `404` | `reservation not found` | No existe o no es tuya |
 
 ---
 
 ## `PATCH /reservations/{id}/cancel`
 
-Cancela la reserva del comprador autenticado. Requiere login.
+Cancela tu reserva. Necesita login.
 
-Reglas: la reserva debe **pertenecer al comprador autenticado**; debe estar en
-estado `pending`; y **no debe tener un pago registrado** (una vez que se pagó,
-la cancelación se tramita con el vendedor).
+Solo si: es tuya, está `pending` y **no tiene pago** (si ya pagaste, hablá con el vendedor).
 
-**Respuesta** — `200 OK` (reservation view ya `cancelled`).
+**Responde** `200` con la reserva ya `cancelled`.
 
-**Errores:**
-
-| Status | Mensaje | Cuándo |
+| Código | Mensaje | Cuándo |
 |--------|---------|--------|
-| `400` | `invalid reservation id` | `{id}` no es un entero |
-| `404` | `reservation not found` | No existe, **o** pertenece a otro comprador (se oculta) |
-| `409` | `reservation is not pending` | Ya fue confirmada o cancelada |
-| `409` | `payment already recorded, cannot cancel` | La reserva ya tiene pago |
+| `400` | `invalid reservation id` | `{id}` no es número |
+| `404` | `reservation not found` | No existe o no es tuya |
+| `409` | `reservation is not pending` | Ya confirmada o cancelada |
+| `409` | `payment already recorded, cannot cancel` | Ya tiene pago |
 
-Tras cancelar, el rango vuelve a quedar **reservable** en `GET /cars` y
-`POST /reservations` (las `cancelled` no bloquean el overlap).
+Al cancelar, esas fechas vuelven a estar disponibles.
 
 ---
 
 ## `GET /seller/reservations`
 
-Lista las reservas de los autos del vendedor autenticado, más recientes
-primero. Requiere rol `seller`. Acepta `limit`/`offset` (ver
-[convenciones](00-general.md)).
+Reservas de tus autos como vendedor, más nuevas primero. Necesita ser `seller`. Acepta `limit`/`offset`.
 
-**Respuesta** — `200 OK` (array de reservation views). Sin reservas → `[]`.
+Array de reservas. Sin reservas → `[]`.

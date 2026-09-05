@@ -2,24 +2,21 @@
 
 ## `GET /cars`
 
-Lista los autos **activos** de todos los vendedores, opcionalmente filtrados
-por vendedor y excluyendo los ya reservados en un rango. Público.
+Lista autos **activos** de todos los vendedores. Puedes filtrar por vendedor y por fechas (excluye los ya reservados en ese rango). No necesita login.
 
-**Query params** (todos opcionales, combinables):
+**Filtros** (todos opcionales, se pueden combinar):
 
 | Parámetro | Formato | Reglas |
 |-----------|---------|--------|
-| `start_date` | `YYYY-MM-DD` | debe acompañarse de `end_date` |
+| `start_date` | `YYYY-MM-DD` | debe ir con `end_date` |
 | `end_date` | `YYYY-MM-DD` | `>= start_date` |
-| `owner_id` | entero | solo autos del vendedor con ese id |
-| `limit` | entero | `1..200`, default `50` |
-| `offset` | entero | `>= 0`, default `0` |
+| `owner_id` | número | solo autos de ese vendedor |
+| `limit` | número | `1..200`, por defecto `50` |
+| `offset` | número | `>= 0`, por defecto `0` |
 
-¿Como funciona el filtro? Solo se listan autos con `active=1` y sin reserva
-`pending`/`confirmed` que **solape** el rango `[start_date, end_date]`. Las
-reservas `cancelled` no bloquean.
+Solo muestra autos con `active=1` y sin reserva `pending`/`confirmed` que choque con `[start_date, end_date]`. Las `cancelled` no bloquean.
 
-**Respuesta** — `200 OK`:
+**Responde** `200`:
 
 ```json
 [
@@ -32,48 +29,40 @@ Sin resultados → `[]`.
 
 **Errores:**
 
-| Status | Mensaje | Cuándo |
+| Código | Mensaje | Cuándo |
 |--------|---------|--------|
-| `400` | `start_date and end_date must be provided together` | Solo se mandó uno de los dos |
-| `400` | `invalid start_date, expected YYYY-MM-DD` | Formato inválido |
-| `400` | `invalid end_date, expected YYYY-MM-DD` | Formato inválido |
-| `400` | `end_date must be on or after start_date` | Rango invertido |
-| `400` | `invalid owner_id` | `owner_id` no es un entero positivo |
-| `400` | `invalid limit` / `invalid offset` | Parámetros de paginación inválidos |
+| `400` | `start_date and end_date must be provided together` | Mandaste solo uno |
+| `400` | `invalid start_date, expected YYYY-MM-DD` | Formato mal |
+| `400` | `invalid end_date, expected YYYY-MM-DD` | Formato mal |
+| `400` | `end_date must be on or after start_date` | Rango al revés |
+| `400` | `invalid owner_id` | No es un número válido |
+| `400` | `invalid limit` / `invalid offset` | Paginación mal |
 
 ---
 
 ## `GET /cars/{id}`
 
-Devuelve un auto **activo** del catálogo por id. Público; útil para la página
-de detalle.
+Detalle de un auto **activo**. No necesita login.
 
-**Respuesta** — `200 OK` (misma shape que la lista):
+**Responde** `200`:
 
 ```json
 {"id":1,"owner_id":4,"name":"Toyota Yaris","photo_url":"https://...","price_per_day":45000,"active":true}
 ```
 
-**Errores:**
-
-| Status | Mensaje | Cuándo |
+| Código | Mensaje | Cuándo |
 |--------|---------|--------|
-| `400` | `invalid car id` | `{id}` no es un entero |
-| `404` | `car not found` | No existe, **o** el auto está inactivo (oculto del catálogo público) |
+| `400` | `invalid car id` | `{id}` no es número |
+| `404` | `car not found` | No existe o está inactivo |
 
 ---
 
 ## `GET /seller/cars`
 
-Lista los autos del vendedor autenticado, más nuevos primero. Requiere rol
-`seller`. Acepta `limit`/`offset` (ver [convenciones](00-general.md)).
-
-**Respuesta** — `200 OK`:
+Tus autos como vendedor, más nuevos primero. Necesita ser `seller`. Acepta `limit`/`offset`.
 
 ```json
-[
-  {"id":1,"owner_id":4,"name":"Toyota Yaris","price_per_day":45000,"active":true}
-]
+[{"id":1,"owner_id":4,"name":"Toyota Yaris","price_per_day":45000,"active":true}]
 ```
 
 Sin autos → `[]`.
@@ -82,68 +71,61 @@ Sin autos → `[]`.
 
 ## `POST /seller/cars`
 
-Da de alta un auto **propio**. Requiere rol `seller`.
+Agrega un auto tuyo. Necesita ser `seller`.
 
 **Body:**
 
-| Campo | Tipo | Requerido | Reglas |
-|-------|------|-----------|--------|
-| `name` | string | sí | no vacío (trim); ≤ 200 caracteres |
-| `photo_url` | string | no | si se manda, URL `http(s)` válida; ≤ 2048 caracteres |
-| `price_per_day` | entero | no | `0..100_000_000` centavos |
+| Campo | Tipo | ¿Obligatorio? | Reglas |
+|-------|------|---------------|--------|
+| `name` | texto | sí | no vacío, hasta 200 caracteres |
+| `photo_url` | texto | no | si va, URL `http(s)` hasta 2048 |
+| `price_per_day` | número | no | `0..100_000_000` centavos |
 
 ```json
 {"name":"Toyota Yaris","photo_url":"https://example.com/yaris.jpg","price_per_day":45000}
 ```
 
-**Respuesta** — `201 Created` (nace `active: true`, con tu `owner_id`):
+**Responde** `201` (nace `active: true` con tu `owner_id`):
 
 ```json
 {"id":1,"owner_id":4,"name":"Toyota Yaris","photo_url":"https://example.com/yaris.jpg","price_per_day":45000,"active":true}
 ```
 
-**Errores:**
-
-| Status | Mensaje | Cuándo |
+| Código | Mensaje | Cuándo |
 |--------|---------|--------|
-| `400` | `name is required` | `name` vacío o ausente |
-| `400` | `name is too long (max 200 characters)` | `name` > 200 caracteres |
-| `400` | `price_per_day must be >= 0` | Precio negativo |
-| `400` | `price_per_day must be <= 100000000` | Precio sobre el tope |
-| `400` | `photo_url is too long` | `photo_url` > 2048 caracteres |
-| `400` | `invalid photo_url` | URL malformada o sin scheme `http(s)` |
-| `400` | `invalid JSON body` | JSON malformado / campos desconocidos |
-| `413` | `request body too large` | Body > 1 MB |
-| `401` / `403` | ver [00-general](00-general.md) | Sin token / rol incorrecto |
+| `400` | `name is required` | Vacío o falta |
+| `400` | `name is too long (max 200 characters)` | Más de 200 |
+| `400` | `price_per_day must be >= 0` | Negativo |
+| `400` | `price_per_day must be <= 100000000` | Se pasó del tope |
+| `400` | `photo_url is too long` | Más de 2048 |
+| `400` | `invalid photo_url` | URL mal formada o sin `http(s)` |
+| `400` | `invalid JSON body` | JSON roto o campos desconocidos |
+| `413` | `request body too large` | Más de 1 MB |
+| `401` / `403` | ver [00-general](00-general.md) | Sin token o sin permiso |
 
 ---
 
 ## `PATCH /seller/cars/{id}`
 
-Activa/inactiva un auto **propio**. Requiere rol `seller`.
-
-**Body** (parcial; solo `active`):
+Prende o apaga uno de tus autos. Necesita ser `seller`.
 
 ```json
 {"active":false}
 ```
 
-**Respuesta** — `200 OK` (el auto completo):
+**Responde** `200` con el auto actualizado:
 
 ```json
 {"id":1,"owner_id":4,"name":"Toyota Yaris","photo_url":"https://example.com/yaris.jpg","price_per_day":45000,"active":false}
 ```
 
-**Errores:**
-
-| Status | Mensaje | Cuándo |
+| Código | Mensaje | Cuándo |
 |--------|---------|--------|
-| `400` | `invalid car id` | `{id}` no es un entero |
-| `400` | `active is required` | Campo ausente (debe ser `true`/`false` explícito) |
-| `404` | `car not found` | No existe, **o** pertenece a otro vendedor (se oculta) |
-| `401` / `403` | ver [00-general](00-general.md) | Sin token / rol incorrecto |
+| `400` | `invalid car id` | `{id}` no es número |
+| `400` | `active is required` | Falta el campo (debe ser `true` o `false`) |
+| `404` | `car not found` | No existe o no es tuyo |
+| `401` / `403` | ver [00-general](00-general.md) | Sin token o sin permiso |
 
 ---
 
-**Nota:** inactivar un auto no borra sus reservas pasadas; simplemente deja de
-aparecer en `GET /cars` y de aceptar reservas nuevas (`409 car is not active`).
+> Apagar un auto no borra sus reservas viejas, solo deja de aparecer en `GET /cars` y no acepta reservas nuevas (`409 car is not active`).

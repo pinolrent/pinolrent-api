@@ -2,23 +2,22 @@
 
 ## `POST /reservations/{id}/payment`
 
-Registra el pago de la reserva del comprador autenticado. Requiere login.
+Registra el pago de tu reserva. Necesita login.
 
 **Body:**
 
-| Campo | Tipo | Requerido | Reglas |
-|-------|------|-----------|--------|
-| `method` | string | sí | `pos` \| `cash` |
-| `proof_url` | string | no | si se manda, URL `http(s)` válida; ≤ 2048 caracteres |
+| Campo | Tipo | ¿Obligatorio? | Reglas |
+|-------|------|---------------|--------|
+| `method` | texto | sí | `pos` o `cash` |
+| `proof_url` | texto | no | si va, URL `http(s)` hasta 2048 |
 
 ```json
 {"method":"pos","proof_url":"https://example.com/boleta.pdf"}
 ```
 
-Reglas: la reserva debe existir y **pertenecer al comprador autenticado**; no
-puede estar `cancelled`; y no puede tener ya un pago (uno por reserva).
+Reglas: la reserva debe existir y ser tuya, no estar `cancelled` y no tener ya un pago (uno por reserva).
 
-**Respuesta** — `201 Created` (nace `status: pending`):
+**Responde** `201` (nace `pending`):
 
 ```json
 {
@@ -32,29 +31,27 @@ puede estar `cancelled`; y no puede tener ya un pago (uno por reserva).
 
 **Errores:**
 
-| Status | Mensaje | Cuándo |
+| Código | Mensaje | Cuándo |
 |--------|---------|--------|
-| `400` | `invalid reservation id` | `{id}` no es un entero |
+| `400` | `invalid reservation id` | `{id}` no es número |
 | `400` | `method must be pos or cash` | Método desconocido |
-| `400` | `proof_url is too long` | `proof_url` > 2048 caracteres |
-| `400` | `invalid proof_url` | URL malformada o sin scheme `http(s)` |
-| `404` | `reservation not found` | No existe, **o** pertenece a otro comprador (se oculta) |
-| `409` | `cancelled reservation cannot be paid` | La reserva está cancelada |
-| `409` | `payment already recorded` | La reserva ya tiene pago |
-| `400` | `invalid JSON body` | JSON malformado / campos desconocidos |
-| `413` | `request body too large` | Body > 1 MB |
+| `400` | `proof_url is too long` | Más de 2048 |
+| `400` | `invalid proof_url` | URL mal formada o sin `http(s)` |
+| `404` | `reservation not found` | No existe o no es tuya |
+| `409` | `cancelled reservation cannot be paid` | Está cancelada |
+| `409` | `payment already recorded` | Ya tiene pago |
+| `400` | `invalid JSON body` | JSON roto o campos desconocidos |
+| `413` | `request body too large` | Más de 1 MB |
 
 ---
 
 ## `PATCH /seller/reservations/{id}/confirm`
 
-Aprueba el pago y confirma la reserva, atomáticamente (transacción
-`BEGIN IMMEDIATE`). Requiere rol `seller` y que el auto de la reserva sea del
-vendedor autenticado. Sin body.
+El vendedor aprueba el pago y confirma la reserva, todo junto en una transacción. Necesita ser `seller` y que el auto sea tuyo. Sin body.
 
-Efectos: `payments.status` → `approved` y `reservations.status` → `confirmed`.
+Pasa `payments.status` → `approved` y `reservations.status` → `confirmed`.
 
-**Respuesta** — `200 OK` (reservation view ya confirmada):
+**Responde** `200`:
 
 ```json
 {
@@ -71,9 +68,9 @@ Efectos: `payments.status` → `approved` y `reservations.status` → `confirmed
 
 **Errores:**
 
-| Status | Mensaje | Cuándo |
+| Código | Mensaje | Cuándo |
 |--------|---------|--------|
-| `400` | `invalid reservation id` | `{id}` no es un entero |
-| `404` | `reservation not found` | No existe, **o** el auto pertenece a otro vendedor (se oculta) |
-| `409` | `reservation is not pending` | Ya fue confirmada o cancelada |
+| `400` | `invalid reservation id` | `{id}` no es número |
+| `404` | `reservation not found` | No existe o el auto no es tuyo |
+| `409` | `reservation is not pending` | Ya confirmada o cancelada |
 | `409` | `no payment recorded for this reservation` | No hay pago que aprobar |

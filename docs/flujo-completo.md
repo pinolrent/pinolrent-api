@@ -1,19 +1,17 @@
 # Flujo completo
 
-Recorrido end-to-end con `curl`: un **vendedor** publica un auto, un
-**comprador** lo reserva y paga, y el vendedor confirma. La respuesta de
-ejemplo de cada paso es la salida real de la API.
+Recorrido con `curl`: un **vendedor** publica un auto, un **comprador** lo reserva y paga, y el vendedor lo confirma. Las respuestas son las reales de la API.
 
-Presupuestos:
+Necesitas:
 
-- Server levantado en `http://localhost:8080` (ver [Configuración](configuracion.md)).
-- `jq` disponible en el shell para extraer campos de las respuestas.
+- Server en `http://localhost:8080` (ver [Configuración](configuracion.md)).
+- `jq` para leer las respuestas.
 
 ```sh
 BASE=http://localhost:8080
 ```
 
-## 1 · Registrar comprador y vendedor
+## 1. Registrar comprador y vendedor
 
 ```sh
 curl -s -X POST "$BASE/auth/register" \
@@ -25,13 +23,13 @@ curl -s -X POST "$BASE/auth/register/seller" \
   -d '{"email":"vende@example.com","password":"secret123"}'
 ```
 
-Recibido en ambos casos (`201 Created`):
+En ambos casos (`201`):
 
 ```json
 {"id":4,"email":"vende@example.com"}
 ```
 
-## 2 · Logins
+## 2. Entrar y guardar los tokens
 
 ```sh
 SELLER=$(curl -s -X POST "$BASE/auth/login" \
@@ -43,20 +41,20 @@ BUYER=$(curl -s -X POST "$BASE/auth/login" \
   -d '{"email":"compra@example.com","password":"secret123"}' | jq -r .token)
 ```
 
-Cada login devuelve (`200 OK`):
+Cada login devuelve (`200`):
 
 ```json
 {"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."}
 ```
 
-Con el token, el perfil se consulta en `GET /auth/me`:
+Puedes ver tu perfil con:
 
 ```sh
 curl -s "$BASE/auth/me" -H "Authorization: Bearer $BUYER"
 # {"id":4,"email":"compra@example.com","role":"buyer"}
 ```
 
-## 3 · El vendedor crea un auto
+## 3. El vendedor publica un auto
 
 ```sh
 curl -s -X POST "$BASE/seller/cars" \
@@ -65,7 +63,7 @@ curl -s -X POST "$BASE/seller/cars" \
   -d '{"name":"Toyota Yaris","price_per_day":45000,"photo_url":"https://example.com/yaris.jpg"}'
 ```
 
-Recibido (`201 Created`) — el auto queda ligado a tu `owner_id`:
+Recibes (`201`) — queda ligado a tu `owner_id`:
 
 ```json
 {
@@ -78,7 +76,7 @@ Recibido (`201 Created`) — el auto queda ligado a tu `owner_id`:
 }
 ```
 
-## 4 · El comprador reserva
+## 4. El comprador reserva
 
 ```sh
 curl -s -X POST "$BASE/reservations" \
@@ -87,7 +85,7 @@ curl -s -X POST "$BASE/reservations" \
   -d '{"car_id":1,"start_date":"2026-10-01","end_date":"2026-10-05"}'
 ```
 
-Recibido (`201 Created`) — el pago todavía no existe, por eso va `omitempty`:
+Recibes (`201`) — aún sin pago, por eso no viene `payment`:
 
 ```json
 {
@@ -107,7 +105,7 @@ Recibido (`201 Created`) — el pago todavía no existe, por eso va `omitempty`:
 }
 ```
 
-## 5 · El comprador paga
+## 5. El comprador paga
 
 ```sh
 curl -s -X POST "$BASE/reservations/1/payment" \
@@ -116,7 +114,7 @@ curl -s -X POST "$BASE/reservations/1/payment" \
   -d '{"method":"pos","proof_url":"https://example.com/boleta.pdf"}'
 ```
 
-Recibido (`201 Created`):
+Recibes (`201`):
 
 ```json
 {
@@ -128,21 +126,16 @@ Recibido (`201 Created`):
 }
 ```
 
-Un segundo pago sobre la misma reserva falla (`409 Conflict`):
+Si intentas pagar de nuevo la misma reserva → `409 {"error":"payment already recorded"}`.
 
-```json
-{"error":"payment already recorded"}
-```
-
-## 6 · El vendedor confirma
+## 6. El vendedor confirma
 
 ```sh
 curl -s -X PATCH "$BASE/seller/reservations/1/confirm" \
   -H "Authorization: Bearer $SELLER"
 ```
 
-Recibido (`200 OK`) — la reserva queda `confirmed` y el pago `approved`, todo
-en una transacción:
+Recibes (`200`) — queda `confirmed` y el pago `approved`, todo en una transacción:
 
 ```json
 {
@@ -169,16 +162,15 @@ en una transacción:
 }
 ```
 
-## Cancelación (antes de pagar)
+## Cancelar (antes de pagar)
 
-Mientras una reserva esté `pending` y **sin pago**, el comprador la cancela;
+Mientras esté `pending` y **sin pago**, el comprador puede cancelar:
 
 ```sh
 curl -s -X PATCH "$BASE/reservations/1/cancel" -H "Authorization: Bearer $BUYER"
 ```
 
-Recibido (`200 OK`) — la reserva queda `cancelled` y su rango vuelve a estar
-disponible:
+Recibes (`200`) — pasa a `cancelled` y esas fechas quedan libres de nuevo:
 
 ```json
 {
@@ -192,7 +184,7 @@ disponible:
 }
 ```
 
-Una reserva **con pago registrado** no se cancela por API:
+Si ya tiene pago, no deja:
 
 ```sh
 curl -s -o /dev/null -w '%{http_code}\n' \
@@ -200,28 +192,19 @@ curl -s -o /dev/null -w '%{http_code}\n' \
 # → 409 {"error":"payment already recorded, cannot cancel"}
 ```
 
-## Aislamiento entre vendedores
+## Cada vendedor solo ve lo suyo
 
-`vende@example.com` no puede tocar los autos de otro vendedor:
+Si `vende@example.com` intenta tocar el auto de otro:
 
 ```sh
-# otro vendedor crea su auto y vos intentás desactivarlo
 curl -s -o /dev/null -w '%{http_code}\n' \
   -X PATCH "$BASE/seller/cars/2" -H "Authorization: Bearer $SELLER" \
   -H 'Content-Type: application/json' -d '{"active":false}'
-# → 404 {car not found} (existe pero no es tuyo)
+# → 404 {car not found} (existe, pero no es tuyo)
 ```
 
-## Estado final
+## Qué queda al final
 
-- El auto 1 ya no aparece al listar con el rango reservado:
-  `GET /cars?start_date=2026-10-01&end_date=2026-10-05` → `[]`.
-- El vendedor ve sus reservas en `GET /seller/reservations`. Las listas
-  aceptan `limit`/`offset` (default 50, máx 200) y `GET /cars` filtra por
-  `owner_id`.
-- El mismo flujo está automatizado en `scripts/demo.sh` (`make demo`), que
-  además comprueba hardening: body demasiado grande (`413`), fechas pasadas
-  (`400`), overlap (`409`), rango > 30 días (`400`), paginación inválida
-  (`400`), cancelación y re-reserva, comprador sin permisos de vendedor
-  (`403`), rate limit sobre `/auth/*` (`429`), fail-fast de `JWT_SECRET`
-  ausente, y shutdown limpio con `SIGTERM`.
+- El auto 1 ya no aparece en `GET /cars?start_date=2026-10-01&end_date=2026-10-05` → `[]`.
+- El vendedor ve sus reservas en `GET /seller/reservations`. Las listas aceptan `limit`/`offset` (por defecto 50, máximo 200) y `GET /cars` filtra por `owner_id`.
+- Este mismo flujo está automatizado en `scripts/demo.sh` (`make demo`), que además prueba: body muy grande (`413`), fechas pasadas (`400`), choque de fechas (`409`), más de 30 días (`400`), paginación mal (`400`), cancelar y re-reservar, comprador sin permiso de vendedor (`403`), límite de intentos (`429`), falta de `JWT_SECRET` y apagado limpio con `SIGTERM`.

@@ -2,37 +2,30 @@
 
 ## Variables de entorno
 
-| Variable | Default | Requerida | Descripción |
-|----------|---------|-----------|-------------|
-| `PORT` | `8080` | no | Puerto del servidor |
-| `DATABASE_URL` | `pinolrent.db` | no | Ruta/DSN del archivo SQLite |
-| `JWT_SECRET` | — | **sí** | Secreto HS256 para firmar tokens; el proceso **aborta si falta o tiene menos de 32 bytes** |
-| `CORS_ALLOWED_ORIGINS` | `*` | no | Orígenes permitidos, separados por coma; `*` acepta cualquiera. Ver [00-general](api/00-general.md) |
+| Variable | Valor por defecto | ¿Obligatoria? | Para qué sirve |
+|----------|-------------------|---------------|----------------|
+| `PORT` | `8080` | no | Puerto donde escucha el server |
+| `DATABASE_URL` | `pinolrent.db` | no | Dónde está el archivo SQLite |
+| `JWT_SECRET` | — | **sí** | Secreto para firmar los tokens (mínimo 32 caracteres) |
+| `CORS_ALLOWED_ORIGINS` | `*` | no | Qué orígenes pueden llamar a la API, separados por coma. `*` = todos |
 
-Precedencia de valores: **variables del shell > `.env` > defaults**. Las
-variables que están vacías en el entorno se tratan como ausentes.
+El orden de prioridad es: **variables del shell > `.env` > valores por defecto**. Si una variable está vacía se ignora.
 
-### Fail-fast
-
-El server no arranca si `JWT_SECRET` falta o tiene menos de 32 bytes:
+### Si falta el secreto, no arranca
 
 ```sh
 $ go run ./cmd/api
-time=... level=ERROR msg="invalid config" error="missing required env vars: JWT_SECRET"
-exit status 1
+# ERROR: missing required env vars: JWT_SECRET
 ```
 
 ```sh
 $ JWT_SECRET=short go run ./cmd/api
-time=... level=ERROR msg="invalid config" error="JWT_SECRET must be at least 32 bytes (got 5); generate one with `openssl rand -base64 32`"
-exit status 1
+# ERROR: JWT_SECRET must be at least 32 bytes (got 5)
 ```
 
-El validador es `Config.Validate` en `internal/config/config.go`. El mínimo de 32
-bytes se exige porque HS256 con un secreto corto es trivial de forjar offline
-si un atacante consigue un solo token.
+Esto lo valida `Config.Validate` en `internal/config/config.go`. Un secreto corto con HS256 es fácil de romper si alguien consigue un token, por eso se exige mínimo 32.
 
-### Proveerse un secreto aleatorio
+### Cómo generar un secreto
 
 ```sh
 export JWT_SECRET="$(openssl rand -base64 32)"
@@ -42,33 +35,22 @@ export JWT_SECRET="$(openssl rand -base64 32)"
 
 ```sh
 export JWT_SECRET="$(openssl rand -base64 32)"
-go run ./cmd/api   # o compila y ejecuta el binario
+go run ./cmd/api   # o el binario compilado con make build
 ```
 
-Secuencia de arranque:
+Qué pasa al arrancar:
 
-1. `godotenv.Load()` — carga `.env` si existe (los valores del shell ganan).
-2. `config.Load()` + `config.Validate()` — aborta si falta `JWT_SECRET`.
-3. `db.Open(DATABASE_URL)` — abre SQLite con WAL, busy timeout de 5 s y un pool
-   pequeño (8 conexiones) y aplica las **migraciones goose** embebidas si hay
-   pendientes (historial en `goose_db_version`; las migraciones **nunca borran
-   datos**). La URL `:memory:` usa una sola conexión.
-4. Se inicia el servidor HTTP y se espera `SIGINT`/`SIGTERM` para un shutdown
-   graceful (10 s de tope).
+1. Lee `.env` si existe (lo que ya está en el shell manda).
+2. Valida `JWT_SECRET` — si falta o es corto, se apaga.
+3. Abre SQLite con WAL y aplica las migraciones que falten (quedan registradas en `goose_db_version`, nunca borran datos). Si es `:memory:` usa una sola conexión, si no hasta 8.
+4. Levanta el HTTP y espera `SIGINT`/`SIGTERM` para apagarse limpio (hasta 10 s).
 
-No hay cuenta admin global: los vendedores y compradores se crean por registro
-público (`POST /auth/register` y `POST /auth/register/seller`).
+No hay usuario admin: compradores y vendedores se crean con `POST /auth/register` y `POST /auth/register/seller`.
 
-## Entorno de desarrollo
+## Desarrollo
 
-Con `make dev` no hace falta crear `.env`: el script `scripts/dev.sh` aplica
-defaults de desarrollo cuando falta la variable correspondiente
-(`JWT_SECRET=dev-secret-not-for-production-32b`, `DATABASE_URL=dev.db`) y arranca
-con `go run`. El fail-fast de producción se conserva: invocar
-`go run ./cmd/api` directamente sin variables (o con un `JWT_SECRET` corto)
-sigue abortando.
+Con `make dev` no necesitas crear `.env`: `scripts/dev.sh` pone valores por defecto (`JWT_SECRET=dev-secret-not-for-production-32b`, `DATABASE_URL=dev.db`) y arranca con `go run`. Si corres `go run ./cmd/api` directo sin variables, sí te va a pedir el secreto (es el comportamiento real de producción).
 
-Copia `.env.example` a `.env` para override de esos defaults.
+Puedes copiar `.env.example` a `.env` para cambiar esos valores.
 
-> `dev.db` (y sus artefactos WAL) están en `.gitignore`: nunca commitees bases
-> de desarrollo.
+> `dev.db` y sus archivos (`-wal`, `-shm`) están en `.gitignore`: no los commitees.

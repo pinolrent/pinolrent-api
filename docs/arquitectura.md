@@ -1,40 +1,32 @@
 # Arquitectura
 
-## Stack
+## Con qué está hecho
 
-- **Go 1.26** con la librería estándar: `net/http` (con las rutas con `Method` y
-  placeholders, p. ej. `"PATCH /seller/cars/{id}"`), `database/sql` y `log/slog`.
-- **SQLite** embebido vía `modernc.org/sqlite` (implementación 100% Go, no
-  requiere CGO ni binarios externos).
-- **Migraciones** con `pressly/goose/v3`: SQL versionado embebido en el binario
-  (`internal/db/migrations/`) y aplicado al arrancar; la tabla `goose_db_version`
-  guarda el historial y las migraciones **nunca borran datos**.
-- **Rate limit** con `golang.org/x/time/rate` (token bucket audited), con una
-  capa propia keyed por IP.
-- **CORS** con `rs/cors` (`internal/handlers/cors.go`).
-- **Config** con `caarlos0/env/v11` (tags de struct + defaults).
-- **JWT HS256** (`golang-jwt/jwt/v5`) y **bcrypt** (`golang.org/x/crypto`).
-- **godotenv** (`joho/godotenv`) para cargar `.env` de forma opcional.
+- **Go 1.26.5** con librería estándar: `net/http`, `database/sql`, `log/slog`.
+- **SQLite** embebido con `modernc.org/sqlite` (no necesita nada instalado en el sistema).
+- **Migraciones** con `pressly/goose/v3`: SQL versionado que se aplica solo al arrancar. Quedan registradas en `goose_db_version` y nunca borran datos.
+- **Límite de intentos** con `golang.org/x/time/rate` (por IP, solo en `/auth/*`).
+- **CORS** con `rs/cors`.
+- **JWT HS256** y **bcrypt** para auth.
 
-No hay framework web ni ORM: los handlers son `http.HandlerFunc` puros y las
-consultas son SQL directo.
+No hay framework ni ORM: handlers HTTP puros y SQL directo.
 
-## Layout del repositorio
+## Cómo está organizado
 
 ```
-cmd/api/                  # main: configuración, servidor, middleware, graceful shutdown
+cmd/api/                  # arranca el server, configura middleware y apaga limpio
 internal/
-  config/                 # carga tipada y validación de variables de entorno
-  db/                     # conexión SQLite, migraciones goose, predicado de overlap
-  auth/                   # bcrypt, JWT, middleware de autenticación y roles
-  models/                 # tipos de dominio compartidos (User, Car, Reservation, Payment)
-  handlers/               # API, rutas, middleware HTTP y handlers por recurso
-  ratelimit/              # token bucket (x/time/rate) limitado por IP
+  config/                 # lee y valida variables de entorno
+  db/                     # abre SQLite y aplica migraciones
+  auth/                   # contraseñas, tokens y middleware de login/roles
+  models/                 # tipos del dominio (User, Car, Reservation, Payment)
+  handlers/               # rutas y lógica de cada endpoint
+  ratelimit/              # límite por IP
 scripts/                  # dev.sh y demo.sh
-bruno/                    # colección API para Bruno
+bruno/                    # colección para probar la API con Bruno
 ```
 
-## Modelo de datos
+## Base de datos
 
 ```mermaid
 erDiagram
@@ -46,10 +38,10 @@ erDiagram
     }
     cars {
         int id PK
-        int owner_id FK "usuario seller dueño"
+        int owner_id FK
         text name
         text photo_url
-        int price_per_day "centavos, >= 0"
+        int price_per_day "en centavos"
         int active "0 | 1"
     }
     reservations {
@@ -62,7 +54,7 @@ erDiagram
     }
     payments {
         int id PK
-        text reservation_id FK, UK "uno por reserva"
+        int reservation_id FK, UK "uno por reserva"
         text method "pos | cash"
         text status "pending | approved | rejected"
         text proof_url
@@ -70,180 +62,113 @@ erDiagram
     revoked_tokens {
         text jti PK
         int user_id FK
-        int expires_at "ts unix del exp del token"
+        int expires_at "cuándo vence el token"
     }
 
-    users ||--o{ reservations : "comprador reserva"
-    users ||--o{ cars : "vendedor publica"
+    users ||--o{ reservations : "reserva"
+    users ||--o{ cars : "publica"
     cars ||--o{ reservations : "es reservado"
-    reservations ||--o| payments : "tiene a lo sumo uno"
-    users ||--o{ revoked_tokens : "tokens revocados"
+    reservations ||--o| payments : "tiene a lo sumo un pago"
+    users ||--o{ revoked_tokens : "tokens invalidados"
 ```
 
-Puntos clave del esquema (`internal/db/migrations/`):
+Lo importante del esquema (`internal/db/migrations/`):
 
-- `users.email` es único (índice case-insensitive sobre `lower(email)`);
-  `role` solo admite `buyer` (comprador) y `seller` (vendedor). No existe
-  cuenta admin global: cada vendedor es dueño de sus autos.
-- `cars.owner_id` apunta al `users.id` del vendedor que lo publica (NOT NULL).
-- `cars.price_per_day` está en **centavos** (entero) y no puede ser negativo.
-- `payments.reservation_id` es único: **una reserva tiene a lo sumo un pago**.
-- `revoked_tokens.jti` es la clave primaria; un GC interno corre cada 10
-  minutos y borra filas cuyo `expires_at` ya pasó.
-- Las fechas son strings ISO `YYYY-MM-DD` en texto.
-- El esquema se gestiona con **migraciones goose** (`internal/db/migrations/*.sql`),
-  embebidas con `go:embed` y aplicadas al arrancar (`db.Open`). goose registra el
-  historial en `goose_db_version`; solo se aplican las pendientes y **los datos
-  nunca se borran**.
+- `users.email` es único (sin distinguir mayúsculas/minúsculas). `role` solo puede ser `buyer` o `seller`.
+- `cars.owner_id` dice quién es el dueño del auto. `price_per_day` en centavos, no puede ser negativo.
+- Una reserva tiene **a lo sumo un pago** (`payments.reservation_id` es único).
+- `revoked_tokens` guarda los tokens que se cerraron con `/auth/logout`. Un proceso interno borra cada 10 minutos los que ya vencieron.
+- Las fechas se guardan como texto `YYYY-MM-DD`.
+- Las migraciones están embebidas en el binario y se aplican al arrancar. Solo se ejecutan las que faltan.
 
-## SQLite y concurrencia
+## Cómo funciona SQLite acá
 
-- `db.Open` configura SQLite con **WAL**, `busy_timeout` de 5 s, `foreign_keys`
-  y un pool pequeño (8 conexiones, 1 en `:memory:`). Las escrituras se serializan
-  con `BEGIN IMMEDIATE`; SQLite también bloquea el caso de un auto reservado dos
-  veces en la misma carrera.
-- `synchronous=NORMAL` (recomendación de SQLite en WAL): un crash del proceso no
-  pierde nada; solo un corte de energía puede revertir la última transacción
-  commiteada (nunca corrupción).
-- `journal_size_limit` de 64 MiB acota el crecimiento del `-wal` entre
-  checkpoints.
-- `00002_perf.sql` crea los índices que las consultas dominantes recorren:
-  `cars(owner_id, id)`, `reservations(user_id, id)` y
-  `reservations(car_id, start_date, end_date)` (solapamiento de fechas).
+- Se abre con **WAL**, espera hasta 5 segundos si la base está ocupada y usa hasta 8 conexiones (1 si es `:memory:`).
+- Las operaciones que tocan varias tablas usan `BEGIN IMMEDIATE` para que dos reservas no choquen al mismo tiempo.
+- `synchronous=NORMAL` (lo que recomienda SQLite con WAL): si se cae el proceso no se pierde nada.
+- Hay índices en `cars(owner_id)`, `reservations(user_id)` y `reservations(car_id, start_date, end_date)` para que las búsquedas sean rápidas.
 
-## Máquina de estados
+## Estados de una reserva
 
 ```mermaid
 stateDiagram-v2
     direction LR
     [*] --> pending: POST /reservations
-    pending --> confirmed: seller confirma (con pago)
-    pending --> cancelled: buyer cancela (sin pago)
+    pending --> confirmed: vendedor confirma (con pago)
+    pending --> cancelled: comprador cancela (sin pago)
     confirmed --> [*]
     cancelled --> [*]
 
     state "pago" as p {
         [*] --> pendingPay: POST /reservations/{id}/payment
-        pendingPay --> approved: seller confirma
+        pendingPay --> approved: vendedor confirma
         pendingPay --> rejected
     }
 ```
 
-- Una reserva nace en `pending`; el vendedor la confirma con `confirmed` tras
-  aprobar el pago, o el comprador la cancela (`cancelled`) con
-  `PATCH /reservations/{id}/cancel` mientras esté `pending` y sin pago.
-- Un pago nace en `pending`; pasa a `approved` cuando el vendedor confirma la
-  reserva. Un pago `rejected` no tiene endpoint en el MVP.
+- Una reserva nace `pending`. El comprador puede cancelarla mientras siga `pending` y no tenga pago. El vendedor la confirma y pasa a `confirmed` (y el pago a `approved`).
+- Un pago nace `pending` y pasa a `approved` al confirmar. `rejected` existe en el esquema pero no tiene endpoint todavía.
 
-## Reglas de dominio
+## Reglas del negocio
 
-Disponibilidad y solapamiento (`GET /cars`, `POST /reservations`):
+**Disponibilidad:**
 
-- Solo se consideran autos con `active = 1`.
-- Dos reservas solapan si `r.start_date <= fin AND r.end_date >= inicio`, siempre
-  que ninguna esté `cancelled` (el overlap se evalúa con
-  [`db.OverlapPredicate`](../internal/db/db.go)); las `cancelled` **no** bloquean.
-- `start_date` no puede ser anterior a hoy (comparación UTC) y
-  `end_date >= start_date`.
-- El rango de una reserva no puede superar los **30 días**
-  (`end_date - start_date <= 30 días`); las listas devuelven un array plano y
-  aceptan `limit`/`offset` para paginar (ver [00-general](api/00-general.md)).
+- Solo cuentan autos con `active = 1`.
+- Dos reservas chocan si `r.start_date <= fin AND r.end_date >= inicio`, siempre que ninguna esté `cancelled`.
+- `start_date` no puede ser anterior a hoy (en UTC) y `end_date >= start_date`.
+- Una reserva no puede durar más de **30 días**.
+- Las listas son arrays simples y se pueden paginar con `limit`/`offset`.
 
-Validaciones de entrada:
+**Validaciones:**
 
-- El body se limita a **1 MB** y es JSON estricto: campos desconocidos o JSON
-  inválido → `400 "invalid JSON body"`; exceso de tamaño → `413`.
-- `price_per_day` en el rango `0..100_000_000` centavos.
-- `photo_url` y `proof_url`, si se envían, deben ser URLs HTTP/HTTPS válidas
-  y de hasta 2048 caracteres.
-- `name` de auto, hasta 200 caracteres.
-- Los emails se normalizan a minúsculas (trim incluido) y se limitan a 254
-  caracteres (RFC 5321).
-- El password es de 8 a 72 caracteres; bcrypt trunca silenciosamente a 72 bytes
-  si se pasa un valor más largo, por eso se valida el límite superior.
+- El body no puede pasar de **1 MB**. Si mandas JSON mal formado o campos que no existen, responde `400`. Si te pasas del tamaño, `413`.
+- `price_per_day` entre `0` y `100_000_000` centavos. `name` hasta 200 caracteres.
+- `photo_url` y `proof_url`, si van, deben ser URLs `http(s)` de hasta 2048 caracteres.
+- Emails: se pasan a minúsculas y se limitan a 254 caracteres. Passwords: 8 a 72.
 
-Operaciones atómicas:
+**Todo o nada:**
 
-- Todas las mutaciones multi-paso (`POST /reservations`,
-  `POST /reservations/{id}/payment`, `PATCH /reservations/{id}/cancel` y
-  `PATCH /seller/reservations/{id}/confirm`) corren dentro de una
-  transacción `BEGIN IMMEDIATE` (SQLite) con `defer ROLLBACK` por si el
-  handler retorna por un error de validación. Esto cierra la ventana
-  TOCTOU entre el `SELECT` y la mutación (por ejemplo, contar pagos y
-  luego insertar otro, o leer `status` y luego cambiarlo).
+- Crear reserva, pagar, cancelar y confirmar se hacen dentro de una transacción. Si algo falla, no queda nada a medias.
 
-## Autenticación y autorización
+## Login y permisos
 
-- El registro es público: `POST /auth/register` crea cuentas `buyer` y
-  `POST /auth/register/seller` cuentas `seller` (un vendedor gestiona **sus**
-  autos).
-- El login valida credenciales (bcrypt) y emite un **JWT HS256 de 24 h** con
-  los claims `uid` (id de usuario), `role`, `iss=pinolrent-api`, `aud=pinolrent-api`,
-  `jti` (16 bytes random en hex), `iat`, `exp` y `sub` (id como string). El
-  parser rechaza tokens con algoritmo distinto de HS256, sin `exp`,
-  sin `iss/aud`/`jti`, o con firma inválida. En el camino de "email no
-  existe" corre un `bcrypt.Compare` contra un hash fijo para que el tiempo
-  de respuesta no filtre la enumeración de cuentas.
-- `POST /auth/logout` invalida el token actual: inserta su `jti` en
-  `revoked_tokens` con el `exp` como `expires_at`. El middleware de auth
-  consulta la tabla en cada request protegida; un `jti` presente es
-  rechazado con `401` (misma respuesta que un token inválido, para no
-  filtrar el motivo). El GC de la tabla corre cada 10 minutos y limpia
-  las filas cuyo token ya habría expirado igual.
+- Registro público: `POST /auth/register` (comprador) y `POST /auth/register/seller` (vendedor).
+- Login devuelve un **JWT HS256 que dura 24 h** con `uid`, `role`, `iss`, `aud`, `jti`, `iat`, `exp` y `sub`. El server rechaza tokens con otro algoritmo (incluido `none`), sin `exp`/`iss`/`aud` o con firma inválida. Si el email no existe igual hace un `bcrypt` dummy para que no se pueda adivinar por tiempo de respuesta.
+- `POST /auth/logout` guarda el `jti` en `revoked_tokens`. Ese token deja de funcionar (responde `401` igual que uno vencido). Otros tokens del mismo usuario siguen valiendo.
 - `Authorization: Bearer <token>` en toda ruta protegida.
-- Los middleware `RequireAuth` y `RequireRole` resuelven el usuario desde el
-  token, lo cargan en la base y lo inyectan en el contexto de la request.
-- Las rutas de vendedor usan `Auth.RequireRole("seller", handler)` declarado en
-  `Routes`, **y** verifican ownership por fila: `PATCH /seller/cars/{id}` y
-  `PATCH /seller/reservations/{id}/confirm` solo operan sobre autos del vendedor
-  autenticado (si no, `404`). `GET /reservations/{id}` habilita al vendedor
-  dueño del auto, además del comprador que reservó.
+- `RequireAuth` y `RequireRole("seller")` verifican el token, buscan al usuario y lo ponen en el contexto. Además, cada operación verifica que el recurso sea tuyo: si no lo es, responde `404`.
 
-### Permission matrix
+### Quién puede hacer qué
 
-| Recurso | Comprador (`buyer`) | Vendedor (`seller`) | Anónimo |
-|---------|--------------------|--------------------|---------|
+| Recurso | Comprador | Vendedor | Sin login |
+|---------|-----------|----------|-----------|
 | `GET /cars` | sí | sí | sí |
 | `POST /auth/register*`, `POST /auth/login` | sí | sí | sí |
 | `GET /auth/me` | su perfil | su perfil | no (401) |
-| `POST /auth/logout` | sí (revoca su propio token) | sí (revoca su propio token) | no (401) |
-| `GET /seller/cars`, `POST /seller/cars` | no (403) | **solo sus autos** | no (401) |
-| `PATCH /seller/cars/{id}` | no (403) | **solo sus autos** | no (401) |
-| `POST /reservations`, `GET /reservations` | sí (sus reservas) | sí (si reserva) | no (401) |
-| `GET /reservations/{id}` | sus reservas | **dueño del auto** | no (401) |
-| `PATCH /reservations/{id}/cancel` | **sus reservas** | su reserva | no (401) |
-| `POST /reservations/{id}/payment` | **sus reservas** | su reserva | no (401) |
-| `GET /seller/reservations` | no (403) | **sus autos** | no (401) |
-| `PATCH /seller/reservations/{id}/confirm` | no (403) | **dueño del auto** | no (401) |
+| `POST /auth/logout` | sí | sí | no (401) |
+| `GET /seller/cars`, `POST /seller/cars` | no (403) | solo sus autos | no (401) |
+| `PATCH /seller/cars/{id}` | no (403) | solo sus autos | no (401) |
+| `POST /reservations`, `GET /reservations` | sí (sus reservas) | sí (si reservó) | no (401) |
+| `GET /reservations/{id}` | sus reservas | dueño del auto | no (401) |
+| `PATCH /reservations/{id}/cancel` | sus reservas | su reserva | no (401) |
+| `POST /reservations/{id}/payment` | sus reservas | su reserva | no (401) |
+| `GET /seller/reservations` | no (403) | sus autos | no (401) |
+| `PATCH /seller/reservations/{id}/confirm` | no (403) | dueño del auto | no (401) |
 
-## Rate limiting
+## Límite de intentos
 
-- Token bucket **en memoria** (`golang.org/x/time/rate`), por IP
-  (`RemoteAddr` sin puerto), solo para rutas cuyo path empieza por `/auth/`.
-- Configuración actual: refill de `0.5` tokens/s (**30 por minuto**), ráfaga de
-  `30`; sobre el límite → `429 {"error":"too many requests"}`.
-- Es un límite de un solo proceso: **no es distribuido**. Los buckets expiran
-  tras 10 min sin uso (GC cada minuto).
+- Solo en rutas que empiezan con `/auth/`, por IP.
+- **30 por minuto** (se recarga a 0.5 por segundo, ráfaga de 30). Si te pasas → `429 {"error":"too many requests"}`.
+- Es en memoria, por proceso. Los contadores se borran tras 10 min sin uso.
 
-## Server y observabilidad
+## Server y logs
 
-- `http.Server` con timeouts razonables (read header 5 s, read 10 s, write 30 s,
-  idle 60 s) y `MaxHeaderBytes` 1 MB.
-- `WithRequestLog` registra una línea por request con método, path, status y
-  duración en ms usando `log/slog` (formato texto).
-- `WithRecover` envuelve el handler y captura panics: los loguea con
-  `slog.Error` incluyendo stack trace y método/path, y devuelve
-  `500 {"error":"server error"}` en JSON. Corre dentro de `WithRequestLog`,
-  así el log de request captura el 500 resultante en vez de la conexión
-  cortada.
-- `GET /health` responde `{"status":"ok","version":"..."}` tras hacer ping a la
-  base (`503 degraded` si falla). La versión del build se inyecta con
-  `-ldflags "-X main.version=<version>"` (ver `make build`).
-- Shutdown graceful ante `SIGINT`/`SIGTERM` con un límite de 10 s.
-- Los errores internos se loguean con detalle y se devuelven como
-  `500 {"error":"server error"}` sin filtrar detalles internos al cliente.
+- Timeouts: header 5 s, lectura 10 s, escritura 30 s, idle 60 s. Header máximo 1 MB.
+- Cada request deja una línea de log con método, ruta, status y duración.
+- Si algo hace panic, se captura y responde `500 {"error":"server error"}`.
+- `GET /health` responde `{"status":"ok","version":"..."}` (o `503 degraded` si la base no responde). La versión se inyecta con `make build`.
+- Al recibir `SIGINT`/`SIGTERM` apaga limpio en hasta 10 s.
 
-## Fuera de alcance (MVP)
+## Qué no hace todavía (MVP)
 
-Uploads reales de imágenes, gateway POS, integración con WhatsApp,
-frontend, rate limiting distribuido y multi-instancia, y un pago `rejected`.
+Subida real de imágenes, pasarela de pago, WhatsApp, frontend, límite distribuido entre varios servers, y rechazar pagos.

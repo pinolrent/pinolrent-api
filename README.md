@@ -1,69 +1,64 @@
 # Pinol Rent API
 
-API de **renta de autos entre particulares** escrita en **Go (stdlib)** con
-**SQLite**. Los vendedores publican sus autos; los compradores reservan, pagan
-y consultan el estado; el vendedor confirma pagos y reservas de sus autos.
+API para **renta de autos entre particulares**. Unos usuarios publican sus autos (vendedores), otros los reservan y pagan (compradores). Hecha en **Go** con **SQLite**.
 
-## Quickstart
+## Arranque rápido
 
 ```sh
 export JWT_SECRET="$(openssl rand -base64 32)"
 go run ./cmd/api
 ```
 
-Para desarrollo con defaults y hot-reload:
+Para desarrollo (usa valores por defecto y no necesitas `.env`):
 
 ```sh
-make tools   # una vez
-make dev     # arranca con defaults de dev (sin .env)
-make watch   # hot-reload
+make tools   # solo la primera vez
+make dev     # levanta el server
+make watch   # levanta con recarga automática al editar
 ```
 
 ## Endpoints
 
-| Método | Ruta | Auth | Descripción |
-|--------|------|------|-------------|
-| GET | `/health` | no | Healthcheck |
-| POST | `/auth/register` · `/auth/register/seller` | no | Registro de comprador / vendedor |
-| POST | `/auth/login` | no | Login (JWT 24 h) |
-| GET | `/auth/me` | login | Tu perfil (`id`, `email`, `role`) |
-| GET | `/cars` | no | Autos activos; con fechas excluye reservados, con `owner_id` filtra vendedor |
-| GET | `/cars/{id}` | no | Detalle de un auto activo |
-| GET · POST | `/seller/cars` · `/seller/cars` | seller | Mis autos y alta |
-| PATCH | `/seller/cars/{id}` | seller | Activar/inactivar (solo tu auto) |
-| POST | `/reservations` | login | Crear reserva (overlap o >30 días → 409/400) |
-| GET | `/reservations` · `/reservations/{id}` | login | Mis reservas y detalle |
-| PATCH | `/reservations/{id}/cancel` | login | Cancelar tu reserva (si está `pending` y sin pago) |
-| POST | `/reservations/{id}/payment` | login | Registrar pago (`pos`\|`cash`) |
-| POST | `/auth/logout` | login | Revoca el token bearer actual (inserta su `jti` en `revoked_tokens`) |
-| GET | `/seller/reservations` | seller | Reservas de tus autos |
-| PATCH | `/seller/reservations/{id}/confirm` | seller | Aprobar pago y confirmar (solo tu auto) |
+| Método | Ruta | ¿Necesita login? | Para qué sirve |
+|--------|------|-----------------|----------------|
+| GET | `/health` | no | Ver si el server y la base están bien |
+| POST | `/auth/register` · `/auth/register/seller` | no | Crear cuenta de comprador / vendedor |
+| POST | `/auth/login` | no | Entrar y obtener un token (dura 24 h) |
+| GET | `/auth/me` | sí | Ver tu propio perfil |
+| POST | `/auth/logout` | sí | Cerrar sesión (invalida tu token actual) |
+| GET | `/cars` | no | Ver autos disponibles (puedes filtrar por fechas o vendedor) |
+| GET | `/cars/{id}` | no | Ver el detalle de un auto |
+| GET · POST | `/seller/cars` | vendedor | Ver tus autos y agregar uno nuevo |
+| PATCH | `/seller/cars/{id}` | vendedor | Activar o desactivar uno de tus autos |
+| POST | `/reservations` | sí | Reservar un auto |
+| GET | `/reservations` · `/reservations/{id}` | sí | Ver tus reservas |
+| PATCH | `/reservations/{id}/cancel` | sí | Cancelar una reserva tuya (solo si aún no pagaste) |
+| POST | `/reservations/{id}/payment` | sí | Pagar una reserva (`pos` o `cash`) |
+| GET | `/seller/reservations` | vendedor | Ver reservas de tus autos |
+| PATCH | `/seller/reservations/{id}/confirm` | vendedor | Confirmar una reserva y aprobar su pago |
+
+Si intentas ver o tocar algo que no es tuyo, la API responde `404` como si no existiera.
 
 ## Roles
 
-- **Comprador**: registra reservas, paga y consulta sus reservas.
-- **Vendedor**: publica autos propios y confirma reservas de sus autos; cada
-  vendedor solo ve y opera lo suyo (lo ajeno responde `404`).
+- **Comprador:** reserva autos, paga y ve sus reservas.
+- **Vendedor:** publica sus autos y confirma las reservas de sus autos. Cada vendedor solo ve lo suyo.
 
 ## Documentación
 
-- **[Índice de la documentación](docs/README.md)** — arquitectura, configuración, desarrollo y flujo completo.
-- **[Referencia de la API](docs/api/00-general.md)** — convenciones, auth, errores y cada endpoint con payloads.
+- **[Índice de docs](docs/README.md)** — arquitectura, configuración, desarrollo y flujo paso a paso.
+- **[Referencia de la API](docs/api/00-general.md)** — cómo se usa la API, autenticación y detalle de cada endpoint.
 
-## Stack
+## Stack y reglas básicas
 
-Go 1.26 · `net/http` (stdlib) · SQLite (`modernc.org/sqlite`) + migraciones
-`goose` · JWT HS256 · bcrypt · rate limit `x/time/rate` · CORS `rs/cors`.
-Notas: `price_per_day` en **centavos**, fechas ISO `YYYY-MM-DD`, body máx.
-1 MB, rate limit por IP en `/auth/*` (30 req/60 s), CORS habilitado por defecto
-para cualquier origen (restringible con `CORS_ALLOWED_ORIGINS`), listas
-paginadas (`limit`/`offset`, default 50 · máx 200) y reservas de hasta 30 días.
-Límites por campo: `email` ≤ 254, `password` 8-72, `name` de auto ≤ 200,
-URLs (`photo_url`, `proof_url`) ≤ 2048. `JWT_SECRET` debe medir al menos
-32 bytes (se valida al arranque) y el parser exige `iss`/`aud`/`exp` además
-de la firma HS256. `GET /health` reporta versión y estado de la base; el
-binario se compila con `make build` inyectando la versión
-(`-ldflags "-X main.version=..."`).
+- **Go 1.26.5**, `net/http` sin framework, **SQLite** (`modernc.org/sqlite`) + migraciones `goose`.
+- Auth con **JWT HS256** (24 h) y **bcrypt** para contraseñas.
+- `price_per_day` va en **centavos** (ej. 45000 = $450). Fechas como `YYYY-MM-DD`.
+- Cada request con body no puede pasar de **1 MB**. JSON con campos desconocidos da error.
+- Login y registro limitados a **30 intentos por minuto por IP**. CORS abierto por defecto (se puede cerrar con `CORS_ALLOWED_ORIGINS`).
+- Listas paginadas con `limit`/`offset` (por defecto 50, máximo 200). Reservas de máximo **30 días**.
+- Límites: `email` hasta 254 caracteres, `password` 8-72, `name` del auto hasta 200, URLs hasta 2048.
+- `JWT_SECRET` debe tener al menos 32 caracteres o el server no arranca. El token exige `iss`, `aud` y `exp`; el `jti` solo se usa para cerrar sesión.
+- `GET /health` responde la versión del binario (`make build` la inyecta).
 
-Convenciones del repo: documentación en español, comentarios del código en
-inglés.
+Docs en español, comentarios del código en inglés.
