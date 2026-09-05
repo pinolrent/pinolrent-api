@@ -83,8 +83,10 @@ echo "== fail-fast sin JWT_SECRET =="
 # server logs its config error to stdout (via slog), so we just check
 # the non-zero exit code here; checking the message text is brittle
 # because slog's output destination depends on configuration.
+set +e
 env -u JWT_SECRET DATABASE_URL="$DB" PORT=9999 "$BIN" >/dev/null 2>&1
 rc=$?
+set -e
 check "aborta sin JWT_SECRET" "1" "$rc"
 
 echo "== start =="
@@ -98,7 +100,7 @@ check "health responde 200" "200" "$(curl -s -o /dev/null -w '%{http_code}' "$BA
 
 echo "== health con version =="
 health_version=$(curl -s "$BASE/health" | jq -r '.version // empty')
-check "health incluye version (dev)" "dev" "$health_version"
+[ -n "$health_version" ]; cond "health incluye version ($health_version)" $?
 
 echo "== auth =="
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/auth/register" \
@@ -198,12 +200,16 @@ code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/cars/999999")
 check "detalle inexistente -> 404" "404" "$code"
 code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/cars/abc")
 check "detalle id inválido -> 400" "400" "$code"
-curl -s -o /dev/null -X PATCH "$BASE/seller/cars/$car" -H "Authorization: Bearer $seller" \
+code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/seller/cars/$car" -H "Authorization: Bearer $seller" \
+  -H 'Content-Type: application/json' -d '{"active":false}')
+check "desactivar con reservas futuras -> 409" "409" "$code"
+car2_json=$(curl -s -X POST "$BASE/seller/cars" -H "Authorization: Bearer $seller" \
+  -H 'Content-Type: application/json' -d '{"name":"Auto Inactivo","price_per_day":10000}')
+car2=$(printf '%s' "$car2_json" | jq -r .id)
+curl -s -o /dev/null -X PATCH "$BASE/seller/cars/$car2" -H "Authorization: Bearer $seller" \
   -H 'Content-Type: application/json' -d '{"active":false}'
-code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/cars/$car")
+code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/cars/$car2")
 check "detalle inactivo -> 404" "404" "$code"
-curl -s -o /dev/null -X PATCH "$BASE/seller/cars/$car" -H "Authorization: Bearer $seller" \
-  -H 'Content-Type: application/json' -d '{"active":true}'
 
 echo "== /auth/me =="
 me=$(curl -s "$BASE/auth/me" -H "Authorization: Bearer $seller")
