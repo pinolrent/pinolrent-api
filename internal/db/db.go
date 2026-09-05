@@ -14,6 +14,7 @@ import (
 	// Blank import to register the modernc.org/sqlite driver with database/sql.
 	_ "modernc.org/sqlite"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/pressly/goose/v3"
 )
 
@@ -71,8 +72,18 @@ func migrate(d *sql.DB) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	applied, err := prov.Up(ctx)
-	if err != nil {
+	var applied []*goose.MigrationResult
+	op := func() error {
+		var opErr error
+		applied, opErr = prov.Up(ctx)
+		if opErr != nil && isBusyError(opErr) {
+			return opErr
+		}
+		return backoff.Permanent(opErr)
+	}
+	exp := backoff.NewExponentialBackOff()
+	exp.InitialInterval = 100 * time.Millisecond
+	if err := backoff.Retry(op, backoff.WithContext(backoff.WithMaxRetries(exp, 5), ctx)); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
 	for _, m := range applied {
@@ -84,3 +95,24 @@ func migrate(d *sql.DB) error {
 // OverlapPredicate is a SQL fragment that detects overlapping reservations
 // over a range [start, end]. The reservations table must be aliased as r.
 const OverlapPredicate = "r.start_date <= ? AND r.end_date >= ?"
+
+func isBusyError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return contains(msg, "database is busy") || contains(msg, "database is locked") || contains(msg, "SQLITE_BUSY")
+}
+
+func contains(s, sub string) bool {
+	return len(s) >= len(sub) && searchStr(s, sub)
+}
+
+func searchStr(s, sub string) bool {
+	for i := 0; i <= len(s)-len(sub); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
+}
