@@ -56,7 +56,7 @@ No hay usuario admin: compradores y vendedores se crean con `POST /auth/register
 
 ## Desarrollo
 
-Con `make dev` no necesitas crear `.env`: `scripts/dev.sh` pone valores por defecto (`JWT_SECRET=dev-secret-not-for-production-32b`, `DATABASE_URL=dev.db`) y arranca con `go run`. Si corres `go run ./cmd/api` directo sin variables, sí te va a pedir el secreto (es el comportamiento real de producción).
+Con `make dev` no necesitas crear `.env`: `scripts/dev.sh` pone valores por defecto (`JWT_SECRET=dev-secret-not-for-production-32b`, `DATABASE_URL=dev.db`) y arranca con `go run`. Si corres `make run` o `go run ./cmd/api` directo sin variables, sí te va a pedir el secreto (es el comportamiento real de producción). `scripts/dev.sh` también rechaza `CORS_ALLOWED_ORIGINS=*` si `ENV=prod`.
 
 Puedes copiar `.env.example` a `.env` para cambiar esos valores.
 

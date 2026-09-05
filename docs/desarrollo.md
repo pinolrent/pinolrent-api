@@ -3,8 +3,9 @@
 ## Arranque rápido
 
 ```sh
-make tools        # solo la primera vez: instala air y golangci-lint
-make dev          # levanta el server con valores de desarrollo
+make tools        # solo la primera vez: instala air, govulncheck y golangci-lint en ~/go/bin (agrégalo a tu PATH)
+make dev          # levanta el server con valores de desarrollo (con defaults, sin fallar)
+make run          # levanta sin defaults (falla sin JWT_SECRET, como en prod)
 ```
 
 ## Makefile
@@ -12,10 +13,10 @@ make dev          # levanta el server con valores de desarrollo
 | Comando | Qué hace |
 |---------|----------|
 | `make help` | Lista los comandos |
-| `make tools` | Instala `air` y `golangci-lint v2` |
+| `make tools` | Instala `air`, `govulncheck` y `golangci-lint v2` |
 | `make dev` | Levanta el server con `scripts/dev.sh` (valores de dev + `.env` si existe) |
-| `make watch` | Recarga automática al editar `.go`, `.env` o `.toml` |
-| `make run` | `go run ./cmd/api` directo (pide variables reales) |
+| `make run` | `go run ./cmd/api` directo (pide variables reales, sin defaults de dev) |
+| `make watch` | Recarga automática al editar `.go` o `.toml` (requiere `make tools`) |
 | `make build` | Compila a `bin/pinolrent-api` con la versión del git |
 | `make test` | Corre los tests (`go test -count=1 -timeout 180s ./...`) |
 | `make test-race` | Tests con detector de carreras (`CGO_ENABLED=1`, necesita gcc, 300s) |
@@ -26,9 +27,9 @@ make dev          # levanta el server con valores de desarrollo
 | `make fmt` | Formatea con `gofmt -w` |
 | `make tidy` | `go mod tidy` |
 | `make demo` | Prueba completa automática en `:8132` con base temporal |
-| `make clean` | Borra binarios y base de dev |
+| `make clean` | Borra `bin/`, `tmp/`, `air.log` y base de dev |
 
-`air` y `golangci-lint` quedan en `$(go env GOPATH)/bin` (normalmente `~/go/bin`); asegúrate de tenerlo en tu `PATH`.
+`air`, `govulncheck` y `golangci-lint` quedan en `$(go env GOPATH)/bin` (normalmente `~/go/bin`); asegúrate de tenerlo en tu `PATH`. `test-race` necesita `gcc`.
 
 ## Linter
 

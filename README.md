@@ -12,9 +12,10 @@ go run ./cmd/api
 Para desarrollo (usa valores por defecto y no necesitas `.env`):
 
 ```sh
-make tools   # solo la primera vez
-make dev     # levanta el server
-make watch   # levanta con recarga automática al editar
+make tools   # solo la primera vez (instala air, govulncheck, golangci-lint en ~/go/bin — agrégalo a tu PATH)
+make dev     # levanta el server con defaults de dev (JWT_SECRET auto, sin fallar)
+make run     # levanta sin defaults (falla sin JWT_SECRET, como en prod)
+make watch   # levanta con recarga automática al editar (requiere make tools)
 ```
 
 ## Endpoints
