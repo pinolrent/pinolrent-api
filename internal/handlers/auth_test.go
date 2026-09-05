@@ -50,9 +50,13 @@ func TestRegisterValidate(t *testing.T) {
 		body   map[string]any
 		status int
 	}{
-		{"short password", map[string]any{"email": "a@b.com", "password": "12345"}, http.StatusBadRequest},
+		{"short password", map[string]any{"email": "a@b.co", "password": "12345"}, http.StatusBadRequest},
 		{"invalid email", map[string]any{"email": "nope", "password": "secret123"}, http.StatusBadRequest},
-		{"missing fields", map[string]any{"email": "a@b.com"}, http.StatusBadRequest},
+		{"single-char tld", map[string]any{"email": "a@b.c", "password": "secret123"}, http.StatusBadRequest},
+		{"consecutive dots", map[string]any{"email": "a..b@c.com", "password": "secret123"}, http.StatusBadRequest},
+		{"leading dot", map[string]any{"email": ".a@b.com", "password": "secret123"}, http.StatusBadRequest},
+		{"leading hyphen domain", map[string]any{"email": "a@-b.com", "password": "secret123"}, http.StatusBadRequest},
+		{"missing fields", map[string]any{"email": "a@b.co"}, http.StatusBadRequest},
 		{"malformed json", nil, http.StatusBadRequest},
 	}
 	for _, tc := range cases {
@@ -336,8 +340,8 @@ func TestRegisterFieldLengthCaps(t *testing.T) {
 		name string
 		body map[string]any
 	}{
-		{"password too short", map[string]any{"email": "x@y.com", "password": "short"}},
-		{"password too long", map[string]any{"email": "x@y.com", "password": strings.Repeat("p", 73)}},
+		{"password too short", map[string]any{"email": "x@y.co", "password": "short"}},
+		{"password too long", map[string]any{"email": "x@y.co", "password": strings.Repeat("p", 73)}},
 		{"email too long", map[string]any{"email": longEmail, "password": "secret123"}},
 	}
 	for _, tc := range cases {
