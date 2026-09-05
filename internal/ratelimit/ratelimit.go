@@ -98,20 +98,22 @@ func (l *Limiter) Middleware(next http.Handler, limitPaths ...string) http.Handl
 	})
 }
 
-// clientIP returns the client IP. It trusts X-Forwarded-For/X-Real-IP only
-// when the deployment is behind a trusted reverse proxy that overwrites them;
-// otherwise spoofed headers can bypass the limiter. Run behind a single
-// trusted proxy or restrict to RemoteAddr.
+// clientIP returns the client IP. Proxy headers (X-Forwarded-For/X-Real-IP)
+// are honored only when the direct peer is a loopback proxy that overwrites
+// them; otherwise any client could spoof an arbitrary IP and get a fresh
+// rate-limit bucket. Direct connections always key on RemoteAddr.
 func clientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		parts := strings.Split(xff, ",")
-		if ip := strings.TrimSpace(parts[0]); ip != "" {
-			return ip
+	if isLocalProxy(r.RemoteAddr) {
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			parts := strings.Split(xff, ",")
+			if ip := strings.TrimSpace(parts[0]); ip != "" {
+				return ip
+			}
 		}
-	}
-	if xri := r.Header.Get("X-Real-IP"); xri != "" {
-		if ip := strings.TrimSpace(xri); ip != "" {
-			return ip
+		if xri := r.Header.Get("X-Real-IP"); xri != "" {
+			if ip := strings.TrimSpace(xri); ip != "" {
+				return ip
+			}
 		}
 	}
 	host := r.RemoteAddr
@@ -119,6 +121,18 @@ func clientIP(r *http.Request) string {
 		return h
 	}
 	return host
+}
+
+// isLocalProxy reports whether remoteAddr belongs to a loopback peer, i.e.
+// the request arrived via a reverse proxy on the same host that sets the
+// forwarding headers itself.
+func isLocalProxy(remoteAddr string) bool {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		host = remoteAddr
+	}
+	ip := net.ParseIP(strings.TrimSpace(host))
+	return ip != nil && ip.IsLoopback()
 }
 
 func matchesPrefix(path string, prefixes []string) bool {

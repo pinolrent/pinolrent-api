@@ -75,6 +75,25 @@ func TestMiddleware(t *testing.T) {
 	}
 }
 
+func TestClientIPIgnoresSpoofedHeaders(t *testing.T) {
+	req := httptest.NewRequestWithContext(context.Background(), "GET", "/", nil)
+	req.RemoteAddr = "203.0.113.7:1234"
+	req.Header.Set("X-Forwarded-For", "1.2.3.4")
+	req.Header.Set("X-Real-IP", "5.6.7.8")
+	if got := clientIP(req); got != "203.0.113.7" {
+		t.Fatalf("spoofed headers honored: got %q, want RemoteAddr host", got)
+	}
+}
+
+func TestClientIPHonorsProxyHeadersViaLoopback(t *testing.T) {
+	req := httptest.NewRequestWithContext(context.Background(), "GET", "/", nil)
+	req.RemoteAddr = "127.0.0.1:1234"
+	req.Header.Set("X-Forwarded-For", "1.2.3.4, 10.0.0.1")
+	if got := clientIP(req); got != "1.2.3.4" {
+		t.Fatalf("proxy XFF ignored: got %q, want 1.2.3.4", got)
+	}
+}
+
 func TestMatchesPrefix(t *testing.T) {
 	if !matchesPrefix("/auth/register", []string{"/auth/"}) {
 		t.Fatal("/auth/register should match")
