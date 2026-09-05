@@ -338,7 +338,7 @@ func TestListCarsByOwner(t *testing.T) {
 	createReservation(t, a, buyerToken, map[string]any{
 		"car_id": cb.ID, "start_date": futureDate(5), "end_date": futureDate(10),
 	})
-	if cars := get("?owner_id=" + itoa(cb.OwnerID) + "&start_date="+futureDate(7)+"&end_date="+futureDate(8)); len(cars) != 0 {
+	if cars := get("?owner_id=" + itoa(cb.OwnerID) + "&start_date=" + futureDate(7) + "&end_date=" + futureDate(8)); len(cars) != 0 {
 		t.Fatalf("owner+dates should exclude booked car, got %+v", cars)
 	}
 
