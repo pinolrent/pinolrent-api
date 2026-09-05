@@ -98,6 +98,17 @@ func (l *Limiter) Middleware(next http.Handler, limitPaths ...string) http.Handl
 }
 
 func clientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		parts := strings.Split(xff, ",")
+		if ip := strings.TrimSpace(parts[0]); ip != "" {
+			return ip
+		}
+	}
+	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+		if ip := strings.TrimSpace(xri); ip != "" {
+			return ip
+		}
+	}
 	host := r.RemoteAddr
 	if h, _, err := net.SplitHostPort(host); err == nil {
 		return h

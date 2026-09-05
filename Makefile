@@ -10,9 +10,11 @@ help: ## Shows this help
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-8s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@printf "\nDev flows: make tools (one-time), make dev (one-shot), make watch (hot-reload).\n"
 
+AIR_VERSION := v1.67.4
+
 tools: ## Installs dev tools: air (go install) and golangci-lint (official binary)
-	go install github.com/air-verse/air@latest
-	curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b $(shell go env GOPATH)/bin $(GOLANGCI_VERSION)
+	go install github.com/air-verse/air@$(AIR_VERSION)
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(shell go env GOPATH)/bin $(GOLANGCI_VERSION)
 
 run: ## Runs the server with the current environment (no reload)
 	@./scripts/dev.sh

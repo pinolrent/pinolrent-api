@@ -106,72 +106,57 @@ func (a *API) CreateReservation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx := r.Context()
-	conn, err := a.DB.Conn(ctx)
-	if err != nil {
-		serverError(w, err)
-		return
-	}
-	defer func() { _ = conn.Close() }()
+	var reservationID int64
+	err = withImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
+		ctx := r.Context()
 
-	if _, err := conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
-		serverError(w, err)
-		return
-	}
-	committed := false
-	defer func() {
-		if !committed {
-			_, _ = conn.ExecContext(ctx, "ROLLBACK")
+		var active int
+		if err := conn.QueryRowContext(ctx, `SELECT active FROM cars WHERE id = ?`, in.CarID).Scan(&active); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				writeError(w, http.StatusNotFound, "car not found")
+				return errTxHandled
+			}
+			serverError(w, err)
+			return errTxHandled
 		}
-	}()
+		if active != 1 {
+			writeError(w, http.StatusConflict, "car is not active")
+			return errTxHandled
+		}
 
-	var active int
-	err = conn.QueryRowContext(ctx, `SELECT active FROM cars WHERE id = ?`, in.CarID).Scan(&active)
-	if errors.Is(err, sql.ErrNoRows) {
-		writeError(w, http.StatusNotFound, "car not found")
-		return
-	}
+		var overlap int
+		if err := conn.QueryRowContext(ctx, `
+			SELECT COUNT(*) FROM reservations r
+			WHERE r.car_id = ? AND r.status != 'cancelled'
+				AND `+db.OverlapPredicate, in.CarID, in.EndDate, in.StartDate).Scan(&overlap); err != nil {
+			serverError(w, err)
+			return errTxHandled
+		}
+		if overlap > 0 {
+			writeError(w, http.StatusConflict, "car already reserved for the requested dates")
+			return errTxHandled
+		}
+
+		res, err := conn.ExecContext(ctx, `
+			INSERT INTO reservations (user_id, car_id, start_date, end_date) VALUES (?, ?, ?, ?)`,
+			u.ID, in.CarID, in.StartDate, in.EndDate,
+		)
+		if err != nil {
+			serverError(w, err)
+			return errTxHandled
+		}
+		reservationID, _ = res.LastInsertId()
+		return nil
+	})
 	if err != nil {
 		serverError(w, err)
 		return
 	}
-	if active != 1 {
-		writeError(w, http.StatusConflict, "car is not active")
+	if reservationID == 0 {
 		return
 	}
 
-	var overlap int
-	err = conn.QueryRowContext(ctx, `
-		SELECT COUNT(*) FROM reservations r
-		WHERE r.car_id = ? AND r.status != 'cancelled'
-			AND `+db.OverlapPredicate, in.CarID, in.EndDate, in.StartDate).Scan(&overlap)
-	if err != nil {
-		serverError(w, err)
-		return
-	}
-	if overlap > 0 {
-		writeError(w, http.StatusConflict, "car already reserved for the requested dates")
-		return
-	}
-
-	res, err := conn.ExecContext(ctx, `
-		INSERT INTO reservations (user_id, car_id, start_date, end_date) VALUES (?, ?, ?, ?)`,
-		u.ID, in.CarID, in.StartDate, in.EndDate,
-	)
-	if err != nil {
-		serverError(w, err)
-		return
-	}
-	id, _ := res.LastInsertId()
-
-	if _, err := conn.ExecContext(ctx, "COMMIT"); err != nil {
-		serverError(w, err)
-		return
-	}
-	committed = true
-	_ = conn.Close()
-
-	v, err := a.reservationView(r.Context(), id)
+	v, err := a.reservationView(r.Context(), reservationID)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -255,69 +240,56 @@ func (a *API) CancelReservation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx := r.Context()
-	conn, err := a.DB.Conn(ctx)
-	if err != nil {
-		serverError(w, err)
-		return
-	}
-	defer func() { _ = conn.Close() }()
+	cancelled := false
+	err = withImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
+		ctx := r.Context()
 
-	if _, err := conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
-		serverError(w, err)
-		return
-	}
-	committed := false
-	defer func() {
-		if !committed {
-			_, _ = conn.ExecContext(ctx, "ROLLBACK")
+		var buyerID int64
+		var status string
+		if err := conn.QueryRowContext(ctx,
+			`SELECT user_id, status FROM reservations WHERE id = ?`, id).Scan(&buyerID, &status); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				writeError(w, http.StatusNotFound, "reservation not found")
+				return errTxHandled
+			}
+			serverError(w, err)
+			return errTxHandled
 		}
-	}()
+		if buyerID != u.ID {
+			writeError(w, http.StatusNotFound, "reservation not found")
+			return errTxHandled
+		}
+		if status != "pending" {
+			writeError(w, http.StatusConflict, "reservation is not pending")
+			return errTxHandled
+		}
 
-	var buyerID int64
-	var status string
-	err = conn.QueryRowContext(ctx,
-		`SELECT user_id, status FROM reservations WHERE id = ?`, id).Scan(&buyerID, &status)
-	if errors.Is(err, sql.ErrNoRows) {
-		writeError(w, http.StatusNotFound, "reservation not found")
-		return
-	}
+		var count int
+		if err := conn.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM payments WHERE reservation_id = ?`, id).Scan(&count); err != nil {
+			serverError(w, err)
+			return errTxHandled
+		}
+		if count > 0 {
+			writeError(w, http.StatusConflict, "payment already recorded, cannot cancel")
+			return errTxHandled
+		}
+
+		if _, err := conn.ExecContext(ctx,
+			`UPDATE reservations SET status = 'cancelled' WHERE id = ? AND user_id = ?`, id, u.ID); err != nil {
+			serverError(w, err)
+			return errTxHandled
+		}
+		cancelled = true
+		return nil
+	})
 	if err != nil {
 		serverError(w, err)
 		return
 	}
-	if buyerID != u.ID {
-		writeError(w, http.StatusNotFound, "reservation not found")
+	if !cancelled {
 		return
 	}
-	if status != "pending" {
-		writeError(w, http.StatusConflict, "reservation is not pending")
-		return
-	}
-
-	var count int
-	if err := conn.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM payments WHERE reservation_id = ?`, id).Scan(&count); err != nil {
-		serverError(w, err)
-		return
-	}
-	if count > 0 {
-		writeError(w, http.StatusConflict, "payment already recorded, cannot cancel")
-		return
-	}
-
-	if _, err := conn.ExecContext(ctx,
-		`UPDATE reservations SET status = 'cancelled' WHERE id = ? AND user_id = ?`, id, u.ID); err != nil {
-		serverError(w, err)
-		return
-	}
-
-	if _, err := conn.ExecContext(ctx, "COMMIT"); err != nil {
-		serverError(w, err)
-		return
-	}
-	committed = true
-	_ = conn.Close()
 
 	v, err := a.reservationView(r.Context(), id)
 	if err != nil {

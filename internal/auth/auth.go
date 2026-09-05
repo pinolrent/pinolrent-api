@@ -81,6 +81,10 @@ func (a *Auth) CheckPassword(hash, pw string) bool {
 // expiry via /auth/logout or any future invalidation path.
 func (a *Auth) SignToken(u *models.User) (string, error) {
 	now := time.Now()
+	jti, err := newJTI()
+	if err != nil {
+		return "", err
+	}
 	claims := Claims{
 		UserID: u.ID,
 		Role:   u.Role,
@@ -88,7 +92,7 @@ func (a *Auth) SignToken(u *models.User) (string, error) {
 			Subject:   strconv.FormatInt(u.ID, 10),
 			Issuer:    jwtIssuer,
 			Audience:  jwt.ClaimStrings{jwtAudience},
-			ID:        newJTI(),
+			ID:        jti,
 			ExpiresAt: jwt.NewNumericDate(now.Add(24 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(now),
 		},
@@ -97,14 +101,12 @@ func (a *Auth) SignToken(u *models.User) (string, error) {
 }
 
 // newJTI returns a 16-byte random identifier encoded as 32 hex characters.
-// crypto/rand failures are treated as fatal because a non-random jti
-// defeats the entire revocation mechanism.
-func newJTI() string {
+func newJTI() (string, error) {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		panic("auth: read random: " + err.Error())
+		return "", err
 	}
-	return hex.EncodeToString(b[:])
+	return hex.EncodeToString(b[:]), nil
 }
 
 // tokenParser enforces the signing algorithm, requires the iss/aud claims,

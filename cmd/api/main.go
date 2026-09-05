@@ -75,10 +75,16 @@ func main() {
 		os.Exit(1)
 	}
 
+	authLimiter := ratelimit.New(0.5, 30)
+	writeLimiter := ratelimit.New(2, 20)
+
 	// Nest inside-out so that CORS ends up outermost: preflights short-circuit
 	// before reaching the rate limiter, and every response (even 429) ships the
 	// CORS headers the browser needs to read it.
-	mux := handlers.WithCORS(origins)(handlers.WithRequestLog(handlers.WithRecover(ratelimit.New(0.5, 30).Middleware(handlers.Routes(h), "/auth/"))))
+	var inner http.Handler = handlers.Routes(h)
+	inner = authLimiter.Middleware(inner, "/auth/")
+	inner = writeLimiter.Middleware(inner, "POST /reservations", "POST /seller/cars", "POST /reservations/")
+	mux := handlers.WithCORS(origins)(handlers.WithRequestLog(handlers.WithRecover(inner)))
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
