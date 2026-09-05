@@ -99,7 +99,7 @@ func writeBodyErr(w http.ResponseWriter, err error) {
 }
 
 func isUniqueViolation(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed")
+	return err != nil && strings.Contains(strings.ToLower(err.Error()), "unique constraint failed")
 }
 
 const (

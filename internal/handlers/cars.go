@@ -253,6 +253,19 @@ func (a *API) PatchCar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !*in.Active {
+		var hasFuture int
+		if err := a.DB.QueryRowContext(r.Context(),
+			`SELECT COUNT(*) FROM reservations WHERE car_id = ? AND status != 'cancelled' AND end_date >= date('now')`, id).Scan(&hasFuture); err != nil {
+			serverError(w, err)
+			return
+		}
+		if hasFuture > 0 {
+			writeError(w, http.StatusConflict, "car has future reservations, cannot deactivate")
+			return
+		}
+	}
+
 	res, err := a.DB.ExecContext(r.Context(), `UPDATE cars SET active = ? WHERE id = ? AND owner_id = ?`, *in.Active, id, u.ID)
 	if err != nil {
 		serverError(w, err)

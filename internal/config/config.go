@@ -15,6 +15,7 @@ type Config struct {
 	DatabaseURL        string `env:"DATABASE_URL" envDefault:"pinolrent.db"`
 	JWTSecret          string `env:"JWT_SECRET"`
 	CORSAllowedOrigins string `env:"CORS_ALLOWED_ORIGINS" envDefault:"*"`
+	Env                string `env:"ENV" envDefault:"dev"`
 }
 
 // Load reads the configuration from the environment, applying defaults for
@@ -38,6 +39,9 @@ func (c Config) Validate() error {
 	if _, err := c.CORSOrigins(); err != nil {
 		return err
 	}
+	if (c.Env == "prod" || c.Env == "production") && c.CORSAllowedOrigins == "*" {
+		return fmt.Errorf("CORS_ALLOWED_ORIGINS=* not allowed when ENV=%s", c.Env)
+	}
 	return nil
 }
 
@@ -60,6 +64,7 @@ func (c Config) CORSOrigins() ([]string, error) {
 }
 
 func validOrigin(s string) bool {
+	s = strings.TrimSuffix(s, "/")
 	u, err := url.Parse(s)
 	if err != nil {
 		return false

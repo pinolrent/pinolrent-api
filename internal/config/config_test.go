@@ -73,7 +73,7 @@ func TestCORSOrigins(t *testing.T) {
 		{"wildcard", "*", []string{"*"}, false},
 		{"explicit", "https://app.example.com, http://localhost:5173 ", []string{"https://app.example.com", "http://localhost:5173"}, false},
 		{"empty", "", []string{}, false},
-		{"with path", "https://app.example.com/", nil, true},
+		{"with path", "https://app.example.com/foo", nil, true},
 		{"not a url", "example.com", nil, true},
 		{"bad scheme", "ftp://host", nil, true},
 	}
