@@ -15,7 +15,7 @@ PID=""
 
 # Same min length the server enforces, so the smoke starts without
 # tripping its own fail-fast.
-SMOKE_JWT_SECRET="${SMOKE_JWT_SECRET:-smoke-test-secret-min-32-bytes-ok}"
+SMOKE_JWT_SECRET="${SMOKE_JWT_SECRET:-smoke-test-secret-min-32B-ok-0123456789}"
 
 failures=0
 pass=0

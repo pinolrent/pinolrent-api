@@ -141,7 +141,7 @@ jobs:
       - name: Start ephemeral server
         run: |
           go build -o /tmp/pinolrent-api ./cmd/api
-          DATABASE_URL=/tmp/bruno.db JWT_SECRET=bruno-ci-secret-min-32-bytes-ok PORT=8132 /tmp/pinolrent-api &
+          DATABASE_URL=/tmp/bruno.db JWT_SECRET=bruno-ci-secret-min-32B-ok-0123456789 PORT=8132 /tmp/pinolrent-api &
           echo $! > /tmp/pinolrent.pid
           for i in $(seq 1 30); do
             curl -sf http://localhost:8132/health && break
