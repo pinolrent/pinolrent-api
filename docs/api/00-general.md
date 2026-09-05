@@ -43,7 +43,7 @@ Siempre así:
 ```
 
 - `400` para datos mal mandados o JSON inválido.
-- `409` para choques (fechas ocupadas, estado que no permite la acción, pago duplicado). El email duplicado en registro responde `201 {"id":0}` a propósito para no revelar qué emails existen.
+- `409` para choques (fechas ocupadas, estado que no permite la acción, pago duplicado). El email duplicado en registro responde el mismo `201 {"email":"..."}` a propósito para no revelar qué emails existen.
 - `404` para ocultar lo ajeno: si no es tuyo, responde como si no existiera.
 
 ## Límites

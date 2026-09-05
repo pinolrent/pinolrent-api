@@ -28,7 +28,7 @@ Crea cuenta de **comprador**. No necesita login.
 **Responde** `201`:
 
 ```json
-{"id":3,"email":"demo@example.com"}
+{"email":"demo@example.com"}
 ```
 
 **Errores:**
@@ -41,7 +41,7 @@ Crea cuenta de **comprador**. No necesita login.
 | `400` | `invalid JSON body` | JSON roto o campos que no existen |
 | `413` | `request body too large` | Más de 1 MB |
 
-> Si el email ya existe, igual responde `201 {"id":0,"email":"..."}` para no revelar qué emails están registrados.
+> Si el email ya existe, responde el mismo `201 {"email":"..."}` para no revelar qué emails están registrados.
 
 ---
 
@@ -50,7 +50,7 @@ Crea cuenta de **comprador**. No necesita login.
 Igual que el anterior pero crea cuenta de **vendedor**. Mismo body y mismas reglas.
 
 ```json
-{"id":4,"email":"vendedor@example.com"}
+{"email":"vendedor@example.com"}
 ```
 
 ---

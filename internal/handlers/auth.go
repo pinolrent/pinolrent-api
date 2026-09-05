@@ -85,23 +85,18 @@ func (a *API) register(w http.ResponseWriter, r *http.Request, role string) {
 		return
 	}
 
-	res, err := a.DB.ExecContext(r.Context(),
+	// The response intentionally omits the user id: returning id=0 for a
+	// duplicate and the real id for a new account would let an attacker
+	// enumerate registered emails. Both paths return the identical body.
+	_, err = a.DB.ExecContext(r.Context(),
 		`INSERT INTO users (email, password_hash, role) VALUES (?, ?, ?)`, in.Email, hash, role)
 	if err != nil {
-		if isUniqueViolation(err) {
-			// Same shape as the success response to avoid letting an
-			// attacker enumerate registered emails via the registration
-			// endpoint. Login remains the path that reveals whether an
-			// account exists (with a constant-time check, see Login).
-			writeJSON(w, http.StatusCreated, map[string]any{"id": 0, "email": in.Email})
+		if !isUniqueViolation(err) {
+			serverError(w, err)
 			return
 		}
-		serverError(w, err)
-		return
 	}
-
-	id, _ := res.LastInsertId()
-	writeJSON(w, http.StatusCreated, map[string]any{"id": id, "email": in.Email})
+	writeJSON(w, http.StatusCreated, map[string]any{"email": in.Email})
 }
 
 // Logout revokes the bearer token used on the request by inserting its
