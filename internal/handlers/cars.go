@@ -254,26 +254,48 @@ func (a *API) PatchCar(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !*in.Active {
-		var hasFuture int
-		if err := a.DB.QueryRowContext(r.Context(),
-			`SELECT COUNT(*) FROM reservations WHERE car_id = ? AND status != 'cancelled' AND end_date >= date('now')`, id).Scan(&hasFuture); err != nil {
+		deactivated := false
+		err = withImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
+			ctx := r.Context()
+			var hasFuture int
+			if err := conn.QueryRowContext(ctx,
+				`SELECT COUNT(*) FROM reservations WHERE car_id = ? AND status != 'cancelled' AND end_date >= date('now')`, id).Scan(&hasFuture); err != nil {
+				serverError(w, err)
+				return errTxHandled
+			}
+			if hasFuture > 0 {
+				writeError(w, http.StatusConflict, "car has future reservations, cannot deactivate")
+				return errTxHandled
+			}
+			res, err := conn.ExecContext(ctx, `UPDATE cars SET active = ? WHERE id = ? AND owner_id = ?`, *in.Active, id, u.ID)
+			if err != nil {
+				serverError(w, err)
+				return errTxHandled
+			}
+			if n, _ := res.RowsAffected(); n == 0 {
+				writeError(w, http.StatusNotFound, "car not found")
+				return errTxHandled
+			}
+			deactivated = true
+			return nil
+		})
+		if err != nil {
 			serverError(w, err)
 			return
 		}
-		if hasFuture > 0 {
-			writeError(w, http.StatusConflict, "car has future reservations, cannot deactivate")
+		if !deactivated {
 			return
 		}
-	}
-
-	res, err := a.DB.ExecContext(r.Context(), `UPDATE cars SET active = ? WHERE id = ? AND owner_id = ?`, *in.Active, id, u.ID)
-	if err != nil {
-		serverError(w, err)
-		return
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		writeError(w, http.StatusNotFound, "car not found")
-		return
+	} else {
+		res, err := a.DB.ExecContext(r.Context(), `UPDATE cars SET active = ? WHERE id = ? AND owner_id = ?`, *in.Active, id, u.ID)
+		if err != nil {
+			serverError(w, err)
+			return
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			writeError(w, http.StatusNotFound, "car not found")
+			return
+		}
 	}
 
 	var car models.Car
