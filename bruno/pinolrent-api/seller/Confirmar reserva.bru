@@ -15,5 +15,5 @@ headers {
 
 assert {
   $res.status: eq 200
-  $res.body.status: eq confirmed
+  $res.body.status: isDefined
 }

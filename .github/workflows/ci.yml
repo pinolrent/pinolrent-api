@@ -149,7 +149,7 @@ jobs:
           done
 
       - name: Run Bruno collection
-        run: npx --yes @usebruno/cli run bruno/pinolrent-api --env-vars "baseUrl=http://localhost:8132"
+        run: npx --yes @usebruno/cli run bruno/pinolrent-api -r --env-var baseUrl=http://localhost:8132
 
       - name: Stop server
         if: always()

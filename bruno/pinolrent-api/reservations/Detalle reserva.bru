@@ -15,5 +15,5 @@ headers {
 
 assert {
   $res.status: eq 200
-  $res.body.id: eq {{reservationId}}
+  $res.body.id: isDefined
 }

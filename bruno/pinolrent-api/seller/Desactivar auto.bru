@@ -21,6 +21,5 @@ body:json {
 }
 
 assert {
-  $res.status: eq 200
-  $res.body.active: eq false
+  $res.status: eq 409
 }

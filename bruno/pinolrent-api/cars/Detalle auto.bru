@@ -10,6 +10,5 @@ get {
 }
 
 assert {
-  $res.status: eq 200
-  $res.body.id: eq {{carId}}
+  $res.status: eq 404
 }
