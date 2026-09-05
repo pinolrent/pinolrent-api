@@ -33,6 +33,19 @@ func WithRequestLog(next http.Handler) http.Handler {
 	})
 }
 
+// WithSecurityHeaders adds basic hardening headers to every response.
+func WithSecurityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		if r.TLS != nil {
+			w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // WithRecover wraps a handler so panics are caught, logged, and turned into a
 // 500 JSON response instead of closing the connection.
 func WithRecover(next http.Handler) http.Handler {

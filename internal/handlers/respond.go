@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -83,6 +84,9 @@ func decodeBody(w http.ResponseWriter, r *http.Request, dst any) error {
 		}
 		return errors.New("invalid JSON body")
 	}
+	if err := dec.Decode(new(struct{})); !errors.Is(err, io.EOF) {
+		return errors.New("invalid JSON body")
+	}
 	return nil
 }
 
@@ -127,6 +131,9 @@ func paginate(r *http.Request) (limit, offset int, errMsg string) {
 func validURL(s string) bool {
 	u, err := url.Parse(s)
 	if err != nil {
+		return false
+	}
+	if u.User != nil {
 		return false
 	}
 	if u.Scheme != "http" && u.Scheme != "https" {

@@ -6,6 +6,13 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+if [ "${ENV:-}" = "prod" ] || [ "${ENV:-}" = "production" ]; then
+  if [ -z "${JWT_SECRET:-}" ] && [ ! -f .env ]; then
+    echo "dev.sh: refusing dev secret in prod (ENV=$ENV, no JWT_SECRET and no .env)" >&2
+    exit 1
+  fi
+fi
+
 if [ ! -f .env ]; then
   if [ -z "${JWT_SECRET:-}" ]; then
     export JWT_SECRET="dev-secret-not-for-production-32b"

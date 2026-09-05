@@ -273,7 +273,14 @@ func (a *API) PatchCar(w http.ResponseWriter, r *http.Request) {
 }
 
 func parseDate(s string) (time.Time, error) {
-	return time.Parse(dateLayout, s)
+	t, err := time.Parse(dateLayout, s)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if t.Format(dateLayout) != s {
+		return time.Time{}, errors.New("invalid date")
+	}
+	return t, nil
 }
 
 func todayStart() time.Time {

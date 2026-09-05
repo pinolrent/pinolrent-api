@@ -155,8 +155,8 @@ func (a *API) ConfirmReservation(w http.ResponseWriter, r *http.Request) {
 			return errTxHandled
 		}
 
-		var method string
-		if err := conn.QueryRowContext(ctx, `SELECT method FROM payments WHERE reservation_id = ?`, id).Scan(&method); err != nil {
+		var pStatus string
+		if err := conn.QueryRowContext(ctx, `SELECT method, status FROM payments WHERE reservation_id = ?`, id).Scan(new(string), &pStatus); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				writeError(w, http.StatusConflict, "no payment recorded for this reservation")
 				return errTxHandled
@@ -164,8 +164,12 @@ func (a *API) ConfirmReservation(w http.ResponseWriter, r *http.Request) {
 			serverError(w, err)
 			return errTxHandled
 		}
+		if pStatus != "pending" {
+			writeError(w, http.StatusConflict, "payment is not pending")
+			return errTxHandled
+		}
 
-		res, err := conn.ExecContext(ctx, `UPDATE payments SET status = 'approved' WHERE reservation_id = ?`, id)
+		res, err := conn.ExecContext(ctx, `UPDATE payments SET status = 'approved' WHERE reservation_id = ? AND status = 'pending'`, id)
 		if err != nil {
 			serverError(w, err)
 			return errTxHandled

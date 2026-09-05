@@ -84,7 +84,7 @@ func main() {
 	var inner http.Handler = handlers.Routes(h)
 	inner = authLimiter.Middleware(inner, "/auth/")
 	inner = writeLimiter.Middleware(inner, "POST /reservations", "POST /seller/cars", "POST /reservations/")
-	mux := handlers.WithCORS(origins)(handlers.WithRequestLog(handlers.WithRecover(inner)))
+	mux := handlers.WithCORS(origins)(handlers.WithSecurityHeaders(handlers.WithRequestLog(handlers.WithRecover(inner))))
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
