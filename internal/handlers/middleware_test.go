@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"crypto/tls"
 	"net/http"
 	"net/http/httptest"
@@ -8,12 +9,12 @@ import (
 )
 
 func TestSecurityHeaders(t *testing.T) {
-	h := WithSecurityHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	h := WithSecurityHeaders(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
+	h.ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), "GET", "/", nil))
 	if rec.Header().Get("X-Content-Type-Options") != "nosniff" {
 		t.Fatal("missing X-Content-Type-Options")
 	}
@@ -28,7 +29,7 @@ func TestSecurityHeaders(t *testing.T) {
 	}
 
 	rec = httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), "GET", "/", nil)
 	req.TLS = &tls.ConnectionState{}
 	h.ServeHTTP(rec, req)
 	if rec.Header().Get("Strict-Transport-Security") == "" {
@@ -37,22 +38,22 @@ func TestSecurityHeaders(t *testing.T) {
 }
 
 func TestRecover(t *testing.T) {
-	h := WithRecover(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	h := WithRecover(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		panic("boom")
 	}))
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
+	h.ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), "GET", "/", nil))
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("panic: status = %d, want 500", rec.Code)
 	}
 }
 
 func TestRequestLogWithRequestID(t *testing.T) {
-	h := WithRequestLog(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	h := WithRequestLog(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequestWithContext(context.Background(), "GET", "/test", nil)
 	req.Header.Set("X-Request-Id", "abc-123")
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
