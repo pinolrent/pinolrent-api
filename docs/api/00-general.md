@@ -49,7 +49,7 @@ Siempre así:
 ## Límites
 
 - **Body máximo 1 MB.** JSON estricto: si mandas campos que no existen o JSON roto → `400 {"error":"invalid JSON body"}`; si te pasas del tamaño → `413`.
-- **Límite por IP**: `/auth/*` → **30 por minuto** (ráfaga 30); escritura (`POST /reservations`, `POST /seller/cars`, `POST /reservations/*/payment`) → **120 por minuto** (ráfaga 20). Si te pasas → `429 {"error":"too many requests"}`. Respeta `X-Forwarded-For` / `X-Real-IP`.
+- **Límite por IP**: `/auth/*` → **30 por minuto** (ráfaga 30); escritura (`POST /reservations`, `POST /seller/cars`, `POST /reservations/*/payment`) → **120 por minuto** (ráfaga 20). Si te pasas → `429 {"error":"too many requests"}` con header `Retry-After: 60`. `X-Forwarded-For` / `X-Real-IP` solo se tienen en cuenta si la conexión viene de un proxy local (loopback); si no, cuenta la IP de la conexión.
 - **CORS** abierto a todos por defecto (`CORS_ALLOWED_ORIGINS=*`), con `ENV=prod` o `production` es rechazado. En producción poné tus orígenes separados por coma, ej. `CORS_ALLOWED_ORIGINS=https://app.example.com`. Los preflights `OPTIONS` responden `204`; si el origen no está permitido, no lleva `Access-Control-Allow-Origin` y el navegador lo bloquea. Solo `GET`, `POST`, `PATCH`, `OPTIONS` y headers `Authorization`, `Content-Type`. Trailing `/` en origen es tolerado.
 
 ## Paginación
@@ -71,6 +71,7 @@ Responden un **array simple**. Para saber si hay más, pedí `limit+1` y fijate 
 | POST | `/auth/register` | no | [auth](auth.md) |
 | POST | `/auth/register/seller` | no | [auth](auth.md) |
 | POST | `/auth/login` | no | [auth](auth.md) |
+| POST | `/auth/refresh` | no | [auth](auth.md) |
 | GET | `/auth/me` | sí | [auth](auth.md) |
 | POST | `/auth/logout` | sí | [auth](auth.md) |
 | GET | `/cars` | no | [cars](cars.md) |

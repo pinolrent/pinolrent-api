@@ -38,7 +38,7 @@ Reglas: la reserva debe existir y ser tuya, no estar `cancelled` y no tener ya u
 | `400` | `proof_url is too long` | Más de 2048 |
 | `400` | `invalid proof_url` | URL mal formada o sin `http(s)` |
 | `404` | `reservation not found` | No existe o no es tuya |
-| `409` | `cancelled reservation cannot be paid` | Está cancelada |
+| `409` | `reservation is not pending` | Está cancelada o confirmada |
 | `409` | `payment already recorded` | Ya tiene pago |
 | `400` | `invalid JSON body` | JSON roto o campos desconocidos |
 | `413` | `request body too large` | Más de 1 MB |

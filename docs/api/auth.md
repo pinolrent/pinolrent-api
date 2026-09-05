@@ -18,7 +18,7 @@ Crea cuenta de **comprador**. No necesita login.
 
 | Campo | Tipo | ¿Obligatorio? | Reglas |
 |-------|------|---------------|--------|
-| `email` | texto | sí | formato email, hasta 254 caracteres, se guarda en minúsculas |
+| `email` | texto | sí | formato email (TLD de 2+ letras, sin `..` ni punto/guion en bordes), hasta 254 caracteres, se guarda en minúsculas |
 | `password` | texto | sí | 8 a 72 caracteres |
 
 ```json

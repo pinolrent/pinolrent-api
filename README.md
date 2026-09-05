@@ -24,7 +24,8 @@ make watch   # levanta con recarga automática al editar (requiere make tools)
 |--------|------|-----------------|----------------|
 | GET | `/health` | no | Ver si el server y la base están bien |
 | POST | `/auth/register` · `/auth/register/seller` | no | Crear cuenta de comprador / vendedor |
-| POST | `/auth/login` | no | Entrar y obtener un token (dura 24 h) |
+| POST | `/auth/login` | no | Entrar y obtener access (15 min) + refresh (7 días) |
+| POST | `/auth/refresh` | no | Renovar el par con un refresh de un solo uso |
 | GET | `/auth/me` | sí | Ver tu propio perfil |
 | POST | `/auth/logout` | sí | Cerrar sesión (invalida tu token actual) |
 | GET | `/cars` | no | Ver autos disponibles (puedes filtrar por fechas o vendedor) |
@@ -53,14 +54,12 @@ Si intentas ver o tocar algo que no es tuyo, la API responde `404` como si no ex
 ## Stack y reglas básicas
 
 - **Go 1.26.5**, `net/http` sin framework, **SQLite** (`modernc.org/sqlite`) + migraciones `goose`.
-- Auth con **JWT HS256** (24 h) y **bcrypt** para contraseñas.
+- Auth con **JWT HS256** (access 15 min + refresh 7 días con rotación) y **bcrypt** para contraseñas.
 - `price_per_day` va en **centavos** (ej. 45000 = $450). Fechas como `YYYY-MM-DD`.
 - Cada request con body no puede pasar de **1 MB**. JSON con campos desconocidos da error.
-- Login y registro limitados a **30 intentos por minuto por IP**; escritura (`POST /reservations`, `POST /seller/cars`) a **120 por minuto** (ráfaga 20). CORS abierto por defecto (se puede cerrar con `CORS_ALLOWED_ORIGINS`; con `ENV=prod` no permite `*`).
+- Login y registro limitados a **30 intentos por minuto por IP**; escritura (`POST /reservations`, `POST /seller/cars`, `POST /reservations/*/payment`) a **120 por minuto** (ráfaga 20). CORS abierto por defecto (se puede cerrar con `CORS_ALLOWED_ORIGINS`; con `ENV=prod` no permite `*`).
 - Listas paginadas con `limit`/`offset` (por defecto 50, máximo 200, `offset` máx. 10000). Reservas de máximo **30 días**.
 - Desactivar un auto con reservas futuras → `409`. Pool SQLite con `MaxIdleTime` 5 min / `MaxLifetime` 30 min. Migración 00005 agrega `CHECK(price_per_day <= 100M)` y `end_date >= start_date`.
 - Límites: `email` hasta 254 caracteres, `password` 8-72, `name` del auto hasta 200, URLs hasta 2048.
-- `JWT_SECRET` debe tener al menos 32 caracteres o el server no arranca. El token exige `iss`, `aud` y `exp`; el `jti` solo se usa para cerrar sesión.
+- `JWT_SECRET` debe tener al menos 32 caracteres con entropía (16+ bytes distintos) o el server no arranca. El token exige `iss`, `aud` y `exp`; el `jti` se usa para cerrar sesión y rotar refresh.
 - `GET /health` responde la versión del binario (`make build` la inyecta).
-
-Docs en español, comentarios del código en inglés.

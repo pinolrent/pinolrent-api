@@ -20,7 +20,7 @@ make run          # levanta sin defaults (falla sin JWT_SECRET, como en prod)
 | `make build` | Compila a `bin/pinolrent-api` con la versión del git |
 | `make test` | Corre los tests (`go test -count=1 -timeout 180s ./...`) |
 | `make test-race` | Tests con detector de carreras (`CGO_ENABLED=1`, necesita gcc, 300s) |
-| `make cover` | Corre tests y muestra resumen de cobertura (180s) |
+| `make cover` | Corre tests y muestra resumen de cobertura (180s, mínimo 70% salvo `COVER_MIN=N`) |
 | `make vuln` | `govulncheck ./...` |
 | `make vet` | `go vet ./...` |
 | `make lint` | `golangci-lint run ./...` (debe quedar en 0) |
@@ -35,7 +35,6 @@ make run          # levanta sin defaults (falla sin JWT_SECRET, como en prod)
 
 - Config en `.golangci.yml` formato **v2**: linters estándar + `revive`, `gosec`, `noctx` y `misspell`.
 - Reglas del repo:
-  - Comentarios del código en **inglés**, docs y README en **español**.
   - Todo lo exportado lleva comentario.
   - `gofmt` limpio y archivos terminan con salto de línea.
 
@@ -56,10 +55,11 @@ Mueve el archivo generado a `internal/db/migrations/` y edita `Up`/`Down`. Queda
 `bruno/pinolrent-api/` está lista para correr:
 
 - `collection.bru` define variables (`baseUrl`, `sellerEmail`, `buyerEmail`, etc.).
-- Los logins guardan el token automáticamente en `sellerToken`/`buyerToken`.
+- Los logins guardan el token y el refresh automáticamente en `sellerToken`/`buyerToken` (más `sellerRefresh`/`buyerRefresh`).
 - `carId` y `reservationId` se guardan igual al crear auto/reserva.
+- Cada request trae `assert` de status y campos clave, así el CLI falla si algo cambia.
 
-Corre los requests **en orden** (dependen unos de otros). Cambia `baseUrl` si no es `http://localhost:8080`.
+Corre los requests **en orden** (`seq`, dependen unos de otros). Cambia `baseUrl` si no es `http://localhost:8080`. También corre en CI (job `bruno` con `@usebruno/cli`).
 
 ## Tests
 
@@ -68,8 +68,8 @@ make test
 make lint
 ```
 
-Los tests cubren `auth`, `config`, `db`, `handlers` y `ratelimit`. El flujo completo se puede ver en [flujo-completo](flujo-completo.md) y la prueba automática en `scripts/demo.sh`.
+Los tests cubren `auth`, `config`, `db`, `handlers`, `httpx`, `models` y `ratelimit` (viven junto al código como `*_test.go`). El flujo completo se puede ver en [flujo-completo](flujo-completo.md) y la prueba automática en `scripts/demo.sh`.
 
 ## CI
 
-`.github/workflows/ci.yml` corre en cada push a `main` y en cada PR: `go mod verify`, `make vet`, `make test`, `make test-race`, `golangci-lint v2.13.2`, `govulncheck`, `make build` y `make demo` (36 checks). `timeout-minutes: 15` y `concurrency` cancela corridas viejas del mismo branch. La versión del linter en el workflow debe coincidir con `GOLANGCI_VERSION` del Makefile.
+`.github/workflows/ci.yml` corre en cada push a `main` y en cada PR, en jobs paralelos: `test` (`go mod verify`, `gofmt`, `tidy`, `make vet`, `make test`, `make test-race`, `make cover`), `lint` (`golangci-lint v2.13.2`), `vuln` (`govulncheck`), `build-demo` (`make build` y `make demo`, 36 checks) y `bruno` (colección Bruno contra un server efímero). `concurrency` cancela corridas viejas del mismo branch. Las versiones de las herramientas en el workflow deben coincidir con `GOLANGCI_VERSION` / `GOVULNCHECK_VERSION` del Makefile.

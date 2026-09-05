@@ -78,7 +78,7 @@ Lo importante del esquema (`internal/db/migrations/`):
 - `cars.owner_id` dice quién es el dueño del auto. `price_per_day` en centavos, `0..100_000_000` con `CHECK` en DB (migración 00005).
 - Las reservas tienen `CHECK(end_date >= start_date)` en DB.
 - Una reserva tiene **a lo sumo un pago** (`payments.reservation_id` es único).
-- `revoked_tokens` guarda los tokens que se cerraron con `/auth/logout`. Un proceso interno borra cada 10 minutos los que ya vencieron.
+- `revoked_tokens` guarda los `jti` de access tokens cerrados con `/auth/logout` y de refresh tokens ya rotados en `/auth/refresh`. Un proceso interno borra cada 10 minutos los que ya vencieron.
 - Las fechas se guardan como texto `YYYY-MM-DD`.
 - Las migraciones están embebidas en el binario y se aplican al arrancar. Solo se ejecutan las que faltan.
 
@@ -125,7 +125,7 @@ stateDiagram-v2
 - El body no puede pasar de **1 MB**. Si mandas JSON mal formado o campos que no existen, responde `400`. Si te pasas del tamaño, `413`.
 - `price_per_day` entre `0` y `100_000_000` centavos. `name` hasta 200 caracteres.
 - `photo_url` y `proof_url`, si van, deben ser URLs `http(s)` de hasta 2048 caracteres.
-- Emails: se pasan a minúsculas y se limitan a 254 caracteres. Passwords: 8 a 72.
+- Emails: se pasan a minúsculas y se limitan a 254 caracteres (formato validado: sin puntos/guiones en bordes, sin `..` seguidos, TLD de al menos 2 letras). Passwords: 8 a 72.
 
 **Todo o nada:**
 
@@ -133,7 +133,7 @@ stateDiagram-v2
 
 ## Login y permisos
 
-- Registro público: `POST /auth/register` (comprador) y `POST /auth/register/seller` (vendedor).
+- Registro público: `POST /auth/register` (comprador) y `POST /auth/register/seller` (vendedor). Responde `201 {"email":"..."}` igual exista o no el email, para no revelar registros.
 - Login devuelve un par **JWT HS256**: access de **15 min** y refresh de **7 días** (un solo uso, con rotación vía `POST /auth/refresh`), con `uid`, `role`, `iss`, `aud`, `jti`, `iat`, `exp` y `sub`. El server rechaza tokens con otro algoritmo (incluido `none`), sin `exp`/`iss`/`aud` o con firma inválida. Si el email no existe igual hace un `bcrypt` dummy para que no se pueda adivinar por tiempo de respuesta.
 - `POST /auth/logout` guarda el `jti` en `revoked_tokens`. Ese token deja de funcionar (responde `401` igual que uno vencido). Otros tokens del mismo usuario siguen valiendo.
 - `Authorization: Bearer <token>` en toda ruta protegida.
@@ -144,7 +144,7 @@ stateDiagram-v2
 | Recurso | Comprador | Vendedor | Sin login |
 |---------|-----------|----------|-----------|
 | `GET /cars` | sí | sí | sí |
-| `POST /auth/register*`, `POST /auth/login` | sí | sí | sí |
+| `POST /auth/register*`, `POST /auth/login`, `POST /auth/refresh` | sí | sí | sí |
 | `GET /auth/me` | su perfil | su perfil | no (401) |
 | `POST /auth/logout` | sí | sí | no (401) |
 | `GET /seller/cars`, `POST /seller/cars` | no (403) | solo sus autos | no (401) |
@@ -160,13 +160,14 @@ stateDiagram-v2
 
 - En rutas `/auth/*` (auth) por IP: **30 por minuto** (0.5/s, ráfaga 30).
 - En escritura `POST /reservations`, `POST /seller/cars`, `POST /reservations/*/payment`: **120 por minuto** (2/s, ráfaga 20).
-- Si te pasas → `429 {"error":"too many requests"}`.
+- Si te pasas → `429 {"error":"too many requests"}` con header `Retry-After: 60`.
+- `X-Forwarded-For` / `X-Real-IP` solo valen si la conexión viene de un proxy local (loopback); si no, cuenta la IP de la conexión.
 - Es en memoria, por proceso. Los contadores se borran tras 10 min sin uso.
 
 ## Server y logs
 
 - Timeouts: header 5 s, lectura 10 s, escritura 30 s, idle 60 s. Header máximo 1 MB.
-- Cada request deja una línea de log con método, ruta, status y duración; si manda `X-Request-Id` se incluye para correlación. Headers de seguridad en cada respuesta (`nosniff`, `DENY`, `Referrer-Policy`, `HSTS` si TLS).
+- Cada request deja una línea de log con método, ruta, status y duración; si manda `X-Request-Id` se incluye para correlación. Headers de seguridad en cada respuesta (`nosniff`, `DENY`, `Referrer-Policy`, `CSP`, `Permissions-Policy`, `HSTS` si TLS).
 - Si algo hace panic, se captura y responde `500 {"error":"server error"}`.
 - `GET /health` responde `{"status":"ok","version":"..."}` (o `503 degraded` si la base no responde). La versión se inyecta con `make build`.
 - Al recibir `SIGINT`/`SIGTERM` apaga limpio en hasta 10 s.

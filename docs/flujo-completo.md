@@ -23,10 +23,10 @@ curl -s -X POST "$BASE/auth/register/seller" \
   -d '{"email":"vende@example.com","password":"secret123"}'
 ```
 
-En ambos casos (`201`):
+En ambos casos (`201`, igual exista o no el email):
 
 ```json
-{"id":4,"email":"vende@example.com"}
+{"email":"vende@example.com"}
 ```
 
 ## 2. Entrar y guardar los tokens
@@ -39,12 +39,25 @@ SELLER=$(curl -s -X POST "$BASE/auth/login" \
 BUYER=$(curl -s -X POST "$BASE/auth/login" \
   -H 'Content-Type: application/json' \
   -d '{"email":"compra@example.com","password":"secret123"}' | jq -r .token)
+
+BUYER_REFRESH=$(curl -s -X POST "$BASE/auth/login" \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"compra@example.com","password":"secret123"}' | jq -r .refresh_token)
 ```
 
-Cada login devuelve (`200`):
+Cada login devuelve (`200`) un access (15 min) y un refresh (7 días, un solo uso):
 
 ```json
-{"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."}
+{"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...","refresh_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."}
+```
+
+Cuando el access vence, pedí otro par sin loguearte de nuevo:
+
+```sh
+curl -s -X POST "$BASE/auth/refresh" \
+  -H 'Content-Type: application/json' \
+  -d "{\"refresh_token\":\"$BUYER_REFRESH\"}"
+# → 200 {"token":"...","refresh_token":"..."} (el refresh usado queda revocado)
 ```
 
 Puedes ver tu perfil con:

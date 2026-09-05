@@ -6,7 +6,7 @@
 |----------|-------------------|---------------|----------------|
 | `PORT` | `8080` | no | Puerto donde escucha el server |
 | `DATABASE_URL` | `pinolrent.db` | no | Dónde está el archivo SQLite |
-| `JWT_SECRET` | — | **sí** | Secreto para firmar los tokens (mínimo 32 caracteres) |
+| `JWT_SECRET` | — | **sí** | Secreto para firmar los tokens (mínimo 32 caracteres, con entropía: al menos 16 bytes distintos) |
 | `CORS_ALLOWED_ORIGINS` | `*` | no | Qué orígenes pueden llamar a la API, separados por coma. `*` = todos |
 | `ENV` | `dev` | no | Entorno: `dev` (default) o `prod`/`production`. En prod `CORS_ALLOWED_ORIGINS=*` es rechazado |
 
@@ -24,7 +24,12 @@ $ JWT_SECRET=short go run ./cmd/api
 # ERROR: JWT_SECRET must be at least 32 bytes (got 5)
 ```
 
-Esto lo valida `Config.Validate` en `internal/config/config.go`. Un secreto corto con HS256 es fácil de romper si alguien consigue un token, por eso se exige mínimo 32.
+```sh
+$ JWT_SECRET=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa go run ./cmd/api
+# ERROR: JWT_SECRET has too little entropy (only 1 unique bytes, want >= 16)
+```
+
+Esto lo valida `Config.Validate` en `internal/config/config.go`. Un secreto corto o repetitivo con HS256 es fácil de romper si alguien consigue un token, por eso se exige mínimo 32 caracteres con al menos 16 bytes distintos.
 
 ### Cómo generar un secreto
 
