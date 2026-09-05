@@ -80,8 +80,8 @@ func (a *API) RecordPayment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "reservation not found")
 		return
 	}
-	if status == "cancelled" {
-		writeError(w, http.StatusConflict, "cancelled reservation cannot be paid")
+	if status != "pending" {
+		writeError(w, http.StatusConflict, "reservation is not pending")
 		return
 	}
 
@@ -190,8 +190,13 @@ func (a *API) ConfirmReservation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := conn.ExecContext(ctx, `UPDATE payments SET status = 'approved' WHERE reservation_id = ?`, id); err != nil {
+	res, err := conn.ExecContext(ctx, `UPDATE payments SET status = 'approved' WHERE reservation_id = ?`, id)
+	if err != nil {
 		serverError(w, err)
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		writeError(w, http.StatusConflict, "no payment recorded for this reservation")
 		return
 	}
 	if _, err := conn.ExecContext(ctx, `UPDATE reservations SET status = 'confirmed' WHERE id = ?`, id); err != nil {

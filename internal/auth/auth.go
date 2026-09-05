@@ -126,6 +126,9 @@ func (a *Auth) parseToken(token string) (*Claims, error) {
 	if err != nil {
 		return nil, err
 	}
+	if claims.JTI() == "" {
+		return nil, jwt.ErrTokenRequiredClaimMissing
+	}
 	return claims, nil
 }
 
