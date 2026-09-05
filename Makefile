@@ -39,10 +39,12 @@ test-race: ## Runs the test suite with the race detector (requires CGO/gcc)
 vuln: ## Runs govulncheck
 	govulncheck ./...
 
-cover: ## Runs the test suite and prints a one-line coverage summary
+COVER_MIN ?= 70
+cover: ## Runs the test suite and prints a one-line coverage summary (COVER_MIN=N to enforce a gate)
 	go test -count=1 -timeout 180s -coverprofile=cover.out -covermode=atomic ./...
 	@go tool cover -func=cover.out | tail -n1
-	@rm -f cover.out
+	@pct=$$(go tool cover -func=cover.out | tail -n1 | grep -o '[0-9.]*%' | tr -d '%'); rm -f cover.out; \
+	if [ "$(COVER_MIN)" != "0" ]; then echo "coverage $${pct}% (min $(COVER_MIN)%)"; awk -v p="$${pct}" -v m="$(COVER_MIN)" 'BEGIN{exit (p+0 < m+0)}'; fi
 
 vet: ## Runs go vet
 	go vet ./...
