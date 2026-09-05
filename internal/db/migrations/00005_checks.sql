@@ -1,4 +1,9 @@
 -- +goose Up
+-- +goose NO TRANSACTION
+PRAGMA foreign_keys=OFF;
+UPDATE cars SET price_per_day = 100000000 WHERE price_per_day > 100000000;
+UPDATE reservations SET end_date = start_date WHERE end_date < start_date;
+BEGIN TRANSACTION;
 CREATE TABLE _cars_new (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	owner_id INTEGER NOT NULL REFERENCES users(id),
@@ -30,8 +35,13 @@ ALTER TABLE _reservations_new RENAME TO reservations;
 CREATE INDEX IF NOT EXISTS idx_cars_owner ON cars (owner_id, id);
 CREATE INDEX IF NOT EXISTS idx_reservations_user ON reservations (user_id, id);
 CREATE INDEX IF NOT EXISTS idx_reservations_car_dates ON reservations (car_id, start_date, end_date);
+COMMIT;
+PRAGMA foreign_keys=ON;
 
 -- +goose Down
+-- +goose NO TRANSACTION
+PRAGMA foreign_keys=OFF;
+BEGIN TRANSACTION;
 DROP INDEX IF EXISTS idx_cars_owner;
 DROP INDEX IF EXISTS idx_reservations_user;
 DROP INDEX IF EXISTS idx_reservations_car_dates;
@@ -65,3 +75,5 @@ ALTER TABLE _reservations_old RENAME TO reservations;
 CREATE INDEX IF NOT EXISTS idx_cars_owner ON cars (owner_id, id);
 CREATE INDEX IF NOT EXISTS idx_reservations_user ON reservations (user_id, id);
 CREATE INDEX IF NOT EXISTS idx_reservations_car_dates ON reservations (car_id, start_date, end_date);
+COMMIT;
+PRAGMA foreign_keys=ON;
