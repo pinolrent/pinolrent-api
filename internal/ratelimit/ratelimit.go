@@ -91,6 +91,7 @@ func (l *Limiter) Middleware(next http.Handler, limitPaths ...string) http.Handl
 			l.mu.Unlock()
 
 			if !l.Allow(clientIP(r)) {
+				w.Header().Set("Retry-After", "60")
 				writeJSONError(w, http.StatusTooManyRequests, "too many requests")
 				return
 			}
@@ -99,6 +100,10 @@ func (l *Limiter) Middleware(next http.Handler, limitPaths ...string) http.Handl
 	})
 }
 
+// clientIP returns the client IP. It trusts X-Forwarded-For/X-Real-IP only
+// when the deployment is behind a trusted reverse proxy that overwrites them;
+// otherwise spoofed headers can bypass the limiter. Run behind a single
+// trusted proxy or restrict to RemoteAddr.
 func clientIP(r *http.Request) string {
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 		parts := strings.Split(xff, ",")

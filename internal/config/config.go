@@ -4,6 +4,7 @@ package config
 import (
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/caarlos0/env/v11"
@@ -61,6 +62,9 @@ func (c Config) CORSOrigins() ([]string, error) {
 		if o != "*" && !validOrigin(o) {
 			return nil, fmt.Errorf("invalid CORS_ALLOWED_ORIGINS entry %q: want * or scheme://host[:port]", o)
 		}
+		if o != "*" {
+			o = strings.TrimSuffix(o, "/")
+		}
 		origins = append(origins, o)
 	}
 	return origins, nil
@@ -85,12 +89,9 @@ func validOrigin(s string) bool {
 }
 
 func parsePort(s string) (int, error) {
-	n := 0
-	for _, ch := range s {
-		if ch < '0' || ch > '9' {
-			return 0, fmt.Errorf("PORT must be a number (got %q)", s)
-		}
-		n = n*10 + int(ch-'0')
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, fmt.Errorf("PORT must be a number (got %q)", s)
 	}
 	if n < 1 || n > 65535 {
 		return 0, fmt.Errorf("PORT out of range 1-65535 (got %q)", s)

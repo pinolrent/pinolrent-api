@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"strings"
 	"time"
 
 	// Blank import to register the modernc.org/sqlite driver with database/sql.
@@ -101,18 +102,5 @@ func isBusyError(err error) bool {
 		return false
 	}
 	msg := err.Error()
-	return contains(msg, "database is busy") || contains(msg, "database is locked") || contains(msg, "SQLITE_BUSY")
-}
-
-func contains(s, sub string) bool {
-	return len(s) >= len(sub) && searchStr(s, sub)
-}
-
-func searchStr(s, sub string) bool {
-	for i := 0; i <= len(s)-len(sub); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
+	return strings.Contains(msg, "database is busy") || strings.Contains(msg, "database is locked") || strings.Contains(msg, "SQLITE_BUSY")
 }

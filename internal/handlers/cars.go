@@ -19,6 +19,8 @@ const maxPricePerDay = 100_000_000
 
 const carColumns = "id, owner_id, name, photo_url, price_per_day, active"
 
+const carColumnsQualified = "c.id, c.owner_id, c.name, c.photo_url, c.price_per_day, c.active"
+
 // ListCars returns active cars, optionally filtered by owner and excluding
 // those already reserved in the [start_date, end_date] range.
 func (a *API) ListCars(w http.ResponseWriter, r *http.Request) {
@@ -57,7 +59,7 @@ func (a *API) ListCars(w http.ResponseWriter, r *http.Request) {
 		// #nosec G202 -- ownerCond/carColumns are fixed internal fragments,
 		// not user input; owner_id is bound as a parameter.
 		rows, err := a.DB.QueryContext(r.Context(),
-			`SELECT c.`+carColumns+` FROM cars c WHERE c.active = 1`+ownerCond+` ORDER BY c.id LIMIT ? OFFSET ?`,
+			`SELECT `+carColumnsQualified+` FROM cars c WHERE c.active = 1`+ownerCond+` ORDER BY c.id LIMIT ? OFFSET ?`,
 			args...)
 		if err != nil {
 			serverError(w, err)
@@ -93,7 +95,7 @@ func (a *API) ListCars(w http.ResponseWriter, r *http.Request) {
 		// #nosec G202 -- db.OverlapPredicate, ownerCond and carColumns are fixed
 		// internal SQL fragments, not user input; the values are bound params.
 		rows, err := a.DB.QueryContext(r.Context(), `
-			SELECT c.`+carColumns+`
+			SELECT `+carColumnsQualified+`
 			FROM cars c
 			WHERE c.active = 1`+ownerCond+`
 			AND NOT EXISTS (
