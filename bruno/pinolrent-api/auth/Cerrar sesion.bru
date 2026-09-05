@@ -1,0 +1,14 @@
+meta {
+  name: Cerrar sesion
+  type: http
+  seq: 18
+}
+
+post {
+  url: {{baseUrl}}/auth/logout
+  body: none
+}
+
+headers {
+  Authorization: Bearer {{buyerToken}}
+}

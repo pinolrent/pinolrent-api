@@ -1,0 +1,21 @@
+meta {
+  name: Desactivar auto
+  type: http
+  seq: 7
+}
+
+patch {
+  url: {{baseUrl}}/seller/cars/{{carId}}
+  body: json
+  auth: bearer
+}
+
+headers {
+  Authorization: Bearer {{sellerToken}}
+}
+
+body:json {
+  {
+    "active": false
+  }
+}
