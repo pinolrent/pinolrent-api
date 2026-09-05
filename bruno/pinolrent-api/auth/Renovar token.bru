@@ -1,11 +1,11 @@
 meta {
-  name: Login comprador
+  name: Renovar token
   type: http
-  seq: 4
+  seq: 5
 }
 
 post {
-  url: {{baseUrl}}/auth/login
+  url: {{baseUrl}}/auth/refresh
   body: json
 }
 
@@ -15,8 +15,7 @@ headers {
 
 body:json {
   {
-    "email": "{{buyerEmail}}",
-    "password": "{{buyerPassword}}"
+    "refresh_token": "{{buyerRefresh}}"
   }
 }
 

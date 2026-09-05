@@ -1,7 +1,7 @@
 meta {
   name: Registrar pago
   type: http
-  seq: 14
+  seq: 15
 }
 
 post {
@@ -19,4 +19,8 @@ body:json {
     "method": "pos",
     "proof_url": "https://example.com/recibo.jpg"
   }
+}
+
+assert {
+  $res.status: eq 201
 }

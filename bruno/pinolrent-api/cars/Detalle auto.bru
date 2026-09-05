@@ -1,10 +1,15 @@
 meta {
   name: Detalle auto
   type: http
-  seq: 8
+  seq: 9
 }
 
 get {
   url: {{baseUrl}}/cars/{{carId}}
   body: none
+}
+
+assert {
+  $res.status: eq 200
+  $res.body.id: eq {{carId}}
 }

@@ -1,7 +1,7 @@
 meta {
   name: Mis reservas
   type: http
-  seq: 12
+  seq: 13
 }
 
 get {
@@ -11,4 +11,8 @@ get {
 
 headers {
   Authorization: Bearer {{buyerToken}}
+}
+
+assert {
+  $res.status: eq 200
 }

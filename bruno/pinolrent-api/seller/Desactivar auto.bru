@@ -1,16 +1,16 @@
 meta {
   name: Desactivar auto
   type: http
-  seq: 7
+  seq: 8
 }
 
 patch {
   url: {{baseUrl}}/seller/cars/{{carId}}
   body: json
-  auth: bearer
 }
 
 headers {
+  Content-Type: application/json
   Authorization: Bearer {{sellerToken}}
 }
 
@@ -18,4 +18,9 @@ body:json {
   {
     "active": false
   }
+}
+
+assert {
+  $res.status: eq 200
+  $res.body.active: eq false
 }

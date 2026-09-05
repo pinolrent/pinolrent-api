@@ -116,3 +116,41 @@ jobs:
 
       - name: End-to-end smoke
         run: make demo
+
+  bruno:
+    name: bruno collection
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [test]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Start ephemeral server
+        run: |
+          go build -o /tmp/pinolrent-api ./cmd/api
+          DATABASE_URL=/tmp/bruno.db JWT_SECRET=bruno-ci-secret-min-32-bytes-ok PORT=8132 /tmp/pinolrent-api &
+          echo $! > /tmp/pinolrent.pid
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8132/health && break
+            sleep 1
+          done
+
+      - name: Run Bruno collection
+        run: npx --yes @usebruno/cli run bruno/pinolrent-api --env-vars "baseUrl=http://localhost:8132"
+
+      - name: Stop server
+        if: always()
+        run: kill $(cat /tmp/pinolrent.pid) || true

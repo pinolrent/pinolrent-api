@@ -8,3 +8,8 @@ get {
   url: {{baseUrl}}/health
   body: none
 }
+
+assert {
+  $res.status: eq 200
+  $res.body.status: eq ok
+}

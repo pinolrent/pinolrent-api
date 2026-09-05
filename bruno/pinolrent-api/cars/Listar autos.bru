@@ -8,3 +8,7 @@ get {
   url: {{baseUrl}}/cars
   body: none
 }
+
+assert {
+  $res.status: eq 200
+}

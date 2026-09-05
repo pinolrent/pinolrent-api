@@ -1,7 +1,7 @@
 meta {
   name: Cancelar reserva
   type: http
-  seq: 15
+  seq: 16
 }
 
 patch {
@@ -11,4 +11,9 @@ patch {
 
 headers {
   Authorization: Bearer {{buyerToken}}
+}
+
+assert {
+  $res.status: eq 200
+  $res.body.status: eq cancelled
 }

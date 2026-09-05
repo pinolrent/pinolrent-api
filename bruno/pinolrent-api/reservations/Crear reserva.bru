@@ -1,7 +1,7 @@
 meta {
   name: Crear reserva
   type: http
-  seq: 11
+  seq: 12
 }
 
 post {
@@ -20,6 +20,11 @@ body:json {
     "start_date": "2027-01-10",
     "end_date": "2027-01-12"
   }
+}
+
+assert {
+  $res.status: eq 201
+  $res.body.id: isDefined
 }
 
 script:post-response {

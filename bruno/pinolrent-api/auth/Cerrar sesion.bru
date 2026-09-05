@@ -1,7 +1,7 @@
 meta {
   name: Cerrar sesion
   type: http
-  seq: 18
+  seq: 19
 }
 
 post {
@@ -11,4 +11,8 @@ post {
 
 headers {
   Authorization: Bearer {{buyerToken}}
+}
+
+assert {
+  $res.status: eq 200
 }

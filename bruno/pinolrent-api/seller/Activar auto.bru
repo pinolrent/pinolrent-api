@@ -1,7 +1,7 @@
 meta {
-  name: Activar/desactivar auto
+  name: Activar auto
   type: http
-  seq: 9
+  seq: 10
 }
 
 patch {
@@ -18,4 +18,9 @@ body:json {
   {
     "active": true
   }
+}
+
+assert {
+  $res.status: eq 200
+  $res.body.active: eq true
 }
