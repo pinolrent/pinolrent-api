@@ -11,6 +11,10 @@ if [ "${ENV:-}" = "prod" ] || [ "${ENV:-}" = "production" ]; then
     echo "dev.sh: refusing dev secret in prod (ENV=$ENV, no JWT_SECRET and no .env)" >&2
     exit 1
   fi
+  if [ "${CORS_ALLOWED_ORIGINS:-}" = "*" ]; then
+    echo "dev.sh: refusing CORS=* in prod (ENV=$ENV)" >&2
+    exit 1
+  fi
 fi
 
 if [ ! -f .env ]; then

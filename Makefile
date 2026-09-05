@@ -1,4 +1,4 @@
-.PHONY: help tools run dev watch build test test-race cover vet lint fmt tidy demo clean
+.PHONY: help tools run dev watch build test test-race cover vuln vet lint fmt tidy demo clean
 
 .DEFAULT_GOAL := help
 
@@ -12,14 +12,16 @@ help: ## Shows this help
 
 AIR_VERSION := v1.67.4
 
-tools: ## Installs dev tools: air (go install) and golangci-lint (official binary)
+tools: ## Installs dev tools: air, govulncheck and golangci-lint
 	go install github.com/air-verse/air@$(AIR_VERSION)
+	go install golang.org/x/vuln/cmd/govulncheck@latest
 	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(shell go env GOPATH)/bin $(GOLANGCI_VERSION)
 
-run: ## Runs the server with the current environment (no reload)
-	@./scripts/dev.sh
+run: ## Runs the server without dev defaults (needs JWT_SECRET, like prod)
+	go run ./cmd/api
 
-dev: run ## Alias of run: one-shot dev server
+dev: ## One-shot dev server with defaults (no .env needed)
+	@./scripts/dev.sh
 
 watch: ## Hot-reload with air (requires: make tools)
 	@air -c .air.toml
@@ -57,5 +59,5 @@ tidy: ## Tidies go.mod/go.sum
 demo: ## Self-contained end-to-end smoke (ephemeral server on :8132)
 	@./scripts/demo.sh
 
-clean: ## Removes bin/ and the dev database
-	rm -rf bin dev.db dev.db-shm dev.db-wal
+clean: ## Removes bin/, tmp/, air.log and the dev database
+	rm -rf bin tmp air.log dev.db dev.db-shm dev.db-wal

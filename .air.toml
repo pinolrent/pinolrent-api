@@ -6,7 +6,7 @@ tmp_dir = "tmp/air"
 [build]
   cmd = "go build -o tmp/air/api ./cmd/api"
   bin = "tmp/air/api"
-  include_ext = ["go", "env", "toml"]
+  include_ext = ["go", "toml"]
   exclude_regex = ["_test\\.go$", "\\.codegraph"]
   exclude_dir = ["bin", "bruno", "scripts", ".git"]
   delay = 1000
