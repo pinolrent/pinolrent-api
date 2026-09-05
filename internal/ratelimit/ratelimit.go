@@ -3,20 +3,18 @@
 package ratelimit
 
 import (
-	"encoding/json"
 	"net"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/pinolrent/pinolrent-api/internal/httpx"
 	"golang.org/x/time/rate"
 )
 
 func writeJSONError(w http.ResponseWriter, status int, msg string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
+	httpx.WriteError(w, status, msg)
 }
 
 type entry struct {

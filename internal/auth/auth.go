@@ -8,7 +8,6 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
-	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -18,6 +17,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/pinolrent/pinolrent-api/internal/httpx"
 	"github.com/pinolrent/pinolrent-api/internal/models"
 )
 
@@ -134,9 +134,9 @@ func (a *Auth) parseToken(token string) (*Claims, error) {
 	return claims, nil
 }
 
-type ctxKey int
+type ctxKey struct{}
 
-const userKey ctxKey = 0
+var userKey = ctxKey{}
 
 // CurrentUser returns the user stored in the request context, if any.
 func CurrentUser(ctx context.Context) (*models.User, bool) {
@@ -152,7 +152,7 @@ func CurrentUser(ctx context.Context) (*models.User, bool) {
 // exp claim; the revoked_tokens GC can drop the row once that time passes.
 func (a *Auth) Revoke(ctx context.Context, userID int64, jti string, expiresAtUnix int64) error {
 	_, err := a.db.ExecContext(ctx,
-		`INSERT INTO revoked_tokens (jti, user_id, expires_at) VALUES (?, ?, ?)`,
+		`INSERT OR IGNORE INTO revoked_tokens (jti, user_id, expires_at) VALUES (?, ?, ?)`,
 		jti, userID, expiresAtUnix)
 	return err
 }
@@ -194,10 +194,10 @@ func (a *Auth) GCRevoked(ctx context.Context) error {
 
 // IsRevoked reports whether the given jti is in the revoked_tokens table.
 func (a *Auth) IsRevoked(ctx context.Context, jti string) (bool, error) {
-	var n int
+	var exists int
 	err := a.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM revoked_tokens WHERE jti = ?`, jti).Scan(&n)
-	return n > 0, err
+		`SELECT EXISTS(SELECT 1 FROM revoked_tokens WHERE jti = ?)`, jti).Scan(&exists)
+	return exists == 1, err
 }
 
 // RequireAuth wraps a handler so it only runs for valid, non-expired tokens.
@@ -244,12 +244,9 @@ func (a *Auth) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// serverErrorFromAuth is the auth package's analogue of handlers.serverError:
-// it logs the error and returns 500. The package is intentionally lean and
-// does not import handlers, so the helper is inlined.
 func serverErrorFromAuth(w http.ResponseWriter, err error) {
 	slog.Error("auth internal error", "error", err)
-	writeError(w, http.StatusInternalServerError, "server error")
+	httpx.WriteError(w, http.StatusInternalServerError, "server error")
 }
 
 // RequireRole wraps a handler so it only runs for authenticated users with the
@@ -266,7 +263,5 @@ func (a *Auth) RequireRole(role string, next http.HandlerFunc) http.HandlerFunc 
 }
 
 func writeError(w http.ResponseWriter, status int, msg string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
+	httpx.WriteError(w, status, msg)
 }

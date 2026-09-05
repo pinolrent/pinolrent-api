@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/pinolrent/pinolrent-api/internal/auth"
+	"github.com/pinolrent/pinolrent-api/internal/httpx"
 )
 
 const maxBodyBytes = 1 << 20
@@ -55,20 +56,16 @@ func New(db *sql.DB, a *auth.Auth) *API {
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	if v != nil {
-		_ = json.NewEncoder(w).Encode(v)
-	}
+	httpx.WriteJSON(w, status, v)
 }
 
 func writeError(w http.ResponseWriter, status int, msg string) {
-	writeJSON(w, status, map[string]string{"error": msg})
+	httpx.WriteError(w, status, msg)
 }
 
 func serverError(w http.ResponseWriter, err error) {
 	slog.Error("internal error", "error", err)
-	writeError(w, http.StatusInternalServerError, "server error")
+	httpx.WriteError(w, http.StatusInternalServerError, "server error")
 }
 
 var errBodyTooLarge = errors.New("request body too large")
