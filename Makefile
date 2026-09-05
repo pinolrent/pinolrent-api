@@ -11,10 +11,11 @@ help: ## Shows this help
 	@printf "\nDev flows: make tools (one-time), make dev (one-shot), make watch (hot-reload).\n"
 
 AIR_VERSION := v1.67.4
+GOVULNCHECK_VERSION := v1.7.0
 
 tools: ## Installs dev tools: air, govulncheck and golangci-lint
 	go install github.com/air-verse/air@$(AIR_VERSION)
-	go install golang.org/x/vuln/cmd/govulncheck@latest
+	go install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
 	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(shell go env GOPATH)/bin $(GOLANGCI_VERSION)
 
 run: ## Runs the server without dev defaults (needs JWT_SECRET, like prod)
