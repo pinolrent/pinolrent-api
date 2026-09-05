@@ -49,6 +49,18 @@ func TestValidateShortSecret(t *testing.T) {
 	}
 }
 
+func TestValidateLowEntropySecret(t *testing.T) {
+	cfg := Config{
+		Port:               "8080",
+		DatabaseURL:        "x.db",
+		JWTSecret:          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		CORSAllowedOrigins: "*",
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected error for low-entropy JWT_SECRET")
+	}
+}
+
 func TestValidateOK(t *testing.T) {
 	cfg := Config{Port: "8080", DatabaseURL: "x.db", JWTSecret: testJWTSecret}
 	if err := cfg.Validate(); err != nil {

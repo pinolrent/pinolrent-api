@@ -37,6 +37,9 @@ func (c Config) Validate() error {
 	if len(c.JWTSecret) < 32 {
 		return fmt.Errorf("JWT_SECRET must be at least 32 bytes (got %d); generate one with `openssl rand -base64 32`", len(c.JWTSecret))
 	}
+	if uniqueBytes(c.JWTSecret) < 16 {
+		return fmt.Errorf("JWT_SECRET has too little entropy (only %d unique bytes, want >= 16); generate one with `openssl rand -base64 32`", uniqueBytes(c.JWTSecret))
+	}
 	if _, err := parsePort(c.Port); err != nil {
 		return err
 	}
@@ -86,6 +89,21 @@ func validOrigin(s string) bool {
 		return false
 	}
 	return true
+}
+
+// uniqueBytes counts distinct byte values in s. A 32-byte secret made of a
+// single repeated character passes a length check but has no entropy, so
+// require a minimum spread of distinct bytes.
+func uniqueBytes(s string) int {
+	var seen [256]bool
+	n := 0
+	for i := 0; i < len(s); i++ {
+		if !seen[s[i]] {
+			seen[s[i]] = true
+			n++
+		}
+	}
+	return n
 }
 
 func parsePort(s string) (int, error) {
