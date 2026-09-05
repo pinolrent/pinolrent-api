@@ -134,7 +134,7 @@ stateDiagram-v2
 ## Login y permisos
 
 - Registro público: `POST /auth/register` (comprador) y `POST /auth/register/seller` (vendedor).
-- Login devuelve un **JWT HS256 que dura 24 h** con `uid`, `role`, `iss`, `aud`, `jti`, `iat`, `exp` y `sub`. El server rechaza tokens con otro algoritmo (incluido `none`), sin `exp`/`iss`/`aud` o con firma inválida. Si el email no existe igual hace un `bcrypt` dummy para que no se pueda adivinar por tiempo de respuesta.
+- Login devuelve un par **JWT HS256**: access de **15 min** y refresh de **7 días** (un solo uso, con rotación vía `POST /auth/refresh`), con `uid`, `role`, `iss`, `aud`, `jti`, `iat`, `exp` y `sub`. El server rechaza tokens con otro algoritmo (incluido `none`), sin `exp`/`iss`/`aud` o con firma inválida. Si el email no existe igual hace un `bcrypt` dummy para que no se pueda adivinar por tiempo de respuesta.
 - `POST /auth/logout` guarda el `jti` en `revoked_tokens`. Ese token deja de funcionar (responde `401` igual que uno vencido). Otros tokens del mismo usuario siguen valiendo.
 - `Authorization: Bearer <token>` en toda ruta protegida.
 - `RequireAuth` y `RequireRole("seller")` verifican el token, buscan al usuario y lo ponen en el contexto. Además, cada operación verifica que el recurso sea tuyo: si no lo es, responde `404`.

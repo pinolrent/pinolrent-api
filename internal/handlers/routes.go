@@ -9,6 +9,7 @@ func Routes(a *API) *http.ServeMux {
 	mux.HandleFunc("POST /auth/register", a.Register)
 	mux.HandleFunc("POST /auth/register/seller", a.RegisterSeller)
 	mux.HandleFunc("POST /auth/login", a.Login)
+	mux.HandleFunc("POST /auth/refresh", a.Refresh)
 	mux.Handle("POST /auth/logout", a.Auth.RequireAuth(a.Logout))
 	mux.Handle("GET /auth/me", a.Auth.RequireAuth(a.Me))
 	mux.HandleFunc("GET /cars", a.ListCars)

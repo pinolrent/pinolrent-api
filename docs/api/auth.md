@@ -66,7 +66,7 @@ Verifica email y password y devuelve un token. No necesita login.
 **Responde** `200`:
 
 ```json
-{"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."}
+{"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...","refresh_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."}
 ```
 
 **Errores:**
@@ -78,6 +78,28 @@ Verifica email y password y devuelve un token. No necesita login.
 | `413` | `request body too large` | Más de 1 MB |
 
 > El tiempo de respuesta es el mismo exista o no el email (hace un `bcrypt` dummy si no existe), así no se puede adivinar qué emails están registrados.
+
+---
+
+## `POST /auth/refresh`
+
+Cambia un refresh token de un solo uso por un par nuevo (`token` + `refresh_token`). El presentado queda revocado: reusarlo devuelve `401`.
+
+```json
+{"refresh_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."}
+```
+
+**Responde** `200`:
+
+```json
+{"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...","refresh_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."}
+```
+
+| Código | Mensaje | Cuándo |
+|--------|---------|--------|
+| `401` | `invalid or expired token` | Refresh trucho, vencido o ya usado |
+| `400` | `refresh_token is required` | Falta el campo |
+| `400` | `invalid JSON body` | JSON roto o campos desconocidos |
 
 ---
 
@@ -132,7 +154,7 @@ Authorization: Bearer <token>
 
 ## Cómo es el token (JWT)
 
-Lo que devuelve `POST /auth/login` es un JWT firmado con **HS256**, válido **24 h**:
+Lo que devuelve `POST /auth/login` es un JWT firmado con **HS256**. El access dura **15 min** y el refresh **7 días** (un solo uso, con rotación):
 
 | Claim | Qué es |
 |-------|--------|
@@ -140,7 +162,7 @@ Lo que devuelve `POST /auth/login` es un JWT firmado con **HS256**, válido **24
 | `role` | `buyer` o `seller` |
 | `sub` | tu id como texto |
 | `iss` | `pinolrent-api` |
-| `aud` | `pinolrent-api` |
+| `aud` | `pinolrent-api` (access) o `pinolrent-api-refresh` (refresh) |
 | `jti` | id único del token (32 hex chars) |
 | `iat` | cuándo se emitió |
 | `exp` | cuándo vence |

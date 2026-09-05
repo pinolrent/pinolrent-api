@@ -115,8 +115,60 @@ func TestSignAndParseToken(t *testing.T) {
 	if claims.ExpiresAt == nil {
 		t.Fatal("ExpiresAt is nil")
 	}
-	if time.Until(claims.ExpiresAt.Time) > 25*time.Hour {
+	if time.Until(claims.ExpiresAt.Time) > 16*time.Minute {
 		t.Fatalf("ExpiresAt too far: %v", claims.ExpiresAt.Time)
+	}
+}
+
+func TestRefreshTokenRoundtrip(t *testing.T) {
+	a := newTestAuth(t)
+	u := &models.User{ID: 7, Role: "seller"}
+
+	rt, err := a.SignRefreshToken(u)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	claims, err := a.parseRefreshToken(rt)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if claims.UserID != 7 {
+		t.Fatalf("UserID = %d, want 7", claims.UserID)
+	}
+	if time.Until(claims.ExpiresAt.Time) > 7*24*time.Hour+time.Minute {
+		t.Fatalf("ExpiresAt too far: %v", claims.ExpiresAt.Time)
+	}
+
+	if _, err := a.parseToken(rt); err == nil {
+		t.Fatal("refresh token accepted as access token")
+	}
+
+	tok, err := a.SignToken(u)
+	if err != nil {
+		t.Fatalf("sign access: %v", err)
+	}
+	if _, err := a.parseRefreshToken(tok); err == nil {
+		t.Fatal("access token accepted as refresh token")
+	}
+}
+
+func TestRotateRefreshSingleUse(t *testing.T) {
+	a := newTestAuth(t)
+	uid := seedUser(t, a, "u@example.com", "buyer")
+
+	rt, err := a.SignRefreshToken(&models.User{ID: uid, Role: "buyer"})
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	access, rotated, err := a.RotateRefresh(context.Background(), rt)
+	if err != nil {
+		t.Fatalf("rotate: %v", err)
+	}
+	if access == "" || rotated == "" {
+		t.Fatal("rotate returned empty pair")
+	}
+	if _, _, err := a.RotateRefresh(context.Background(), rt); err == nil {
+		t.Fatal("reused refresh token accepted")
 	}
 }
 

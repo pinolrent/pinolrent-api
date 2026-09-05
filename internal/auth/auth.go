@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -21,12 +22,15 @@ import (
 	"github.com/pinolrent/pinolrent-api/internal/models"
 )
 
-// jwtIssuer and jwtAudience are the iss/aud claims set on every token and
-// required by the parser. They scope tokens to this service so a token signed
-// with the same secret by another service is rejected.
+// jwtIssuer and jwtAudience scope tokens to this service so a token signed
+// with the same secret by another service is rejected. Refresh tokens carry
+// a distinct audience so they cannot be used as access tokens and vice versa.
 const (
-	jwtIssuer   = "pinolrent-api"
-	jwtAudience = "pinolrent-api"
+	jwtIssuer       = "pinolrent-api"
+	jwtAudience     = "pinolrent-api"
+	jwtRefreshAud   = "pinolrent-api-refresh"
+	accessTokenTTL  = 15 * time.Minute
+	refreshTokenTTL = 7 * 24 * time.Hour
 )
 
 // Auth signs and validates HS256 JWTs and provides HTTP auth middleware.
@@ -76,10 +80,21 @@ func (a *Auth) CheckPassword(hash, pw string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(pw)) == nil
 }
 
-// SignToken issues a signed token for the user, valid for 24 hours. Every
-// token carries a unique jti (UUID) so it can be revoked before its natural
-// expiry via /auth/logout or any future invalidation path.
+// SignToken issues a short-lived access token for the user. Every token
+// carries a unique jti so it can be revoked before its natural expiry via
+// /auth/logout.
 func (a *Auth) SignToken(u *models.User) (string, error) {
+	return a.sign(u, jwtAudience, accessTokenTTL)
+}
+
+// SignRefreshToken issues a single-use refresh token for the user. Present
+// it to POST /auth/refresh to obtain a fresh access+refresh pair; the used
+// refresh token is revoked (rotation) so a leaked one cannot be replayed.
+func (a *Auth) SignRefreshToken(u *models.User) (string, error) {
+	return a.sign(u, jwtRefreshAud, refreshTokenTTL)
+}
+
+func (a *Auth) sign(u *models.User, aud string, ttl time.Duration) (string, error) {
 	now := time.Now()
 	jti, err := newJTI()
 	if err != nil {
@@ -91,9 +106,9 @@ func (a *Auth) SignToken(u *models.User) (string, error) {
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   strconv.FormatInt(u.ID, 10),
 			Issuer:    jwtIssuer,
-			Audience:  jwt.ClaimStrings{jwtAudience},
+			Audience:  jwt.ClaimStrings{aud},
 			ID:        jti,
-			ExpiresAt: jwt.NewNumericDate(now.Add(24 * time.Hour)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
 			IssuedAt:  jwt.NewNumericDate(now),
 		},
 	}
@@ -119,10 +134,27 @@ var tokenParser = jwt.NewParser(
 	jwt.WithExpirationRequired(),
 )
 
+var refreshParser = jwt.NewParser(
+	jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
+	jwt.WithIssuer(jwtIssuer),
+	jwt.WithAudience(jwtRefreshAud),
+	jwt.WithExpirationRequired(),
+)
+
 func (a *Auth) parseToken(token string) (*Claims, error) {
+	return a.parseWith(tokenParser, token)
+}
+
+// parseRefreshToken validates a refresh token. The distinct audience keeps
+// access tokens from being accepted here and vice versa.
+func (a *Auth) parseRefreshToken(token string) (*Claims, error) {
+	return a.parseWith(refreshParser, token)
+}
+
+func (a *Auth) parseWith(p *jwt.Parser, token string) (*Claims, error) {
 	claims := &Claims{}
 	//nolint:revive // t is part of the jwt.Keyfunc signature, even if unused here
-	_, err := tokenParser.ParseWithClaims(token, claims, func(t *jwt.Token) (any, error) {
+	_, err := p.ParseWithClaims(token, claims, func(t *jwt.Token) (any, error) {
 		return a.secret, nil
 	})
 	if err != nil {
@@ -191,6 +223,44 @@ func (a *Auth) GCRevoked(ctx context.Context) error {
 	_, err := a.db.ExecContext(ctx, `DELETE FROM revoked_tokens WHERE expires_at < ?`, time.Now().Unix())
 	return err
 }
+
+// RotateRefresh validates a single-use refresh token and swaps it for a
+// fresh access+refresh pair. The presented token is revoked so it cannot be
+// replayed; a reuse attempt fails with errRefreshReused.
+func (a *Auth) RotateRefresh(ctx context.Context, token string) (access, refresh string, err error) {
+	claims, err := a.parseRefreshToken(strings.TrimSpace(token))
+	if err != nil {
+		return "", "", err
+	}
+	revoked, err := a.IsRevoked(ctx, claims.JTI())
+	if err != nil {
+		return "", "", err
+	}
+	if revoked {
+		return "", "", errRefreshReused
+	}
+	var u models.User
+	err = a.db.QueryRowContext(ctx,
+		`SELECT id, email, password_hash, role FROM users WHERE id = ?`, claims.UserID).
+		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role)
+	if err != nil {
+		return "", "", err
+	}
+	if err := a.Revoke(ctx, claims.UserID, claims.JTI(), claims.ExpiresAtUnix()); err != nil {
+		return "", "", err
+	}
+	access, err = a.SignToken(&u)
+	if err != nil {
+		return "", "", err
+	}
+	refresh, err = a.SignRefreshToken(&u)
+	if err != nil {
+		return "", "", err
+	}
+	return access, refresh, nil
+}
+
+var errRefreshReused = errors.New("refresh token already used")
 
 // IsRevoked reports whether the given jti is in the revoked_tokens table.
 func (a *Auth) IsRevoked(ctx context.Context, jti string) (bool, error) {

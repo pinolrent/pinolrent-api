@@ -16,7 +16,7 @@ Las rutas protegidas necesitan:
 Authorization: Bearer <token>
 ```
 
-El token lo sacas de `POST /auth/login` y dura **24 h**.
+El token lo sacas de `POST /auth/login`: el access dura **15 min** y el refresh **7 días** (se renueva con `POST /auth/refresh`).
 
 Roles:
 

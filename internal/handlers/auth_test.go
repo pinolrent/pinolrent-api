@@ -117,11 +117,65 @@ func TestLogin(t *testing.T) {
 		t.Fatalf("status = %d body %s", rec.Code, rec.Body.String())
 	}
 	var out struct {
-		Token string `json:"token"`
+		Token        string `json:"token"`
+		RefreshToken string `json:"refresh_token"`
 	}
 	decodeJSON(t, rec, &out)
 	if out.Token == "" {
 		t.Fatal("login returned empty token")
+	}
+	if out.RefreshToken == "" {
+		t.Fatal("login returned empty refresh token")
+	}
+}
+
+func TestRefreshRotates(t *testing.T) {
+	a := newTestAPI(t)
+	registerBuyer(t, a, "user@example.com", "secret123")
+
+	rec := doJSON(t, a, "POST", "/auth/login", "", map[string]any{
+		"email": "user@example.com", "password": "secret123",
+	})
+	var login struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+	decodeJSON(t, rec, &login)
+
+	rec = doJSON(t, a, "POST", "/auth/refresh", "", map[string]any{
+		"refresh_token": login.RefreshToken,
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("refresh: status = %d body %s", rec.Code, rec.Body.String())
+	}
+	var out struct {
+		Token        string `json:"token"`
+		RefreshToken string `json:"refresh_token"`
+	}
+	decodeJSON(t, rec, &out)
+	if out.Token == "" || out.RefreshToken == "" {
+		t.Fatalf("refresh returned empty pair: %+v", out)
+	}
+	if out.RefreshToken == login.RefreshToken {
+		t.Fatal("refresh token was not rotated")
+	}
+
+	rec = doJSON(t, a, "POST", "/auth/refresh", "", map[string]any{
+		"refresh_token": login.RefreshToken,
+	})
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("reused refresh: status = %d, want 401 (body %s)", rec.Code, rec.Body.String())
+	}
+}
+
+func TestRefreshRejectsAccessToken(t *testing.T) {
+	a := newTestAPI(t)
+	token := registerBuyer(t, a, "user@example.com", "secret123")
+
+	rec := doJSON(t, a, "POST", "/auth/refresh", "", map[string]any{
+		"refresh_token": token,
+	})
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("access as refresh: status = %d, want 401 (body %s)", rec.Code, rec.Body.String())
 	}
 }
 

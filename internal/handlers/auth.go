@@ -136,7 +136,7 @@ func init() {
 	dummyHash = h
 }
 
-// Login validates credentials and returns a signed token.
+// Login validates credentials and returns an access+refresh token pair.
 func (a *API) Login(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		Email    string `json:"email"`
@@ -173,5 +173,32 @@ func (a *API) Login(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"token": token})
+	refresh, err := a.Auth.SignRefreshToken(&u)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"token": token, "refresh_token": refresh})
+}
+
+// Refresh swaps a single-use refresh token for a fresh access+refresh pair.
+// The presented token is revoked (rotation); replaying it returns 401.
+func (a *API) Refresh(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+	if err := decodeBody(w, r, &in); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+	if strings.TrimSpace(in.RefreshToken) == "" {
+		writeError(w, http.StatusBadRequest, "refresh_token is required")
+		return
+	}
+	access, refresh, err := a.Auth.RotateRefresh(r.Context(), in.RefreshToken)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "invalid or expired token")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"token": access, "refresh_token": refresh})
 }
