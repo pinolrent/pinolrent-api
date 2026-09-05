@@ -8,6 +8,7 @@
 | `DATABASE_URL` | `pinolrent.db` | no | Dónde está el archivo SQLite |
 | `JWT_SECRET` | — | **sí** | Secreto para firmar los tokens (mínimo 32 caracteres) |
 | `CORS_ALLOWED_ORIGINS` | `*` | no | Qué orígenes pueden llamar a la API, separados por coma. `*` = todos |
+| `ENV` | `dev` | no | Entorno: `dev` (default) o `prod`/`production`. En prod `CORS_ALLOWED_ORIGINS=*` es rechazado |
 
 El orden de prioridad es: **variables del shell > `.env` > valores por defecto**. Si una variable está vacía se ignora.
 
