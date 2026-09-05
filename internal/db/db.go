@@ -30,7 +30,7 @@ func Open(url string) (*sql.DB, error) {
 	mem := url == ":memory:"
 	var dsn string
 	if mem {
-		dsn = "file::memory:?cache=shared"
+		dsn = "file::memory:?cache=shared&_pragma=foreign_keys(1)"
 	} else {
 		dsn = fmt.Sprintf("file:%s?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=journal_size_limit(67108864)", url)
 	}

@@ -10,5 +10,11 @@ bin/
 tmp/
 air.log
 
+# Test artifacts
+*.out
+*.test
+*.prof
+.DS_Store
+
 # AI stuff
 .codegraph
