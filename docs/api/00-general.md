@@ -49,8 +49,8 @@ Siempre así:
 ## Límites
 
 - **Body máximo 1 MB.** JSON estricto: si mandas campos que no existen o JSON roto → `400 {"error":"invalid JSON body"}`; si te pasas del tamaño → `413`.
-- **Límite por IP** solo en rutas `/auth/*`: **30 por minuto** (ráfaga de 30). Si te pasas → `429 {"error":"too many requests"}`.
-- **CORS** abierto a todos por defecto (`CORS_ALLOWED_ORIGINS=*`). En producción poné tus orígenes separados por coma, ej. `CORS_ALLOWED_ORIGINS=https://app.example.com`. Los preflights `OPTIONS` responden `204`; si el origen no está permitido, no lleva `Access-Control-Allow-Origin` y el navegador lo bloquea. Solo `GET`, `POST`, `PATCH`, `OPTIONS` y headers `Authorization`, `Content-Type`.
+- **Límite por IP**: `/auth/*` → **30 por minuto** (ráfaga 30); escritura (`POST /reservations`, `POST /seller/cars`, `POST /reservations/*/payment`) → **120 por minuto** (ráfaga 20). Si te pasas → `429 {"error":"too many requests"}`. Respeta `X-Forwarded-For` / `X-Real-IP`.
+- **CORS** abierto a todos por defecto (`CORS_ALLOWED_ORIGINS=*`), con `ENV=prod` o `production` es rechazado. En producción poné tus orígenes separados por coma, ej. `CORS_ALLOWED_ORIGINS=https://app.example.com`. Los preflights `OPTIONS` responden `204`; si el origen no está permitido, no lleva `Access-Control-Allow-Origin` y el navegador lo bloquea. Solo `GET`, `POST`, `PATCH`, `OPTIONS` y headers `Authorization`, `Content-Type`. Trailing `/` en origen es tolerado.
 
 ## Paginación
 
@@ -59,7 +59,7 @@ Las listas (`GET /cars`, `GET /seller/cars`, `GET /reservations`, `GET /seller/r
 | Parámetro | Por defecto | Reglas |
 |-----------|-------------|--------|
 | `limit` | `50` | `1..200`; si no → `400 "invalid limit"` |
-| `offset` | `0` | `>= 0`; si no → `400 "invalid offset"` |
+| `offset` | `0` | `0..10000`; si no → `400 "invalid offset"` |
 
 Responden un **array simple**. Para saber si hay más, pedí `limit+1` y fijate si vino uno extra.
 

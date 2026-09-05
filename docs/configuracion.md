@@ -39,11 +39,17 @@ export JWT_SECRET="$(openssl rand -base64 32)"
 go run ./cmd/api   # o el binario compilado con make build
 ```
 
+### `ENV` y `PORT`
+
+- `ENV` por defecto `dev`. Con `ENV=prod` o `ENV=production`, `CORS_ALLOWED_ORIGINS=*` es rechazado.
+- `PORT` debe ser `1..65535` o el server no arranca.
+- Un `.env` malformado (ej. línea sin `=`) hace que no arranque — se muestra el error en el log.
+
 Qué pasa al arrancar:
 
-1. Lee `.env` si existe (lo que ya está en el shell manda).
-2. Valida `JWT_SECRET` — si falta o es corto, se apaga.
-3. Abre SQLite con WAL y aplica las migraciones que falten (quedan registradas en `goose_db_version`, nunca borran datos). Si es `:memory:` usa una sola conexión, si no hasta 8.
+1. Lee `.env` si existe (lo que ya está en el shell manda). Si está mal formado, se apaga.
+2. Valida `JWT_SECRET` — si falta o es corto, se apaga. Valida `PORT` y `CORS_ALLOWED_ORIGINS`/`ENV`.
+3. Abre SQLite con WAL y aplica las migraciones que falten (quedan registradas en `goose_db_version`, nunca borran datos). Si es `:memory:` usa una sola conexión, si no hasta 8 (con `MaxIdleTime` 5 min / `MaxLifetime` 30 min). Si la base está ocupada, reintenta con backoff.
 4. Levanta el HTTP y espera `SIGINT`/`SIGTERM` para apagarse limpio (hasta 10 s).
 
 No hay usuario admin: compradores y vendedores se crean con `POST /auth/register` y `POST /auth/register/seller`.

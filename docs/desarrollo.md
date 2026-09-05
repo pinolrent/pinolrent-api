@@ -17,9 +17,10 @@ make dev          # levanta el server con valores de desarrollo
 | `make watch` | Recarga automática al editar `.go`, `.env` o `.toml` |
 | `make run` | `go run ./cmd/api` directo (pide variables reales) |
 | `make build` | Compila a `bin/pinolrent-api` con la versión del git |
-| `make test` | Corre los tests (`go test -count=1 -timeout 120s ./...`) |
-| `make test-race` | Tests con detector de carreras (`CGO_ENABLED=1`, necesita gcc) |
-| `make cover` | Corre tests y muestra resumen de cobertura |
+| `make test` | Corre los tests (`go test -count=1 -timeout 180s ./...`) |
+| `make test-race` | Tests con detector de carreras (`CGO_ENABLED=1`, necesita gcc, 300s) |
+| `make cover` | Corre tests y muestra resumen de cobertura (180s) |
+| `make vuln` | `govulncheck ./...` |
 | `make vet` | `go vet ./...` |
 | `make lint` | `golangci-lint run ./...` (debe quedar en 0) |
 | `make fmt` | Formatea con `gofmt -w` |
@@ -70,4 +71,4 @@ Los tests cubren `auth`, `config`, `db`, `handlers` y `ratelimit`. El flujo comp
 
 ## CI
 
-`.github/workflows/ci.yml` corre en cada push a `main` y en cada PR: `make vet`, `make test`, `make test-race`, `golangci-lint v2.13.2`, `make build` y `make demo`. La versión del linter en el workflow debe coincidir con `GOLANGCI_VERSION` del Makefile.
+`.github/workflows/ci.yml` corre en cada push a `main` y en cada PR: `go mod verify`, `make vet`, `make test`, `make test-race`, `golangci-lint v2.13.2`, `govulncheck`, `make build` y `make demo` (36 checks). `timeout-minutes: 15` y `concurrency` cancela corridas viejas del mismo branch. La versión del linter en el workflow debe coincidir con `GOLANGCI_VERSION` del Makefile.

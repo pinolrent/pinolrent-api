@@ -75,7 +75,8 @@ erDiagram
 Lo importante del esquema (`internal/db/migrations/`):
 
 - `users.email` es único (sin distinguir mayúsculas/minúsculas). `role` solo puede ser `buyer` o `seller`.
-- `cars.owner_id` dice quién es el dueño del auto. `price_per_day` en centavos, no puede ser negativo.
+- `cars.owner_id` dice quién es el dueño del auto. `price_per_day` en centavos, `0..100_000_000` con `CHECK` en DB (migración 00005).
+- Las reservas tienen `CHECK(end_date >= start_date)` en DB.
 - Una reserva tiene **a lo sumo un pago** (`payments.reservation_id` es único).
 - `revoked_tokens` guarda los tokens que se cerraron con `/auth/logout`. Un proceso interno borra cada 10 minutos los que ya vencieron.
 - Las fechas se guardan como texto `YYYY-MM-DD`.
@@ -83,9 +84,9 @@ Lo importante del esquema (`internal/db/migrations/`):
 
 ## Cómo funciona SQLite acá
 
-- Se abre con **WAL**, espera hasta 5 segundos si la base está ocupada y usa hasta 8 conexiones (1 si es `:memory:`).
+- Se abre con **WAL**, espera hasta 5 segundos si la base está ocupada y usa hasta 8 conexiones (1 si es `:memory:`) con `MaxIdleTime` 5 min / `MaxLifetime` 30 min.
 - Las operaciones que tocan varias tablas usan `BEGIN IMMEDIATE` para que dos reservas no choquen al mismo tiempo.
-- `synchronous=NORMAL` (lo que recomienda SQLite con WAL): si se cae el proceso no se pierde nada.
+- `synchronous=NORMAL` (lo que recomienda SQLite con WAL): si se cae el proceso no se pierde nada. Si al migrar la base está ocupada, reintenta con backoff (hasta 5 veces).
 - Hay índices en `cars(owner_id)`, `reservations(user_id)` y `reservations(car_id, start_date, end_date)` para que las búsquedas sean rápidas.
 
 ## Estados de una reserva
@@ -157,14 +158,15 @@ stateDiagram-v2
 
 ## Límite de intentos
 
-- Solo en rutas que empiezan con `/auth/`, por IP.
-- **30 por minuto** (se recarga a 0.5 por segundo, ráfaga de 30). Si te pasas → `429 {"error":"too many requests"}`.
+- En rutas `/auth/*` (auth) por IP: **30 por minuto** (0.5/s, ráfaga 30).
+- En escritura `POST /reservations`, `POST /seller/cars`, `POST /reservations/*/payment`: **120 por minuto** (2/s, ráfaga 20).
+- Si te pasas → `429 {"error":"too many requests"}`.
 - Es en memoria, por proceso. Los contadores se borran tras 10 min sin uso.
 
 ## Server y logs
 
 - Timeouts: header 5 s, lectura 10 s, escritura 30 s, idle 60 s. Header máximo 1 MB.
-- Cada request deja una línea de log con método, ruta, status y duración.
+- Cada request deja una línea de log con método, ruta, status y duración; si manda `X-Request-Id` se incluye para correlación. Headers de seguridad en cada respuesta (`nosniff`, `DENY`, `Referrer-Policy`, `HSTS` si TLS).
 - Si algo hace panic, se captura y responde `500 {"error":"server error"}`.
 - `GET /health` responde `{"status":"ok","version":"..."}` (o `503 degraded` si la base no responde). La versión se inyecta con `make build`.
 - Al recibir `SIGINT`/`SIGTERM` apaga limpio en hasta 10 s.

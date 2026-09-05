@@ -36,7 +36,7 @@ Sin resultados → `[]`.
 | `400` | `invalid end_date, expected YYYY-MM-DD` | Formato mal |
 | `400` | `end_date must be on or after start_date` | Rango al revés |
 | `400` | `invalid owner_id` | No es un número válido |
-| `400` | `invalid limit` / `invalid offset` | Paginación mal |
+| `400` | `invalid limit` / `invalid offset` | Paginación mal (`offset` máx. 10000) |
 
 ---
 
@@ -123,9 +123,10 @@ Prende o apaga uno de tus autos. Necesita ser `seller`.
 |--------|---------|--------|
 | `400` | `invalid car id` | `{id}` no es número |
 | `400` | `active is required` | Falta el campo (debe ser `true` o `false`) |
+| `409` | `car has future reservations, cannot deactivate` | Intentás apagar con reservas futuras |
 | `404` | `car not found` | No existe o no es tuyo |
 | `401` / `403` | ver [00-general](00-general.md) | Sin token o sin permiso |
 
 ---
 
-> Apagar un auto no borra sus reservas viejas, solo deja de aparecer en `GET /cars` y no acepta reservas nuevas (`409 car is not active`).
+> Apagar un auto no borra sus reservas viejas, solo deja de aparecer en `GET /cars` y no acepta reservas nuevas (`409 car is not active`). Si tiene reservas futuras (`pending`/`confirmed`) no deja desactivar (`409`).
