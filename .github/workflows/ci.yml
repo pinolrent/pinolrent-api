@@ -51,19 +51,65 @@ jobs:
       - name: go test -race
         run: make test-race
 
+      - name: Coverage
+        run: make cover
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:
           version: v2.13.2
 
+  vuln:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
       - name: Govulncheck
         uses: golang/govulncheck-action@v1
         with:
           work-dir: .
-          go-version-input: ${{ matrix.go-version }}
+          go-version-input: "1.26"
 
-      - name: Coverage
-        run: make cover
+  build-demo:
+    name: build and e2e smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [test]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
 
       - name: Build
         run: make build
