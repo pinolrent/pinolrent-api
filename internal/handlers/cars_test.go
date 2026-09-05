@@ -166,6 +166,24 @@ func TestListMyCars(t *testing.T) {
 	}
 }
 
+func TestPatchCarDeactivateGuard(t *testing.T) {
+	a := newTestAPI(t)
+	seller := newSeller(t, a)
+	car := createCar(t, a, seller, map[string]any{"name": "Guard", "price_per_day": 100})
+	buyer := registerBuyer(t, a, "buyer-guard@example.com", "secret123")
+	createReservation(t, a, buyer, map[string]any{
+		"car_id": car.ID, "start_date": futureDate(10), "end_date": futureDate(12),
+	})
+	rec := doJSON(t, a, "PATCH", "/seller/cars/"+itoa(car.ID), seller, map[string]any{"active": false})
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("deactivate with future reservation: status = %d, want 409 (body %s)", rec.Code, rec.Body.String())
+	}
+	rec = doJSON(t, a, "PATCH", "/seller/cars/"+itoa(car.ID), seller, map[string]any{"active": true})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("reactivate: status = %d body %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestPatchCarValidates(t *testing.T) {
 	a := newTestAPI(t)
 	token := newSeller(t, a)
@@ -344,6 +362,15 @@ func TestListCarsByOwner(t *testing.T) {
 
 	if rec := doJSON(t, a, "GET", "/cars?owner_id=abc", "", nil); rec.Code != http.StatusBadRequest {
 		t.Fatalf("bad owner_id: status = %d, want 400", rec.Code)
+	}
+}
+
+func TestPaginateOffsetCap(t *testing.T) {
+	a := newTestAPI(t)
+	createCar(t, a, newSeller(t, a), map[string]any{"name": "X", "price_per_day": 1})
+	rec := doJSON(t, a, "GET", "/cars?offset=10001", "", nil)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("offset > 10000: status = %d, want 400", rec.Code)
 	}
 }
 

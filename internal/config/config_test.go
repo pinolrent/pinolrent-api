@@ -63,6 +63,33 @@ func TestValidateBadCORS(t *testing.T) {
 	}
 }
 
+func TestValidateBadPort(t *testing.T) {
+	for _, tc := range []string{"abc", "0", "99999", "-1"} {
+		cfg := Config{JWTSecret: testJWTSecret, Port: tc}
+		if err := cfg.Validate(); err == nil {
+			t.Fatalf("expected error for PORT %q", tc)
+		}
+	}
+}
+
+func TestValidateCORSStarInProd(t *testing.T) {
+	cfg := Config{JWTSecret: testJWTSecret, CORSAllowedOrigins: "*", Env: "prod"}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected error for CORS=* in prod")
+	}
+	cfg.Env = "production"
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected error for CORS=* in production")
+	}
+}
+
+func TestValidOriginTrailingSlash(t *testing.T) {
+	cfg := Config{CORSAllowedOrigins: "https://app.example.com/"}
+	if _, err := cfg.CORSOrigins(); err != nil {
+		t.Fatalf("trailing slash should be accepted: %v", err)
+	}
+}
+
 func TestCORSOrigins(t *testing.T) {
 	cases := []struct {
 		name    string

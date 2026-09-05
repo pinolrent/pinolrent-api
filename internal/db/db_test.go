@@ -288,3 +288,42 @@ func TestEmailCaseInsensitiveUnique(t *testing.T) {
 		t.Fatal("expected UNIQUE violation for case-different email")
 	}
 }
+
+func TestPriceCheckConstraint(t *testing.T) {
+	d, err := Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = d.Close() })
+	ctx := context.Background()
+	if _, err := d.ExecContext(ctx, `INSERT INTO users (email, password_hash, role) VALUES ('s@example.com','h','seller')`); err != nil {
+		t.Fatalf("insert seller: %v", err)
+	}
+	if _, err := d.ExecContext(ctx, `INSERT INTO cars (owner_id, name, price_per_day) VALUES (1,'Over',100000001)`); err == nil {
+		t.Fatal("expected CHECK to reject price > 100M")
+	}
+	if _, err := d.ExecContext(ctx, `INSERT INTO cars (owner_id, name, price_per_day) VALUES (1,'Exact',100000000)`); err != nil {
+		t.Fatalf("price 100M should be allowed: %v", err)
+	}
+}
+
+func TestReservationDateCheck(t *testing.T) {
+	d, err := Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = d.Close() })
+	ctx := context.Background()
+	if _, err := d.ExecContext(ctx, `INSERT INTO users (email, password_hash, role) VALUES ('u@example.com','h','buyer')`); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+	if _, err := d.ExecContext(ctx, `INSERT INTO users (email, password_hash, role) VALUES ('s@example.com','h','seller')`); err != nil {
+		t.Fatalf("insert seller: %v", err)
+	}
+	if _, err := d.ExecContext(ctx, `INSERT INTO cars (owner_id, name, price_per_day) VALUES (2,'Car',100)`); err != nil {
+		t.Fatalf("insert car: %v", err)
+	}
+	if _, err := d.ExecContext(ctx, `INSERT INTO reservations (user_id, car_id, start_date, end_date) VALUES (1,1,'2026-10-05','2026-10-01')`); err == nil {
+		t.Fatal("expected CHECK to reject end < start")
+	}
+}
