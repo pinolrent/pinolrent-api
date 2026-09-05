@@ -67,7 +67,7 @@ func (c *Claims) ExpiresAtUnix() int64 {
 
 // HashPassword returns the bcrypt hash of pw.
 func (a *Auth) HashPassword(pw string) (string, error) {
-	b, err := bcrypt.GenerateFromPassword([]byte(pw), 12)
+	b, err := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.DefaultCost)
 	return string(b), err
 }
 
