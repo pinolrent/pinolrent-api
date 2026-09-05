@@ -18,18 +18,23 @@ func (r *statusRecorder) WriteHeader(status int) {
 }
 
 // WithRequestLog wraps a handler and logs one line per request with method,
-// path, status, and duration.
+// path, status, and duration. If the request carries X-Request-Id, it is
+// included in the log for correlation.
 func WithRequestLog(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rec, r)
-		slog.Info("request",
+		args := []any{
 			"method", r.Method,
 			"path", r.URL.Path,
 			"status", rec.status,
 			"duration_ms", time.Since(start).Milliseconds(),
-		)
+		}
+		if id := r.Header.Get("X-Request-Id"); id != "" {
+			args = append(args, "request_id", id)
+		}
+		slog.Info("request", args...)
 	})
 }
 

@@ -27,7 +27,11 @@ func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, nil)))
 
 	// Load .env if present. Values already set in the environment win over it.
-	_ = godotenv.Load()
+	// A malformed .env is not silently ignored — fail fast so typos are caught.
+	if err := godotenv.Load(); err != nil && !errors.Is(err, os.ErrNotExist) {
+		slog.Error("invalid .env file", "error", err)
+		os.Exit(1)
+	}
 
 	cfg := config.Load()
 	if err := cfg.Validate(); err != nil {

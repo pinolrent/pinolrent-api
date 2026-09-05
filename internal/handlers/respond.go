@@ -123,6 +123,9 @@ func paginate(r *http.Request) (limit, offset int, errMsg string) {
 		if err != nil || n < 0 {
 			return 0, 0, "invalid offset"
 		}
+		if n > 10000 {
+			return 0, 0, "invalid offset"
+		}
 		offset = n
 	}
 	return limit, offset, ""

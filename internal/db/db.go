@@ -44,6 +44,8 @@ func Open(url string) (*sql.DB, error) {
 	} else {
 		d.SetMaxOpenConns(8)
 		d.SetMaxIdleConns(8)
+		d.SetConnMaxIdleTime(5 * time.Minute)
+		d.SetConnMaxLifetime(30 * time.Minute)
 	}
 
 	if err := migrate(d); err != nil {

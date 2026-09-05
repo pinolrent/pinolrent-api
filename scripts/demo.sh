@@ -2,7 +2,7 @@
 # Self-contained end-to-end smoke test. Builds the API, boots it on a
 # temporary port with a throwaway database, exercises the seller/buyer flow
 # and asserts the hardened edge cases. Exits non-zero on any failure.
-set -u
+set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
@@ -72,7 +72,8 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 echo "== build =="
-if ! go build -o "$BIN" ./cmd/api; then
+VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo dev)"
+if ! go build -ldflags "-X main.version=$VERSION" -o "$BIN" ./cmd/api; then
   echo "build FAIL"; exit 1
 fi
 

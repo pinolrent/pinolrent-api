@@ -1,16 +1,16 @@
 # Air configuration for the dev hot-reload flow (`make watch`).
 # Docs: https://github.com/air-verse/air
 root = "."
-tmp_dir = "/tmp/air-pinolrent-api"
+tmp_dir = "tmp/air"
 
 [build]
-  cmd = "go build -o /tmp/air-pinolrent-api/api ./cmd/api"
-  bin = "/tmp/air-pinolrent-api/api"
+  cmd = "go build -o tmp/air/api ./cmd/api"
+  bin = "tmp/air/api"
   include_ext = ["go", "env", "toml"]
   exclude_regex = ["_test\\.go$", "\\.codegraph"]
   exclude_dir = ["bin", "bruno", "scripts", ".git"]
   delay = 1000
-  stop_on_error = false
+  stop_on_error = true
   log = "air.log"
 
 [log]

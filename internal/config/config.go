@@ -36,6 +36,9 @@ func (c Config) Validate() error {
 	if len(c.JWTSecret) < 32 {
 		return fmt.Errorf("JWT_SECRET must be at least 32 bytes (got %d); generate one with `openssl rand -base64 32`", len(c.JWTSecret))
 	}
+	if _, err := parsePort(c.Port); err != nil {
+		return err
+	}
 	if _, err := c.CORSOrigins(); err != nil {
 		return err
 	}
@@ -79,4 +82,18 @@ func validOrigin(s string) bool {
 		return false
 	}
 	return true
+}
+
+func parsePort(s string) (int, error) {
+	n := 0
+	for _, ch := range s {
+		if ch < '0' || ch > '9' {
+			return 0, fmt.Errorf("PORT must be a number (got %q)", s)
+		}
+		n = n*10 + int(ch-'0')
+	}
+	if n < 1 || n > 65535 {
+		return 0, fmt.Errorf("PORT out of range 1-65535 (got %q)", s)
+	}
+	return n, nil
 }
