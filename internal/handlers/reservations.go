@@ -93,7 +93,9 @@ func (a *API) CreateReservation(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "end_date must be on or after start_date")
 		return
 	}
-	if end.Sub(start) > maxRentalDays*24*time.Hour {
+	// Dates are inclusive, so a same-day rental is 1 day. A 30-day cap
+	// means end-start must stay below 30*24h (end = start+30d is 31 days).
+	if end.Sub(start) >= maxRentalDays*24*time.Hour {
 		writeError(w, http.StatusBadRequest, "reservation cannot be longer than "+strconv.Itoa(maxRentalDays)+" days")
 		return
 	}

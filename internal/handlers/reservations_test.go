@@ -147,13 +147,13 @@ func TestCreateReservationMaxDays(t *testing.T) {
 	token := registerBuyer(t, a, "user@example.com", "secret123")
 
 	if rec := doJSON(t, a, "POST", "/reservations", token, map[string]any{
-		"car_id": car.ID, "start_date": futureDate(1), "end_date": futureDate(31),
+		"car_id": car.ID, "start_date": futureDate(1), "end_date": futureDate(30),
 	}); rec.Code != http.StatusCreated {
 		t.Fatalf("30 days: status = %d, want 201 (body %s)", rec.Code, rec.Body.String())
 	}
 
 	if rec := doJSON(t, a, "POST", "/reservations", token, map[string]any{
-		"car_id": car.ID, "start_date": futureDate(50), "end_date": futureDate(81),
+		"car_id": car.ID, "start_date": futureDate(50), "end_date": futureDate(80),
 	}); rec.Code != http.StatusBadRequest {
 		t.Fatalf("31 days: status = %d, want 400 (body %s)", rec.Code, rec.Body.String())
 	}
