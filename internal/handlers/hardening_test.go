@@ -40,7 +40,7 @@ func TestCreateReservationConcurrent(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			rec := doJSON(t, api, "POST", "/reservations", token, map[string]any{
-				"car_id": car.ID, "start_date": "2026-12-01", "end_date": "2026-12-03",
+				"car_id": car.ID, "start_date": futureDate(10), "end_date": futureDate(12),
 			})
 			switch rec.Code {
 			case http.StatusCreated:

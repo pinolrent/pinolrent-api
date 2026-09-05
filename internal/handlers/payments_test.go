@@ -15,7 +15,7 @@ func seedReservation(t *testing.T, a *API) (buyerToken, sellerToken string, v re
 	car := createCar(t, a, sellerToken, map[string]any{"name": "Toyota Yaris", "price_per_day": 45000})
 	buyerToken = registerBuyer(t, a, "user@example.com", "secret123")
 	v = createReservation(t, a, buyerToken, map[string]any{
-		"car_id": car.ID, "start_date": "2026-10-01", "end_date": "2026-10-03",
+		"car_id": car.ID, "start_date": futureDate(10), "end_date": futureDate(12),
 	})
 	return buyerToken, sellerToken, v
 }
@@ -113,7 +113,7 @@ func TestRecordPaymentCancelled(t *testing.T) {
 	car := seedCar(t, a)
 	token := registerBuyer(t, a, "user@example.com", "secret123")
 	v := createReservation(t, a, token, map[string]any{
-		"car_id": car.ID, "start_date": "2026-10-01", "end_date": "2026-10-03",
+		"car_id": car.ID, "start_date": futureDate(10), "end_date": futureDate(12),
 	})
 
 	if _, err := a.DB.ExecContext(context.Background(), `UPDATE reservations SET status = 'cancelled' WHERE id = ?`, v.ID); err != nil {
@@ -149,7 +149,7 @@ func TestConfirmReservation(t *testing.T) {
 	}
 
 	// confirmed reservation blocks overlapping booking via cars endpoint
-	rec = doJSON(t, a, "GET", "/cars?start_date=2026-10-02&end_date=2026-10-02", "", nil)
+	rec = doJSON(t, a, "GET", "/cars?start_date="+futureDate(11)+"&end_date="+futureDate(11), "", nil)
 	var cars []models.Car
 	decodeJSON(t, rec, &cars)
 	if len(cars) != 0 {

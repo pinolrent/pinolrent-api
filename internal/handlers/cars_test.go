@@ -197,13 +197,13 @@ func TestListCarsByDates(t *testing.T) {
 		t.Fatalf("buyer id: %v", err)
 	}
 	if _, err := a.DB.ExecContext(context.Background(),
-		`INSERT INTO reservations (user_id, car_id, start_date, end_date, status) VALUES (?, ?, '2026-09-05', '2026-09-10', 'pending')`,
-		buyerID, booked.ID,
+		`INSERT INTO reservations (user_id, car_id, start_date, end_date, status) VALUES (?, ?, ?, ?, 'pending')`,
+		buyerID, booked.ID, futureDate(5), futureDate(10),
 	); err != nil {
 		t.Fatalf("seed reservation: %v", err)
 	}
 
-	rec := doJSON(t, a, "GET", "/cars?start_date=2026-09-07&end_date=2026-09-08", "", nil)
+	rec := doJSON(t, a, "GET", "/cars?start_date="+futureDate(7)+"&end_date="+futureDate(8), "", nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d body %s", rec.Code, rec.Body.String())
 	}
@@ -213,13 +213,13 @@ func TestListCarsByDates(t *testing.T) {
 		t.Fatalf("expected only free car, got %+v", cars)
 	}
 
-	rec = doJSON(t, a, "GET", "/cars?start_date=2026-09-01&end_date=2026-09-02", "", nil)
+	rec = doJSON(t, a, "GET", "/cars?start_date="+futureDate(1)+"&end_date="+futureDate(2), "", nil)
 	decodeJSON(t, rec, &cars)
 	if len(cars) != 2 {
 		t.Fatalf("expected both cars outside range, got %+v", cars)
 	}
 
-	rec = doJSON(t, a, "GET", "/cars?start_date=2026-09-10&end_date=2026-09-12", "", nil)
+	rec = doJSON(t, a, "GET", "/cars?start_date="+futureDate(10)+"&end_date="+futureDate(12), "", nil)
 	decodeJSON(t, rec, &cars)
 	if len(cars) != 1 || cars[0].ID != free.ID {
 		t.Fatalf("boundary end overlap: expected only free car, got %+v", cars)
@@ -336,9 +336,9 @@ func TestListCarsByOwner(t *testing.T) {
 	// combined with the date filter: bookings still exclude the car
 	buyerToken := registerBuyer(t, a, "cli@example.com", "secret123")
 	createReservation(t, a, buyerToken, map[string]any{
-		"car_id": cb.ID, "start_date": "2026-09-05", "end_date": "2026-09-10",
+		"car_id": cb.ID, "start_date": futureDate(5), "end_date": futureDate(10),
 	})
-	if cars := get("?owner_id=" + itoa(cb.OwnerID) + "&start_date=2026-09-07&end_date=2026-09-08"); len(cars) != 0 {
+	if cars := get("?owner_id=" + itoa(cb.OwnerID) + "&start_date="+futureDate(7)+"&end_date="+futureDate(8)); len(cars) != 0 {
 		t.Fatalf("owner+dates should exclude booked car, got %+v", cars)
 	}
 

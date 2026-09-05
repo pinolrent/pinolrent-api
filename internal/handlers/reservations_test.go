@@ -32,7 +32,7 @@ func TestCreateReservation(t *testing.T) {
 	token := registerBuyer(t, a, "user@example.com", "secret123")
 
 	v := createReservation(t, a, token, map[string]any{
-		"car_id": car.ID, "start_date": "2026-09-10", "end_date": "2026-09-12",
+		"car_id": car.ID, "start_date": futureDate(10), "end_date": futureDate(12),
 	})
 	if v.Status != "pending" || v.CarID != car.ID || v.Car == nil || v.Car.Name != "Toyota Yaris" {
 		t.Fatalf("unexpected reservation: %+v", v)
@@ -45,7 +45,7 @@ func TestCreateReservationValidates(t *testing.T) {
 	token := registerBuyer(t, a, "user@example.com", "secret123")
 
 	if rec := doJSON(t, a, "POST", "/reservations", "", map[string]any{
-		"car_id": car.ID, "start_date": "2026-09-10", "end_date": "2026-09-12",
+		"car_id": car.ID, "start_date": futureDate(10), "end_date": futureDate(12),
 	}); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("no auth: status = %d, want 401", rec.Code)
 	}
@@ -54,9 +54,9 @@ func TestCreateReservationValidates(t *testing.T) {
 		name string
 		body map[string]any
 	}{
-		{"bad start", map[string]any{"car_id": car.ID, "start_date": "garbage", "end_date": "2026-09-12"}},
-		{"reversed", map[string]any{"car_id": car.ID, "start_date": "2026-09-12", "end_date": "2026-09-10"}},
-		{"missing car", map[string]any{"start_date": "2026-09-10", "end_date": "2026-09-12"}},
+		{"bad start", map[string]any{"car_id": car.ID, "start_date": "garbage", "end_date": futureDate(12)}},
+		{"reversed", map[string]any{"car_id": car.ID, "start_date": futureDate(12), "end_date": futureDate(10)}},
+		{"missing car", map[string]any{"start_date": futureDate(10), "end_date": futureDate(12)}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -68,7 +68,7 @@ func TestCreateReservationValidates(t *testing.T) {
 	}
 
 	if rec := doJSON(t, a, "POST", "/reservations", token, map[string]any{
-		"car_id": 99999, "start_date": "2026-09-10", "end_date": "2026-09-12",
+		"car_id": 99999, "start_date": futureDate(10), "end_date": futureDate(12),
 	}); rec.Code != http.StatusNotFound {
 		t.Fatalf("unknown car: status = %d, want 404", rec.Code)
 	}
@@ -77,7 +77,7 @@ func TestCreateReservationValidates(t *testing.T) {
 	inactive := createCar(t, a, inactiveOwner, map[string]any{"name": "Off", "price_per_day": 100})
 	doJSON(t, a, "PATCH", "/seller/cars/"+itoa(inactive.ID), inactiveOwner, map[string]any{"active": false})
 	if rec := doJSON(t, a, "POST", "/reservations", token, map[string]any{
-		"car_id": inactive.ID, "start_date": "2026-09-10", "end_date": "2026-09-12",
+		"car_id": inactive.ID, "start_date": futureDate(10), "end_date": futureDate(12),
 	}); rec.Code != http.StatusConflict {
 		t.Fatalf("inactive car: status = %d, want 409", rec.Code)
 	}
@@ -89,7 +89,7 @@ func TestCreateReservationOverlap(t *testing.T) {
 	token := registerBuyer(t, a, "user@example.com", "secret123")
 
 	createReservation(t, a, token, map[string]any{
-		"car_id": car.ID, "start_date": "2026-09-10", "end_date": "2026-09-12",
+		"car_id": car.ID, "start_date": futureDate(10), "end_date": futureDate(12),
 	})
 
 	cases := []struct {
@@ -97,11 +97,11 @@ func TestCreateReservationOverlap(t *testing.T) {
 		startDate string
 		endDate   string
 	}{
-		{"inside", "2026-09-11", "2026-09-11"},
-		{"straddle start", "2026-09-08", "2026-09-11"},
-		{"straddle end", "2026-09-12", "2026-09-15"},
-		{"envelope", "2026-09-01", "2026-09-30"},
-		{"equal", "2026-09-10", "2026-09-12"},
+		{"inside", futureDate(11), futureDate(11)},
+		{"straddle start", futureDate(8), futureDate(11)},
+		{"straddle end", futureDate(12), futureDate(15)},
+		{"envelope", futureDate(1), futureDate(30)},
+		{"equal", futureDate(10), futureDate(12)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -115,7 +115,7 @@ func TestCreateReservationOverlap(t *testing.T) {
 	}
 
 	rec := doJSON(t, a, "POST", "/reservations", token, map[string]any{
-		"car_id": car.ID, "start_date": "2026-09-13", "end_date": "2026-09-15",
+		"car_id": car.ID, "start_date": futureDate(13), "end_date": futureDate(15),
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("adjacent after: status = %d, want 201 (body %s)", rec.Code, rec.Body.String())
@@ -128,13 +128,13 @@ func TestCreateReservationAllowsCancelled(t *testing.T) {
 	token := registerBuyer(t, a, "user@example.com", "secret123")
 
 	if _, err := a.DB.ExecContext(context.Background(),
-		`INSERT INTO reservations (user_id, car_id, start_date, end_date, status) VALUES (1, ?, '2026-09-10', '2026-09-12', 'cancelled')`, car.ID,
+		`INSERT INTO reservations (user_id, car_id, start_date, end_date, status) VALUES (1, ?, ?, ?, 'cancelled')`, car.ID, futureDate(10), futureDate(12),
 	); err != nil {
 		t.Fatalf("seed cancelled: %v", err)
 	}
 
 	rec := doJSON(t, a, "POST", "/reservations", token, map[string]any{
-		"car_id": car.ID, "start_date": "2026-09-10", "end_date": "2026-09-12",
+		"car_id": car.ID, "start_date": futureDate(10), "end_date": futureDate(12),
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want 201 (body %s)", rec.Code, rec.Body.String())
@@ -147,13 +147,13 @@ func TestCreateReservationMaxDays(t *testing.T) {
 	token := registerBuyer(t, a, "user@example.com", "secret123")
 
 	if rec := doJSON(t, a, "POST", "/reservations", token, map[string]any{
-		"car_id": car.ID, "start_date": "2026-09-01", "end_date": "2026-10-01",
+		"car_id": car.ID, "start_date": futureDate(1), "end_date": futureDate(31),
 	}); rec.Code != http.StatusCreated {
 		t.Fatalf("30 days: status = %d, want 201 (body %s)", rec.Code, rec.Body.String())
 	}
 
 	if rec := doJSON(t, a, "POST", "/reservations", token, map[string]any{
-		"car_id": car.ID, "start_date": "2026-11-01", "end_date": "2026-12-02",
+		"car_id": car.ID, "start_date": futureDate(50), "end_date": futureDate(81),
 	}); rec.Code != http.StatusBadRequest {
 		t.Fatalf("31 days: status = %d, want 400 (body %s)", rec.Code, rec.Body.String())
 	}
@@ -165,7 +165,7 @@ func TestCancelReservation(t *testing.T) {
 	token := registerBuyer(t, a, "user@example.com", "secret123")
 
 	v := createReservation(t, a, token, map[string]any{
-		"car_id": car.ID, "start_date": "2026-09-10", "end_date": "2026-09-12",
+		"car_id": car.ID, "start_date": futureDate(10), "end_date": futureDate(12),
 	})
 
 	rec := doJSON(t, a, "PATCH", "/reservations/"+itoa(v.ID)+"/cancel", token, nil)
@@ -180,7 +180,7 @@ func TestCancelReservation(t *testing.T) {
 
 	// the freed range is bookable again
 	rec = doJSON(t, a, "POST", "/reservations", token, map[string]any{
-		"car_id": car.ID, "start_date": "2026-09-10", "end_date": "2026-09-12",
+		"car_id": car.ID, "start_date": futureDate(10), "end_date": futureDate(12),
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("rebook after cancel: status = %d, want 201 (body %s)", rec.Code, rec.Body.String())
@@ -195,7 +195,7 @@ func TestCancelReservationRules(t *testing.T) {
 	tokenB := registerBuyer(t, a, "b@example.com", "secret123")
 
 	v := createReservation(t, a, tokenA, map[string]any{
-		"car_id": car.ID, "start_date": "2026-09-10", "end_date": "2026-09-12",
+		"car_id": car.ID, "start_date": futureDate(10), "end_date": futureDate(12),
 	})
 	path := "/reservations/" + itoa(v.ID) + "/cancel"
 
@@ -220,7 +220,7 @@ func TestCancelReservationRules(t *testing.T) {
 
 	// a paid reservation cannot be cancelled
 	paid := createReservation(t, a, tokenA, map[string]any{
-		"car_id": car.ID, "start_date": "2026-10-01", "end_date": "2026-10-02",
+		"car_id": car.ID, "start_date": futureDate(20), "end_date": futureDate(21),
 	})
 	if rec := doJSON(t, a, "POST", "/reservations/"+itoa(paid.ID)+"/payment", tokenA, map[string]any{"method": "pos"}); rec.Code != http.StatusCreated {
 		t.Fatalf("payment: status = %d body %s", rec.Code, rec.Body.String())
@@ -231,7 +231,7 @@ func TestCancelReservationRules(t *testing.T) {
 
 	// a confirmed reservation cannot be cancelled
 	confirmed := createReservation(t, a, tokenA, map[string]any{
-		"car_id": car.ID, "start_date": "2026-11-01", "end_date": "2026-11-02",
+		"car_id": car.ID, "start_date": futureDate(22), "end_date": futureDate(23),
 	})
 	doJSON(t, a, "POST", "/reservations/"+itoa(confirmed.ID)+"/payment", tokenA, map[string]any{"method": "cash"})
 	if rec := doJSON(t, a, "PATCH", "/seller/reservations/"+itoa(confirmed.ID)+"/confirm", seller, nil); rec.Code != http.StatusOK {
@@ -246,9 +246,9 @@ func TestListReservationsPagination(t *testing.T) {
 	a := newTestAPI(t)
 	car := seedCar(t, a)
 	token := registerBuyer(t, a, "user@example.com", "secret123")
-	createReservation(t, a, token, map[string]any{"car_id": car.ID, "start_date": "2026-09-01", "end_date": "2026-09-02"})
-	createReservation(t, a, token, map[string]any{"car_id": car.ID, "start_date": "2026-09-03", "end_date": "2026-09-04"})
-	createReservation(t, a, token, map[string]any{"car_id": car.ID, "start_date": "2026-09-05", "end_date": "2026-09-06"})
+	createReservation(t, a, token, map[string]any{"car_id": car.ID, "start_date": futureDate(1), "end_date": futureDate(2)})
+	createReservation(t, a, token, map[string]any{"car_id": car.ID, "start_date": futureDate(3), "end_date": futureDate(4)})
+	createReservation(t, a, token, map[string]any{"car_id": car.ID, "start_date": futureDate(5), "end_date": futureDate(6)})
 
 	rec := doJSON(t, a, "GET", "/reservations?limit=2", token, nil)
 	if rec.Code != http.StatusOK {
@@ -275,10 +275,10 @@ func TestListReservationsOwn(t *testing.T) {
 	tokenB := registerBuyer(t, a, "b@example.com", "secret123")
 
 	createReservation(t, a, tokenA, map[string]any{
-		"car_id": car.ID, "start_date": "2026-09-10", "end_date": "2026-09-11",
+		"car_id": car.ID, "start_date": futureDate(10), "end_date": futureDate(11),
 	})
 	createReservation(t, a, tokenB, map[string]any{
-		"car_id": car.ID, "start_date": "2026-09-20", "end_date": "2026-09-21",
+		"car_id": car.ID, "start_date": futureDate(20), "end_date": futureDate(21),
 	})
 
 	rec := doJSON(t, a, "GET", "/reservations", tokenA, nil)
@@ -303,7 +303,7 @@ func TestGetReservationAccess(t *testing.T) {
 	tokenA := registerBuyer(t, a, "a@example.com", "secret123")
 	tokenB := registerBuyer(t, a, "b@example.com", "secret123")
 	v := createReservation(t, a, tokenA, map[string]any{
-		"car_id": car.ID, "start_date": "2026-09-10", "end_date": "2026-09-11",
+		"car_id": car.ID, "start_date": futureDate(10), "end_date": futureDate(11),
 	})
 
 	// owner can read
@@ -343,10 +343,10 @@ func TestListSellerReservations(t *testing.T) {
 	tokenA := registerBuyer(t, a, "a@example.com", "secret123")
 	tokenB := registerBuyer(t, a, "b@example.com", "secret123")
 	createReservation(t, a, tokenA, map[string]any{
-		"car_id": car.ID, "start_date": "2026-09-10", "end_date": "2026-09-11",
+		"car_id": car.ID, "start_date": futureDate(10), "end_date": futureDate(11),
 	})
 	createReservation(t, a, tokenB, map[string]any{
-		"car_id": car.ID, "start_date": "2026-09-20", "end_date": "2026-09-21",
+		"car_id": car.ID, "start_date": futureDate(20), "end_date": futureDate(21),
 	})
 
 	rec := doJSON(t, a, "GET", "/seller/reservations", seller, nil)

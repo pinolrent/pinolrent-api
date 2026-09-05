@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/pinolrent/pinolrent-api/internal/auth"
 	"github.com/pinolrent/pinolrent-api/internal/db"
@@ -111,4 +112,8 @@ func login(t *testing.T, a *API, email, password string) string {
 		t.Fatal("login: empty token")
 	}
 	return out.Token
+}
+
+func futureDate(days int) string {
+	return time.Now().UTC().AddDate(0, 0, days).Format(dateLayout)
 }
