@@ -206,5 +206,5 @@ curl -s -o /dev/null -w '%{http_code}\n' \
 ## Qué queda al final
 
 - El auto 1 ya no aparece en `GET /cars?start_date=2026-10-01&end_date=2026-10-05` → `[]`.
-- El vendedor ve sus reservas en `GET /seller/reservations`. Las listas aceptan `limit`/`offset` (por defecto 50, máximo 200) y `GET /cars` filtra por `owner_id`.
+- El vendedor ve sus reservas en `GET /seller/reservations`. Las listas aceptan `limit`/`offset` (por defecto 50, máximo 200, `offset` máx. 10000) y `GET /cars` filtra por `owner_id`.
 - Este mismo flujo está automatizado en `scripts/demo.sh` (`make demo`), que además prueba: body muy grande (`413`), fechas pasadas (`400`), choque de fechas (`409`), más de 30 días (`400`), paginación mal (`400`), cancelar y re-reservar, comprador sin permiso de vendedor (`403`), límite de intentos (`429`), falta de `JWT_SECRET` y apagado limpio con `SIGTERM`.
