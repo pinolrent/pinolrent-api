@@ -1,11 +1,11 @@
 meta {
-  name: Renovar token
+  name: Login comprador
   type: http
   seq: 5
 }
 
 post {
-  url: {{baseUrl}}/auth/refresh
+  url: {{baseUrl}}/auth/login
   body: json
 }
 
@@ -15,14 +15,15 @@ headers {
 
 body:json {
   {
-    "refresh_token": "{{buyerRefresh}}"
+    "email": "{{buyerEmail}}",
+    "password": "{{buyerPassword}}"
   }
 }
 
 assert {
-  $res.status: eq 200
-  $res.body.token: isDefined
-  $res.body.refresh_token: isDefined
+  res.status: eq 200
+  res.body.token: isDefined
+  res.body.refresh_token: isDefined
 }
 
 script:post-response {

@@ -1,7 +1,7 @@
 meta {
-  name: Cancelar reserva
+  name: Cancelar reserva pagada
   type: http
-  seq: 16
+  seq: 18
 }
 
 patch {
@@ -14,5 +14,5 @@ headers {
 }
 
 assert {
-  $res.status: eq 409
+  res.status: eq 409
 }

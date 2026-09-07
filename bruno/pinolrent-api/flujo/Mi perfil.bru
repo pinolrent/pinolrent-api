@@ -1,11 +1,11 @@
 meta {
-  name: Mis reservas
+  name: Mi perfil
   type: http
-  seq: 13
+  seq: 7
 }
 
 get {
-  url: {{baseUrl}}/reservations
+  url: {{baseUrl}}/auth/me
   body: none
 }
 
@@ -14,5 +14,5 @@ headers {
 }
 
 assert {
-  $res.status: eq 200
+  res.status: eq 200
 }

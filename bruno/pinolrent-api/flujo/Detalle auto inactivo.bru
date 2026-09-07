@@ -1,7 +1,7 @@
 meta {
-  name: Detalle auto
+  name: Detalle auto inactivo
   type: http
-  seq: 9
+  seq: 11
 }
 
 get {
@@ -10,5 +10,5 @@ get {
 }
 
 assert {
-  $res.status: eq 404
+  res.status: eq 404
 }

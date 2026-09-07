@@ -1,5 +1,5 @@
 meta {
-  name: Activar auto
+  name: Desactivar auto
   type: http
   seq: 10
 }
@@ -16,10 +16,11 @@ headers {
 
 body:json {
   {
-    "active": true
+    "active": false
   }
 }
 
 assert {
-  $res.status: eq 200
+  res.status: eq 200
+  res.body.active: eq false
 }

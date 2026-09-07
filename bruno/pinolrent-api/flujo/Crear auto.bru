@@ -1,7 +1,7 @@
 meta {
   name: Crear auto
   type: http
-  seq: 7
+  seq: 9
 }
 
 post {
@@ -23,8 +23,8 @@ body:json {
 }
 
 assert {
-  $res.status: eq 201
-  $res.body.id: isDefined
+  res.status: eq 201
+  res.body.id: isDefined
 }
 
 script:post-response {

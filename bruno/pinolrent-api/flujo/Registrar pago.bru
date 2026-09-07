@@ -1,7 +1,7 @@
 meta {
   name: Registrar pago
   type: http
-  seq: 15
+  seq: 17
 }
 
 post {
@@ -22,5 +22,5 @@ body:json {
 }
 
 assert {
-  $res.status: eq 201
+  res.status: eq 201
 }

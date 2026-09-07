@@ -1,5 +1,5 @@
 meta {
-  name: Login comprador
+  name: Login vendedor
   type: http
   seq: 4
 }
@@ -15,23 +15,23 @@ headers {
 
 body:json {
   {
-    "email": "{{buyerEmail}}",
-    "password": "{{buyerPassword}}"
+    "email": "{{sellerEmail}}",
+    "password": "{{sellerPassword}}"
   }
 }
 
 assert {
-  $res.status: eq 200
-  $res.body.token: isDefined
-  $res.body.refresh_token: isDefined
+  res.status: eq 200
+  res.body.token: isDefined
+  res.body.refresh_token: isDefined
 }
 
 script:post-response {
   const body = res.getBody();
   if (body.token) {
-    bru.setVar("buyerToken", body.token);
+    bru.setVar("sellerToken", body.token);
   }
   if (body.refresh_token) {
-    bru.setVar("buyerRefresh", body.refresh_token);
+    bru.setVar("sellerRefresh", body.refresh_token);
   }
 }

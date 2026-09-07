@@ -1,7 +1,7 @@
 meta {
   name: Registrar vendedor
   type: http
-  seq: 2
+  seq: 3
 }
 
 post {
@@ -21,5 +21,5 @@ body:json {
 }
 
 assert {
-  $res.status: eq 201
+  res.status: eq 201
 }

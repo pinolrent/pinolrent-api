@@ -1,7 +1,7 @@
 meta {
   name: Confirmar reserva
   type: http
-  seq: 18
+  seq: 19
 }
 
 patch {
@@ -14,6 +14,6 @@ headers {
 }
 
 assert {
-  $res.status: eq 200
-  $res.body.status: isDefined
+  res.status: eq 200
+  res.body.status: isDefined
 }

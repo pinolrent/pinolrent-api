@@ -1,0 +1,45 @@
+meta {
+  name: Crear reserva
+  type: http
+  seq: 14
+}
+
+post {
+  url: {{baseUrl}}/reservations
+  body: json
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{buyerToken}}
+}
+
+script:pre-request {
+  const fmt = (offsetDays) => {
+    const d = new Date();
+    d.setDate(d.getDate() + offsetDays);
+    return d.toISOString().slice(0, 10);
+  };
+  bru.setVar("startDate", fmt(10));
+  bru.setVar("endDate", fmt(12));
+}
+
+body:json {
+  {
+    "car_id": {{carId}},
+    "start_date": "{{startDate}}",
+    "end_date": "{{endDate}}"
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.id: isDefined
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (body.id) {
+    bru.setVar("reservationId", body.id);
+  }
+}

@@ -143,14 +143,16 @@ jobs:
           go build -o /tmp/pinolrent-api ./cmd/api
           DATABASE_URL=/tmp/bruno.db JWT_SECRET=bruno-ci-secret-min-32B-ok-0123456789 PORT=8132 /tmp/pinolrent-api &
           echo $! > /tmp/pinolrent.pid
+          health_ok=0
           for i in $(seq 1 30); do
-            curl -sf http://localhost:8132/health && break
+            if curl -sf http://localhost:8132/health; then health_ok=1; break; fi
             sleep 1
           done
+          [ "$health_ok" = "1" ] || { echo 'server did not become healthy'; exit 1; }
 
       - name: Run Bruno collection
         working-directory: bruno/pinolrent-api
-        run: npx --yes @usebruno/cli run -r --env-var baseUrl=http://localhost:8132
+        run: npx --yes @usebruno/cli@4.1.0 run -r --env-var baseUrl=http://localhost:8132
 
       - name: Stop server
         if: always()

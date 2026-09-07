@@ -1,7 +1,7 @@
 meta {
   name: Cerrar sesion
   type: http
-  seq: 19
+  seq: 21
 }
 
 post {
@@ -14,5 +14,5 @@ headers {
 }
 
 assert {
-  $res.status: eq 200
+  res.status: eq 200
 }

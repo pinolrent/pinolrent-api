@@ -54,12 +54,13 @@ Mueve el archivo generado a `internal/db/migrations/` y edita `Up`/`Down`. Queda
 
 `bruno/pinolrent-api/` está lista para correr:
 
-- `collection.bru` define variables (`baseUrl`, `sellerEmail`, `buyerEmail`, etc.).
+- `collection.bru` define variables (`baseUrl`, `sellerEmail`, `buyerEmail`, etc.) con defaults que no abortan la corrida.
+- Todos los requests viven en la carpeta única `flujo/`: el CLI de Bruno solo respeta `seq` **dentro** de cada carpeta y ejecuta las carpetas alfabéticamente, así que el flujo encadenado no puede repartirse en varias.
 - Los logins guardan el token y el refresh automáticamente en `sellerToken`/`buyerToken` (más `sellerRefresh`/`buyerRefresh`).
-- `carId` y `reservationId` se guardan igual al crear auto/reserva.
-- Cada request trae `assert` de status y campos clave, así el CLI falla si algo cambia.
+- `carId` y `reservationId` se guardan igual al crear auto/reserva; las fechas de la reserva se calculan en un script pre-request (`startDate`/`endDate`), nunca fechas de calendario fijas.
+- Cada request trae `assert` con la sintaxis `res.status` / `res.body.*` (la variante `$res` lanza `ReferenceError` en el CLI).
 
-Corre los requests **en orden** (`seq`, dependen unos de otros). Cambia `baseUrl` si no es `http://localhost:8080`. También corre en CI (job `bruno` con `@usebruno/cli`).
+Corre los requests **en orden** (`seq`, dependen unos de otros). Cambia `baseUrl` si no es `http://localhost:8080`. También corre en CI (job `bruno` con `@usebruno/cli` en versión fijada).
 
 ## Tests
 
