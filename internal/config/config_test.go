@@ -11,7 +11,7 @@ const testJWTSecret = "test-secret-32-bytes-minimum-okay"
 func TestLoadDefaults(t *testing.T) {
 	t.Setenv("JWT_SECRET", testJWTSecret)
 	cfg := Load()
-	if cfg.Port != "8080" || cfg.DatabaseURL != "pinolrent.db" || cfg.CORSAllowedOrigins != "*" {
+	if cfg.Port != "8080" || cfg.DatabaseURL != "pinolrent.db" || cfg.CORSAllowedOrigins != "*" || cfg.UploadDir != "uploads" {
 		t.Fatalf("defaults not applied: %+v", cfg)
 	}
 }
@@ -62,9 +62,16 @@ func TestValidateLowEntropySecret(t *testing.T) {
 }
 
 func TestValidateOK(t *testing.T) {
-	cfg := Config{Port: "8080", DatabaseURL: "x.db", JWTSecret: testJWTSecret}
+	cfg := Config{Port: "8080", DatabaseURL: "x.db", JWTSecret: testJWTSecret, UploadDir: "uploads"}
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateEmptyUploadDir(t *testing.T) {
+	cfg := Config{Port: "8080", DatabaseURL: "x.db", JWTSecret: testJWTSecret, UploadDir: "  "}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected error for empty UPLOAD_DIR")
 	}
 }
 

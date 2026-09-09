@@ -17,6 +17,7 @@ type Config struct {
 	JWTSecret          string `env:"JWT_SECRET"`
 	CORSAllowedOrigins string `env:"CORS_ALLOWED_ORIGINS" envDefault:"*"`
 	Env                string `env:"ENV" envDefault:"dev"`
+	UploadDir          string `env:"UPLOAD_DIR" envDefault:"uploads"`
 }
 
 // Load reads the configuration from the environment, applying defaults for
@@ -48,6 +49,9 @@ func (c Config) Validate() error {
 	}
 	if (c.Env == "prod" || c.Env == "production") && c.CORSAllowedOrigins == "*" {
 		return fmt.Errorf("CORS_ALLOWED_ORIGINS=* not allowed when ENV=%s", c.Env)
+	}
+	if strings.TrimSpace(c.UploadDir) == "" {
+		return fmt.Errorf("UPLOAD_DIR must not be empty")
 	}
 	return nil
 }
