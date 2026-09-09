@@ -11,7 +11,9 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
+
+	"modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 
 	"github.com/pinolrent/pinolrent-api/internal/auth"
 	"github.com/pinolrent/pinolrent-api/internal/httpx"
@@ -95,8 +97,11 @@ func writeBodyErr(w http.ResponseWriter, err error) {
 	writeError(w, http.StatusBadRequest, "invalid JSON body")
 }
 
+// isUniqueViolation reports whether err is a SQLite UNIQUE constraint
+// violation, detected by the driver result code rather than the error text.
 func isUniqueViolation(err error) bool {
-	return err != nil && strings.Contains(strings.ToLower(err.Error()), "unique constraint failed")
+	var sqliteErr *sqlite.Error
+	return errors.As(err, &sqliteErr) && sqliteErr.Code() == sqlite3.SQLITE_CONSTRAINT_UNIQUE
 }
 
 const (
