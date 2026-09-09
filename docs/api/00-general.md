@@ -48,8 +48,8 @@ Siempre así:
 
 ## Límites
 
-- **Body máximo 1 MB.** JSON estricto: si mandas campos que no existen o JSON roto → `400 {"error":"invalid JSON body"}`; si te pasas del tamaño → `413`.
-- **Límite por IP**: `/auth/*` → **30 por minuto** (ráfaga 30); escritura (`POST /reservations`, `POST /seller/cars`, `POST /reservations/*/payment`) → **120 por minuto** (ráfaga 20). Si te pasas → `429 {"error":"too many requests"}` con header `Retry-After: 60`. `X-Forwarded-For` / `X-Real-IP` solo se tienen en cuenta si la conexión viene de un proxy local (loopback); si no, cuenta la IP de la conexión.
+- **Body máximo 1 MB** (JSON estricto: si mandas campos que no existen o JSON roto → `400 {"error":"invalid JSON body"}`; si te pasas del tamaño → `413`). `POST /uploads` acepta hasta **5 MB** por imagen (`jpg`/`png`/`webp`).
+- **Límite por IP**: `/auth/*` → **30 por minuto** (ráfaga 30); escritura (`POST /reservations`, `POST /seller/cars`, `POST /reservations/*/payment`, `POST /uploads`) → **120 por minuto** (ráfaga 20). Si te pasas → `429 {"error":"too many requests"}` con header `Retry-After: 60`. `X-Forwarded-For` / `X-Real-IP` solo se tienen en cuenta si la conexión viene de un proxy local (loopback); si no, cuenta la IP de la conexión.
 - **CORS** abierto a todos por defecto (`CORS_ALLOWED_ORIGINS=*`), con `ENV=prod` o `production` es rechazado. En producción poné tus orígenes separados por coma, ej. `CORS_ALLOWED_ORIGINS=https://app.example.com`. Los preflights `OPTIONS` responden `204`; si el origen no está permitido, no lleva `Access-Control-Allow-Origin` y el navegador lo bloquea. Solo `GET`, `POST`, `PATCH`, `OPTIONS` y headers `Authorization`, `Content-Type`. Trailing `/` en origen es tolerado.
 
 ## Paginación
@@ -86,6 +86,8 @@ Responden un **array simple**. Para saber si hay más, pedí `limit+1` y fijate 
 | POST | `/reservations/{id}/payment` | sí | [payments](payments.md) |
 | GET | `/seller/reservations` | vendedor | [payments](payments.md) |
 | PATCH | `/seller/reservations/{id}/confirm` | vendedor | [payments](payments.md) |
+| POST | `/uploads` | sí | [uploads](uploads.md) |
+| GET | `/uploads/{nombre}` | no | [uploads](uploads.md) |
 
 ## Formas que devuelve la API
 

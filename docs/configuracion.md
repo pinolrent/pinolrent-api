@@ -9,6 +9,7 @@
 | `JWT_SECRET` | — | **sí** | Secreto para firmar los tokens (mínimo 32 caracteres, con entropía: al menos 16 bytes distintos) |
 | `CORS_ALLOWED_ORIGINS` | `*` | no | Qué orígenes pueden llamar a la API, separados por coma. `*` = todos |
 | `ENV` | `dev` | no | Entorno: `dev` (default) o `prod`/`production`. En prod `CORS_ALLOWED_ORIGINS=*` es rechazado |
+| `UPLOAD_DIR` | `uploads` | no | Directorio donde se guardan las imágenes de `POST /uploads`. Se crea al arrancar; no vacío |
 
 El orden de prioridad es: **variables del shell > `.env` > valores por defecto**. Si una variable está vacía se ignora.
 

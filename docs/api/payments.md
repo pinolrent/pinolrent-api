@@ -9,7 +9,7 @@ Registra el pago de tu reserva. Necesita login.
 | Campo | Tipo | ¿Obligatorio? | Reglas |
 |-------|------|---------------|--------|
 | `method` | texto | sí | `pos` o `cash` |
-| `proof_url` | texto | no | si va, URL `http(s)` hasta 2048 |
+| `proof_url` | texto | no | si va, URL `http(s)` o ruta `/uploads/...` hasta 2048 (ver [uploads](uploads.md)) |
 
 ```json
 {"method":"pos","proof_url":"https://example.com/boleta.pdf"}
@@ -36,7 +36,7 @@ Reglas: la reserva debe existir y ser tuya, no estar `cancelled` y no tener ya u
 | `400` | `invalid reservation id` | `{id}` no es número |
 | `400` | `method must be pos or cash` | Método desconocido |
 | `400` | `proof_url is too long` | Más de 2048 |
-| `400` | `invalid proof_url` | URL mal formada o sin `http(s)` |
+| `400` | `invalid proof_url` | URL mal formada, sin `http(s)` ni ruta `/uploads/...` válida |
 | `404` | `reservation not found` | No existe o no es tuya |
 | `409` | `reservation is not pending` | Está cancelada o confirmada |
 | `409` | `payment already recorded` | Ya tiene pago |

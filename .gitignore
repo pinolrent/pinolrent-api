@@ -10,6 +10,9 @@ bin/
 tmp/
 air.log
 
+# Uploaded images (see UPLOAD_DIR)
+uploads/
+
 # Test artifacts
 *.out
 *.test

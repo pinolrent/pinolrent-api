@@ -78,7 +78,7 @@ Agrega un auto tuyo. Necesita ser `seller`.
 | Campo | Tipo | ¿Obligatorio? | Reglas |
 |-------|------|---------------|--------|
 | `name` | texto | sí | no vacío, hasta 200 caracteres |
-| `photo_url` | texto | no | si va, URL `http(s)` hasta 2048 |
+| `photo_url` | texto | no | si va, URL `http(s)` o ruta `/uploads/...` hasta 2048 (ver [uploads](uploads.md)) |
 | `price_per_day` | número | no | `0..100_000_000` centavos |
 
 ```json
@@ -98,7 +98,7 @@ Agrega un auto tuyo. Necesita ser `seller`.
 | `400` | `price_per_day must be >= 0` | Negativo |
 | `400` | `price_per_day must be <= 100000000` | Se pasó del tope |
 | `400` | `photo_url is too long` | Más de 2048 |
-| `400` | `invalid photo_url` | URL mal formada o sin `http(s)` |
+| `400` | `invalid photo_url` | URL mal formada, sin `http(s)` ni ruta `/uploads/...` válida |
 | `400` | `invalid JSON body` | JSON roto o campos desconocidos |
 | `413` | `request body too large` | Más de 1 MB |
 | `401` / `403` | ver [00-general](00-general.md) | Sin token o sin permiso |
