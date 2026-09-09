@@ -1,0 +1,30 @@
+meta {
+  name: Subir imagen
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/uploads
+  body: multipart-form
+}
+
+headers {
+  Authorization: Bearer {{sellerToken}}
+}
+
+body:multipart-form {
+  file: @file(../fixtures/fit.png)
+}
+
+assert {
+  res.status: eq 201
+  res.body.url: isDefined
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (body.url) {
+    bru.setVar("uploadUrl", body.url);
+  }
+}

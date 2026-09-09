@@ -68,6 +68,7 @@ cleanup() {
     kill -KILL "$PID" 2>/dev/null || true
   fi
   rm -f "$DB" "$DB-shm" "$DB-wal" "$LOG" "$BIN"
+  rm -rf "${UPLOAD_TMP:-}"
 }
 trap cleanup EXIT INT TERM
 
@@ -90,7 +91,8 @@ set -e
 check "aborta sin JWT_SECRET" "1" "$rc"
 
 echo "== start =="
-DATABASE_URL="$DB" JWT_SECRET="$SMOKE_JWT_SECRET" PORT="$PORT" \
+UPLOAD_TMP="$(mktemp -d /tmp/pinolrent-uploads.XXXXXX)"
+DATABASE_URL="$DB" JWT_SECRET="$SMOKE_JWT_SECRET" PORT="$PORT" UPLOAD_DIR="$UPLOAD_TMP" \
   "$BIN" > "$LOG" 2>&1 &
 PID=$!
 if ! wait_for_health 5; then
@@ -126,9 +128,23 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/seller/cars" \
   -d '{"name":"X","price_per_day":1}')
 check "comprador no crea autos -> 403" "403" "$code"
 
+echo "== uploads =="
+png_tmp="$(mktemp /tmp/pinolrent-upload.XXXXXX.png)"
+printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde' > "$png_tmp"
+upload_json=$(curl -s -X POST "$BASE/uploads" -H "Authorization: Bearer $seller" -F "file=@$png_tmp;type=image/png")
+upload_url=$(printf '%s' "$upload_json" | jq -r .url)
+[ -n "$upload_url" ] && [ "$upload_url" != "null" ]; cond "subir imagen -> url ($upload_url)" $?
+rm -f "$png_tmp"
+code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE$upload_url")
+check "descargar imagen -> 200" "200" "$code"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/uploads" -H "Authorization: Bearer $seller" -F "file=@$0;type=text/x-shellscript")
+check "subir no-imagen -> 415" "415" "$code"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/uploads")
+check "subir sin token -> 401" "401" "$code"
+
 car_json=$(curl -s -X POST "$BASE/seller/cars" -H "Authorization: Bearer $seller" \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"Honda Fit","price_per_day":25000,"photo_url":"https://example.com/fit.jpg"}')
+ -H 'Content-Type: application/json' \
+ -d "{\"name\":\"Honda Fit\",\"price_per_day\":25000,\"photo_url\":\"$upload_url\"}")
 car=$(printf '%s' "$car_json" | jq -r .id)
 car_owner=$(printf '%s' "$car_json" | jq -r .owner_id)
 check "crear auto" "numero" "$([ "$car" != "null" ] && echo numero)"
