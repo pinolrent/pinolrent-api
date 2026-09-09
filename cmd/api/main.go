@@ -54,6 +54,14 @@ func main() {
 	a := auth.New(cfg.JWTSecret, d)
 	h := handlers.New(d, a)
 	h.Version = version
+	h.UploadDir = cfg.UploadDir
+
+	// #nosec G301 -- the upload directory must be readable by the static
+	// file server and any reverse proxy user; uploaded files stay 0600.
+	if err := os.MkdirAll(cfg.UploadDir, 0o755); err != nil {
+		slog.Error("create upload dir", "error", err)
+		os.Exit(1)
+	}
 
 	// Periodically drop rows from revoked_tokens whose tokens have
 	// already expired. Keeps the table small so the per-request
@@ -87,7 +95,7 @@ func main() {
 	// CORS headers the browser needs to read it.
 	var inner http.Handler = handlers.Routes(h)
 	inner = authLimiter.Middleware(inner, "/auth/")
-	inner = writeLimiter.Middleware(inner, "POST /reservations", "POST /seller/cars", "POST /reservations/")
+	inner = writeLimiter.Middleware(inner, "POST /reservations", "POST /seller/cars", "POST /reservations/", "POST /uploads")
 	mux := handlers.WithCORS(origins)(handlers.WithSecurityHeaders(handlers.WithRequestLog(handlers.WithRecover(inner))))
 
 	srv := &http.Server{

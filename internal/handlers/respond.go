@@ -10,7 +10,9 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"strconv"
+	"strings"
 
 	"modernc.org/sqlite"
 	sqlite3 "modernc.org/sqlite/lib"
@@ -47,9 +49,10 @@ func lenBetween(s string, minLen, maxLen int) bool {
 // API bundles the shared dependencies used by every handler: the database
 // pool and the auth provider.
 type API struct {
-	DB      *sql.DB
-	Auth    *auth.Auth
-	Version string
+	DB        *sql.DB
+	Auth      *auth.Auth
+	Version   string
+	UploadDir string
 }
 
 // New returns an API bound to the given database pool and auth provider.
@@ -133,7 +136,20 @@ func paginate(r *http.Request) (limit, offset int, errMsg string) {
 	return limit, offset, ""
 }
 
+// uploadExtensions are the file extensions served from /uploads/, kept in
+// sync with uploadExtByType in uploads.go.
+var uploadExtensions = map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".webp": true}
+
+// validURL accepts absolute http(s) URLs and local /uploads/ paths. Local
+// paths must be a bare basename with an image extension; anything else
+// (traversal, subdirectories, other extensions) is rejected.
 func validURL(s string) bool {
+	if rest, ok := cutUploadPrefix(s); ok {
+		if rest == "" || strings.ContainsAny(rest, `/\`) || strings.Contains(rest, "..") {
+			return false
+		}
+		return uploadExtensions[strings.ToLower(filepath.Ext(rest))]
+	}
 	u, err := url.Parse(s)
 	if err != nil {
 		return false
@@ -145,4 +161,12 @@ func validURL(s string) bool {
 		return false
 	}
 	return u.Host != ""
+}
+
+func cutUploadPrefix(s string) (string, bool) {
+	const prefix = "/uploads/"
+	if !strings.HasPrefix(s, prefix) {
+		return "", false
+	}
+	return s[len(prefix):], true
 }

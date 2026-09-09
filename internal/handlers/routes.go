@@ -22,6 +22,8 @@ func Routes(a *API) *http.ServeMux {
 	mux.Handle("GET /reservations/{id}", a.Auth.RequireAuth(a.GetReservation))
 	mux.Handle("PATCH /reservations/{id}/cancel", a.Auth.RequireAuth(a.CancelReservation))
 	mux.Handle("POST /reservations/{id}/payment", a.Auth.RequireAuth(a.RecordPayment))
+	mux.Handle("POST /uploads", a.Auth.RequireAuth(a.UploadFile))
+	mux.HandleFunc("GET /uploads/", a.serveUpload)
 	mux.Handle("GET /seller/reservations", a.Auth.RequireRole("seller", a.ListSellerReservations))
 	mux.Handle("PATCH /seller/reservations/{id}/confirm", a.Auth.RequireRole("seller", a.ConfirmReservation))
 	return mux
