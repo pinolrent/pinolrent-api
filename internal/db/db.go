@@ -6,14 +6,14 @@ import (
 	"context"
 	"database/sql"
 	"embed"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
-	"strings"
 	"time"
 
-	// Blank import to register the modernc.org/sqlite driver with database/sql.
-	_ "modernc.org/sqlite"
+	sqlite "modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/pressly/goose/v3"
@@ -97,10 +97,13 @@ func migrate(d *sql.DB) error {
 // over a range [start, end]. The reservations table must be aliased as r.
 const OverlapPredicate = "r.start_date <= ? AND r.end_date >= ?"
 
+// isBusyError reports whether err is a SQLite busy/locked condition (the
+// database is locked or the busy timeout expired), detected by the driver
+// result code rather than the error text.
 func isBusyError(err error) bool {
-	if err == nil {
+	var sqliteErr *sqlite.Error
+	if !errors.As(err, &sqliteErr) {
 		return false
 	}
-	msg := err.Error()
-	return strings.Contains(msg, "database is busy") || strings.Contains(msg, "database is locked") || strings.Contains(msg, "SQLITE_BUSY")
+	return sqliteErr.Code() == sqlite3.SQLITE_BUSY || sqliteErr.Code() == sqlite3.SQLITE_BUSY_TIMEOUT
 }
