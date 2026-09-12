@@ -112,7 +112,7 @@ check "registro comprador -> 201" "201" "$code"
 
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/auth/register/seller" \
   -H 'Content-Type: application/json' \
-  -d '{"email":"seller@example.com","password":"secret123"}')
+  -d '{"email":"seller@example.com","password":"secret123","phone":"+56912345678"}')
 check "registro vendedor -> 201" "201" "$code"
 
 buyer=$(curl -s -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
