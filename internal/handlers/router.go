@@ -28,5 +28,5 @@ func NewRouter(a *API, origins []string) http.Handler {
 	var inner http.Handler = Routes(a)
 	inner = authLimiter.Middleware(inner, a.limiterPatterns(limitAuth)...)
 	inner = writeLimiter.Middleware(inner, a.limiterPatterns(limitWrite)...)
-	return WithCORS(origins)(WithSecurityHeaders(WithRequestLog(WithRecover(inner))))
+	return WithCORS(origins, a.allowedMethods())(WithSecurityHeaders(WithRequestLog(WithRecover(inner))))
 }

@@ -159,7 +159,7 @@ stateDiagram-v2
 ## Límite de intentos
 
 - En rutas `/auth/*` (auth) por IP: **30 por minuto** (0.5/s, ráfaga 30).
-- En escritura `POST /reservations`, `POST /seller/cars`, `POST /reservations/*/payment`: **120 por minuto** (2/s, ráfaga 20).
+- En escritura (todo `POST`/`PATCH` fuera de `/auth/*`, p. ej. `POST /reservations`, `POST /seller/cars`, `PATCH /reservations/*/cancel`): **120 por minuto** (2/s, ráfaga 20). Sale de la tabla de rutas, así que un endpoint nuevo hereda su límite al declararse.
 - Si te pasas → `429 {"error":"too many requests"}` con header `Retry-After: 60`.
 - `X-Forwarded-For` / `X-Real-IP` solo valen si la conexión viene de un proxy local (loopback); si no, cuenta la IP de la conexión.
 - Es en memoria, por proceso. Los contadores se borran tras 10 min sin uso.
