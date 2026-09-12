@@ -37,6 +37,7 @@ func (a *API) routes() []route {
 		{http.MethodPost, "/auth/refresh", a.Refresh, limitStrict},
 		{http.MethodPost, "/auth/logout", a.Auth.RequireAuth(a.Logout), limitStrict},
 		{http.MethodGet, "/auth/me", a.Auth.RequireAuth(a.Me), limitStrict},
+		{http.MethodPatch, "/auth/me", a.Auth.RequireAuth(a.UpdateMe), limitStrict},
 		{http.MethodGet, "/cars", a.ListCars, limitNone},
 		{http.MethodGet, "/cars/{id}", a.GetCar, limitNone},
 		// Contact exposes the seller's phone, so it gets the strict bucket even

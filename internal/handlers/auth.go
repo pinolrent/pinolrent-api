@@ -48,6 +48,45 @@ func (a *API) Me(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// UpdateMe updates the authenticated user's own profile. Only the phone is
+// mutable: the email identifies the account and the role is granted at
+// registration.
+func (a *API) UpdateMe(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.CurrentUser(r.Context())
+
+	var in struct {
+		Phone string `json:"phone"`
+	}
+	if err := decodeBody(w, r, &in); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+
+	phone, ok := normalizePhone(in.Phone)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invalid phone")
+		return
+	}
+	// Same rule as registration: a seller without a phone cannot be contacted.
+	if u.Role == "seller" && phone == "" {
+		writeError(w, http.StatusBadRequest, "phone is required for sellers")
+		return
+	}
+
+	if _, err := a.DB.ExecContext(r.Context(),
+		`UPDATE users SET phone = ? WHERE id = ?`, phone, u.ID); err != nil {
+		serverError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"id":    u.ID,
+		"email": u.Email,
+		"role":  u.Role,
+		"phone": phone,
+	})
+}
+
 // Register creates a new buyer account.
 func (a *API) Register(w http.ResponseWriter, r *http.Request) {
 	a.register(w, r, "buyer")
