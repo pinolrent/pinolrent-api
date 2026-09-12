@@ -1,0 +1,18 @@
+meta {
+  name: Contacto del vendedor
+  type: http
+  seq: 22
+}
+
+get {
+  url: {{baseUrl}}/cars/{{carId}}/contact
+}
+
+headers {
+  Authorization: Bearer {{buyerToken}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.whatsapp_url: isDefined
+}

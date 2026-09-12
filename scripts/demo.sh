@@ -115,6 +115,11 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/auth/register/selle
   -d '{"email":"seller@example.com","password":"secret123","phone":"+56912345678"}')
 check "registro vendedor -> 201" "201" "$code"
 
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/auth/register/seller" \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"sin-telefono@example.com","password":"secret123"}')
+check "vendedor sin telefono -> 400" "400" "$code"
+
 buyer=$(curl -s -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
   -d '{"email":"buyer@example.com","password":"secret123"}' | jq -r .token)
 seller=$(curl -s -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
@@ -216,6 +221,14 @@ code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/cars/999999")
 check "detalle inexistente -> 404" "404" "$code"
 code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/cars/abc")
 check "detalle id inválido -> 400" "400" "$code"
+
+echo "== contacto del vendedor =="
+wa=$(curl -s "$BASE/cars/$car/contact" -H "Authorization: Bearer $buyer" | jq -r .whatsapp_url)
+echo "$wa" | grep -q '^https://wa.me/56912345678'; cond "contacto -> link wa.me normalizado" $?
+code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/cars/$car/contact")
+check "contacto sin token -> 401" "401" "$code"
+code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/cars/999999/contact" -H "Authorization: Bearer $buyer")
+check "contacto de auto inexistente -> 404" "404" "$code"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/seller/cars/$car" -H "Authorization: Bearer $seller" \
   -H 'Content-Type: application/json' -d '{"active":false}')
 check "desactivar con reservas futuras -> 409" "409" "$code"
