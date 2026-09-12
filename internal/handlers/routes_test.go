@@ -17,6 +17,12 @@ var knownHTTPMethods = map[string]bool{
 	http.MethodDelete: true,
 }
 
+// isMutating reports whether a method changes server state, which means the
+// route needs the write limiter.
+func isMutating(method string) bool {
+	return method != http.MethodGet && method != http.MethodHead && method != http.MethodOptions
+}
+
 // TestRouteTableInvariants keeps the route table honest: everything Routes,
 // NewRouter, CORS and the docs derive from it must be well formed.
 func TestRouteTableInvariants(t *testing.T) {
@@ -41,6 +47,9 @@ func TestRouteTableInvariants(t *testing.T) {
 		}
 		if strings.HasPrefix(r.pattern, authNamespace) && r.limit != limitAuth {
 			t.Errorf("route %q lives under %s and must use the auth limiter", key, authNamespace)
+		}
+		if isMutating(r.method) && !strings.HasPrefix(r.pattern, authNamespace) && r.limit != limitWrite {
+			t.Errorf("route %q mutates state and must declare the write limiter", key)
 		}
 	}
 
