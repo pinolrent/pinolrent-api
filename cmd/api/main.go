@@ -16,7 +16,6 @@ import (
 	"github.com/pinolrent/pinolrent-api/internal/config"
 	"github.com/pinolrent/pinolrent-api/internal/db"
 	"github.com/pinolrent/pinolrent-api/internal/handlers"
-	"github.com/pinolrent/pinolrent-api/internal/ratelimit"
 )
 
 // version is the build version reported by GET /health. Release builds set it
@@ -87,20 +86,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	authLimiter := ratelimit.New(0.5, 30)
-	writeLimiter := ratelimit.New(2, 20)
-
-	// Nest inside-out so that CORS ends up outermost: preflights short-circuit
-	// before reaching the rate limiter, and every response (even 429) ships the
-	// CORS headers the browser needs to read it.
-	var inner http.Handler = handlers.Routes(h)
-	inner = authLimiter.Middleware(inner, "/auth/")
-	inner = writeLimiter.Middleware(inner, "POST /reservations", "POST /seller/cars", "POST /reservations/", "POST /uploads")
-	mux := handlers.WithCORS(origins)(handlers.WithSecurityHeaders(handlers.WithRequestLog(handlers.WithRecover(inner))))
-
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           mux,
+		Handler:           handlers.NewRouter(h, origins),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      30 * time.Second,
