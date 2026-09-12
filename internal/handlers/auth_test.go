@@ -205,6 +205,81 @@ func TestLoginRejects(t *testing.T) {
 	}
 }
 
+func TestRegisterSellerRequiresPhone(t *testing.T) {
+	a := newTestAPI(t)
+
+	rec := doJSON(t, a, "POST", "/auth/register/seller", "", map[string]any{
+		"email": "seller@example.com", "password": "secret123",
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (body %s)", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "phone") {
+		t.Fatalf("error should mention phone: %s", rec.Body.String())
+	}
+
+	rec = doJSON(t, a, "POST", "/auth/register/seller", "", map[string]any{
+		"email": "seller@example.com", "password": "secret123", "phone": "no-es-numero",
+	})
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("invalid phone: status = %d, want 400", rec.Code)
+	}
+}
+
+func TestRegisterBuyerPhoneIsOptional(t *testing.T) {
+	a := newTestAPI(t)
+
+	rec := doJSON(t, a, "POST", "/auth/register", "", map[string]any{
+		"email": "buyer@example.com", "password": "secret123",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("without phone: status = %d, want 201 (body %s)", rec.Code, rec.Body.String())
+	}
+
+	token := login(t, a, "buyer@example.com", "secret123")
+	rec = doJSON(t, a, "GET", "/auth/me", token, nil)
+	var out struct {
+		Phone string `json:"phone"`
+	}
+	decodeJSON(t, rec, &out)
+	if out.Phone != "" {
+		t.Fatalf("buyer phone = %q, want empty", out.Phone)
+	}
+
+	rec = doJSON(t, a, "POST", "/auth/register", "", map[string]any{
+		"email": "buyer2@example.com", "password": "secret123", "phone": "9 1234 5678",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("with phone: status = %d, want 201 (body %s)", rec.Code, rec.Body.String())
+	}
+}
+
+func TestRegisterNormalizesPhone(t *testing.T) {
+	a := newTestAPI(t)
+	for _, tc := range []struct{ email, in string }{
+		{"a@example.com", "9 1234 5678"},
+		{"b@example.com", "56912345678"},
+		{"c@example.com", "+56 9-1234-5678"},
+	} {
+		rec := doJSON(t, a, "POST", "/auth/register/seller", "", map[string]any{
+			"email": tc.email, "password": "secret123", "phone": tc.in,
+		})
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("phone %q: status = %d (body %s)", tc.in, rec.Code, rec.Body.String())
+		}
+
+		token := login(t, a, tc.email, "secret123")
+		rec = doJSON(t, a, "GET", "/auth/me", token, nil)
+		var out struct {
+			Phone string `json:"phone"`
+		}
+		decodeJSON(t, rec, &out)
+		if out.Phone != "+56912345678" {
+			t.Fatalf("phone %q stored as %q, want +56912345678", tc.in, out.Phone)
+		}
+	}
+}
+
 func TestMe(t *testing.T) {
 	a := newTestAPI(t)
 

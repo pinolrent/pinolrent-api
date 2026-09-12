@@ -44,6 +44,7 @@ func (a *API) Me(w http.ResponseWriter, r *http.Request) {
 		"id":    u.ID,
 		"email": u.Email,
 		"role":  u.Role,
+		"phone": u.Phone,
 	})
 }
 
@@ -62,6 +63,7 @@ func (a *API) register(w http.ResponseWriter, r *http.Request, role string) {
 	var in struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
+		Phone    string `json:"phone"`
 	}
 	if err := decodeBody(w, r, &in); err != nil {
 		writeBodyErr(w, err)
@@ -82,6 +84,18 @@ func (a *API) register(w http.ResponseWriter, r *http.Request, role string) {
 		return
 	}
 
+	phone, ok := normalizePhone(in.Phone)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invalid phone")
+		return
+	}
+	// A seller is the one buyers contact, so the number is mandatory there;
+	// buyers can add it later from their profile.
+	if role == "seller" && phone == "" {
+		writeError(w, http.StatusBadRequest, "phone is required for sellers")
+		return
+	}
+
 	hash, err := a.Auth.HashPassword(in.Password)
 	if err != nil {
 		serverError(w, err)
@@ -92,7 +106,8 @@ func (a *API) register(w http.ResponseWriter, r *http.Request, role string) {
 	// duplicate and the real id for a new account would let an attacker
 	// enumerate registered emails. Both paths return the identical body.
 	_, err = a.DB.ExecContext(r.Context(),
-		`INSERT INTO users (email, password_hash, role) VALUES (?, ?, ?)`, in.Email, hash, role)
+		`INSERT INTO users (email, password_hash, role, phone) VALUES (?, ?, ?, ?)`,
+		in.Email, hash, role, phone)
 	if err != nil {
 		if !isUniqueViolation(err) {
 			serverError(w, err)
@@ -147,9 +162,9 @@ func (a *API) Login(w http.ResponseWriter, r *http.Request) {
 
 	var u models.User
 	err := a.DB.QueryRowContext(r.Context(),
-		`SELECT id, email, password_hash, role FROM users WHERE email = ?`,
+		`SELECT id, email, password_hash, phone, role FROM users WHERE email = ?`,
 		strings.ToLower(strings.TrimSpace(in.Email))).
-		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role)
+		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Phone, &u.Role)
 	if errors.Is(err, sql.ErrNoRows) {
 		// Run a bcrypt comparison against a fixed dummy hash so the
 		// response time is independent of whether the email exists.

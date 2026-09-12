@@ -228,8 +228,8 @@ func (a *Auth) GCRevoked(ctx context.Context) error {
 func (a *Auth) userByID(ctx context.Context, id int64) (models.User, error) {
 	var u models.User
 	err := a.db.QueryRowContext(ctx,
-		`SELECT id, email, password_hash, role FROM users WHERE id = ?`, id).
-		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role)
+		`SELECT id, email, password_hash, phone, role FROM users WHERE id = ?`, id).
+		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Phone, &u.Role)
 	return u, err
 }
 

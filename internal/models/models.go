@@ -1,11 +1,13 @@
 // Package models defines the domain types exposed by the API.
 package models
 
-// User is an account that can authenticate as a buyer or as a seller.
+// User is an account that can authenticate as a buyer or as a seller. Phone is
+// the seller's WhatsApp contact, stored in E.164 and empty when not provided.
 type User struct {
 	ID           int64  `json:"id"`
 	Email        string `json:"email"`
 	PasswordHash string `json:"-"`
+	Phone        string `json:"phone,omitempty"`
 	Role         string `json:"role"`
 }
 
