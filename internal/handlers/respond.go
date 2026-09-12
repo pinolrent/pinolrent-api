@@ -46,6 +46,12 @@ func lenBetween(s string, minLen, maxLen int) bool {
 	return true
 }
 
+// rowScanner is the shared shape of *sql.Row and *sql.Rows, so a scan helper
+// can serve both the single-row and the multi-row path.
+type rowScanner interface {
+	Scan(dest ...any) error
+}
+
 // API bundles the shared dependencies used by every handler: the database
 // pool and the auth provider.
 type API struct {
