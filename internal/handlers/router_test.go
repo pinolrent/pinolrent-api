@@ -4,20 +4,15 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
 // doRouter sends a request through the full production chain (NewRouter), not
 // just the mux, so the middleware order is what gets exercised.
-func doRouter(t *testing.T, h http.Handler, method, path, token, origin string) *httptest.ResponseRecorder {
+func doRouter(t *testing.T, h http.Handler, method, path string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequestWithContext(context.Background(), method, path, nil)
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-	if origin != "" {
-		req.Header.Set("Origin", origin)
-	}
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	return rec
@@ -25,7 +20,7 @@ func doRouter(t *testing.T, h http.Handler, method, path, token, origin string) 
 
 func TestRouterSecurityHeaders(t *testing.T) {
 	a := newTestAPI(t)
-	rec := doRouter(t, NewRouter(a, []string{"*"}), "GET", "/health", "", "")
+	rec := doRouter(t, NewRouter(a, []string{"*"}), "GET", "/health")
 
 	for header, want := range map[string]string{
 		"X-Content-Type-Options": "nosniff",
@@ -39,16 +34,20 @@ func TestRouterSecurityHeaders(t *testing.T) {
 	}
 }
 
-func TestRouterAuthLimiter(t *testing.T) {
+func TestRouterStrictLimiterCoversAuthNamespace(t *testing.T) {
 	a := newTestAPI(t)
 	router := NewRouter(a, []string{"https://app.example.com"})
 
 	var last *httptest.ResponseRecorder
-	for i := 0; i <= authLimiterBurst; i++ {
-		last = doRouter(t, router, "POST", "/auth/login", "", "https://app.example.com")
+	for i := 0; i <= strictLimiterBurst; i++ {
+		req := httptest.NewRequestWithContext(context.Background(), "POST", "/auth/login", nil)
+		req.Header.Set("Origin", "https://app.example.com")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		last = rec
 	}
 	if last.Code != http.StatusTooManyRequests {
-		t.Fatalf("request %d: status = %d, want 429", authLimiterBurst+1, last.Code)
+		t.Fatalf("request %d: status = %d, want 429", strictLimiterBurst+1, last.Code)
 	}
 	if got := last.Header().Get("Retry-After"); got != "60" {
 		t.Errorf("Retry-After = %q, want 60", got)
@@ -59,27 +58,65 @@ func TestRouterAuthLimiter(t *testing.T) {
 	}
 }
 
-func TestRouterWriteLimiter(t *testing.T) {
+// TestRouterStrictLimiterCoversUnknownAuthPaths pins the namespace behaviour:
+// metering cannot be dodged by hitting a path that is not registered.
+func TestRouterStrictLimiterCoversUnknownAuthPaths(t *testing.T) {
 	a := newTestAPI(t)
 	router := NewRouter(a, []string{"*"})
 
 	var last *httptest.ResponseRecorder
-	for i := 0; i <= writeLimiterBurst; i++ {
-		last = doRouter(t, router, "POST", "/uploads", "", "")
+	for i := 0; i <= strictLimiterBurst; i++ {
+		last = doRouter(t, router, "POST", "/auth/does-not-exist")
 	}
 	if last.Code != http.StatusTooManyRequests {
-		t.Fatalf("request %d: status = %d, want 429", writeLimiterBurst+1, last.Code)
+		t.Fatalf("status = %d, want 429", last.Code)
+	}
+}
+
+// TestEveryLimitedRouteIsActuallyLimited walks the table and proves each route
+// that declares a limiter really answers 429 once its burst is spent. This is
+// the regression test for prefix matching: a pattern such as
+// "/reservations/{id}/payment" never matches a real request path, so the
+// limiter used to be silently inert.
+func TestEveryLimitedRouteIsActuallyLimited(t *testing.T) {
+	for _, tc := range []struct {
+		kind  limiterKind
+		burst int
+	}{
+		{limitStrict, strictLimiterBurst},
+		{limitStandard, standardLimiterBurst},
+	} {
+		a := newTestAPI(t)
+		for _, r := range a.routes() {
+			if r.limit != tc.kind || strings.HasPrefix(r.pattern, authNamespace) {
+				continue
+			}
+			t.Run(r.method+" "+r.pattern, func(t *testing.T) {
+				// A router per route so the burst starts fresh.
+				router := NewRouter(a, []string{"*"})
+				path := strings.ReplaceAll(r.pattern, "{id}", "1")
+
+				var last *httptest.ResponseRecorder
+				for i := 0; i <= tc.burst; i++ {
+					last = doRouter(t, router, r.method, path)
+				}
+				if last.Code != http.StatusTooManyRequests {
+					t.Fatalf("request %d to %s %s: status = %d, want 429",
+						tc.burst+1, r.method, path, last.Code)
+				}
+			})
+		}
 	}
 }
 
 // TestRouterPreflightSkipsLimiter proves CORS is outermost: hammering
-// preflights must not consume the shared auth budget, and must answer 204
+// preflights must not consume the shared strict budget, and must answer 204
 // without reaching the mux.
 func TestRouterPreflightSkipsLimiter(t *testing.T) {
 	a := newTestAPI(t)
 	router := NewRouter(a, []string{"https://app.example.com"})
 
-	for i := 0; i < authLimiterBurst*2; i++ {
+	for i := 0; i < strictLimiterBurst*2; i++ {
 		req := httptest.NewRequestWithContext(context.Background(), "OPTIONS", "/auth/login", nil)
 		req.Header.Set("Origin", "https://app.example.com")
 		req.Header.Set("Access-Control-Request-Method", "POST")
@@ -90,8 +127,7 @@ func TestRouterPreflightSkipsLimiter(t *testing.T) {
 		}
 	}
 
-	rec := doRouter(t, router, "POST", "/auth/login", "", "https://app.example.com")
-	if rec.Code == http.StatusTooManyRequests {
-		t.Fatal("preflights consumed the auth rate limit budget")
+	if rec := doRouter(t, router, "POST", "/auth/login"); rec.Code == http.StatusTooManyRequests {
+		t.Fatal("preflights consumed the strict rate limit budget")
 	}
 }

@@ -89,14 +89,16 @@ Fix every failure before committing. Never push with a red check that you could 
 ## Routes and middleware
 
 `internal/handlers/routes.go` holds the single route table: each entry declares its mux pattern, its auth
-wrapper and its rate limiter (`limitNone`/`limitAuth`/`limitWrite`). `Routes`, `NewRouter` and the CORS
+wrapper and its rate limiter (`limitNone`/`limitStrict`/`limitStandard`). `Routes`, `NewRouter` and the CORS
 method list all derive from it, so a new endpoint is one table entry and nothing else. Tests enforce the
-invariants: no duplicate patterns, every `/auth/*` route uses the auth limiter, and every mutating route
-uses the write limiter.
+invariants: no duplicate patterns, every `/auth/*` route uses the strict limiter, every mutating route uses
+the standard limiter, and every route that declares a limiter actually answers `429` when its burst is spent.
 
-`internal/handlers/router.go` assembles the production chain (rate limiters, CORS, security headers,
-request log, recover) in that nesting order — CORS is outermost on purpose so preflights short-circuit
-before the limiter and even a `429` carries the CORS headers. `cmd/api/main.go` only wires config, db,
+`internal/handlers/router.go` attaches each limiter to its route (per route, never by path prefix: a pattern
+like `/reservations/{id}/payment` does not match a real request path) and assembles the production chain
+(limiters, CORS, security headers, request log, recover) in that nesting order — CORS is outermost on purpose
+so preflights short-circuit before the limiter and even a `429` carries the CORS headers. `/auth/` is metered
+as a namespace, so unregistered paths under it stay limited too. `cmd/api/main.go` only wires config, db,
 auth and this router.
 
 ## Migrations
