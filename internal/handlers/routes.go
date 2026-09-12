@@ -40,16 +40,16 @@ func (a *API) routes() []route {
 		{http.MethodGet, "/cars/{id}", a.GetCar, limitNone},
 		{http.MethodGet, "/seller/cars", a.Auth.RequireRole("seller", a.ListMyCars), limitNone},
 		{http.MethodPost, "/seller/cars", a.Auth.RequireRole("seller", a.CreateCar), limitWrite},
-		{http.MethodPatch, "/seller/cars/{id}", a.Auth.RequireRole("seller", a.PatchCar), limitNone},
+		{http.MethodPatch, "/seller/cars/{id}", a.Auth.RequireRole("seller", a.PatchCar), limitWrite},
 		{http.MethodPost, "/reservations", a.Auth.RequireAuth(a.CreateReservation), limitWrite},
 		{http.MethodGet, "/reservations", a.Auth.RequireAuth(a.ListReservations), limitNone},
 		{http.MethodGet, "/reservations/{id}", a.Auth.RequireAuth(a.GetReservation), limitNone},
-		{http.MethodPatch, "/reservations/{id}/cancel", a.Auth.RequireAuth(a.CancelReservation), limitNone},
+		{http.MethodPatch, "/reservations/{id}/cancel", a.Auth.RequireAuth(a.CancelReservation), limitWrite},
 		{http.MethodPost, "/reservations/{id}/payment", a.Auth.RequireAuth(a.RecordPayment), limitWrite},
 		{http.MethodPost, "/uploads", a.Auth.RequireAuth(a.UploadFile), limitWrite},
 		{http.MethodGet, "/uploads/", a.serveUpload, limitNone},
 		{http.MethodGet, "/seller/reservations", a.Auth.RequireRole("seller", a.ListSellerReservations), limitNone},
-		{http.MethodPatch, "/seller/reservations/{id}/confirm", a.Auth.RequireRole("seller", a.ConfirmReservation), limitNone},
+		{http.MethodPatch, "/seller/reservations/{id}/confirm", a.Auth.RequireRole("seller", a.ConfirmReservation), limitWrite},
 	}
 }
 
