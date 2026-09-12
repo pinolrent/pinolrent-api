@@ -49,7 +49,7 @@ make vet         # go vet ./...
 make lint        # golangci-lint run ./... (config: .golangci.yml v2, must be 0)
 make fmt         # gofmt -w .
 make tidy        # go mod tidy
-make demo        # full E2E smoke on :8132 with ephemeral DB (36 checks)
+make demo        # full E2E smoke on :8132 with ephemeral DB (todos los checks deben pasar)
 make clean       # removes bin/, tmp/, air.log, dev.db
 ```
 
@@ -85,6 +85,19 @@ Fix every failure before committing. Never push with a red check that you could 
 - `scripts/demo.sh` is the E2E smoke — exercises the full buyer/seller flow with `curl`+`jq`.
 - Bruno collection in `bruno/pinolrent-api/` mirrors all routes — keep it in sync when adding endpoints.
 - Aim to add or update tests for every change.
+
+## Routes and middleware
+
+`internal/handlers/routes.go` holds the single route table: each entry declares its mux pattern, its auth
+wrapper and its rate limiter (`limitNone`/`limitAuth`/`limitWrite`). `Routes`, `NewRouter` and the CORS
+method list all derive from it, so a new endpoint is one table entry and nothing else. Tests enforce the
+invariants: no duplicate patterns, every `/auth/*` route uses the auth limiter, and every mutating route
+uses the write limiter.
+
+`internal/handlers/router.go` assembles the production chain (rate limiters, CORS, security headers,
+request log, recover) in that nesting order — CORS is outermost on purpose so preflights short-circuit
+before the limiter and even a `429` carries the CORS headers. `cmd/api/main.go` only wires config, db,
+auth and this router.
 
 ## Migrations
 
