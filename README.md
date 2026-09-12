@@ -27,9 +27,11 @@ make watch   # levanta con recarga automática al editar (requiere make tools)
 | POST | `/auth/login` | no | Entrar y obtener access (15 min) + refresh (7 días) |
 | POST | `/auth/refresh` | no | Renovar el par con un refresh de un solo uso |
 | GET | `/auth/me` | sí | Ver tu propio perfil |
+| PATCH | `/auth/me` | sí | Corregir tu teléfono de contacto |
 | POST | `/auth/logout` | sí | Cerrar sesión (invalida tu token actual) |
 | GET | `/cars` | no | Ver autos disponibles (puedes filtrar por fechas o vendedor) |
 | GET | `/cars/{id}` | no | Ver el detalle de un auto |
+| GET | `/cars/{id}/contact` | sí | Link de WhatsApp del vendedor (para coordinar) |
 | GET · POST | `/seller/cars` | vendedor | Ver tus autos y agregar uno nuevo |
 | PATCH | `/seller/cars/{id}` | vendedor | Activar o desactivar uno de tus autos |
 | POST | `/reservations` | sí | Reservar un auto |
@@ -46,7 +48,7 @@ Si intentas ver o tocar algo que no es tuyo, la API responde `404` como si no ex
 ## Roles
 
 - **Comprador:** reserva autos, paga y ve sus reservas.
-- **Vendedor:** publica sus autos y confirma las reservas de sus autos. Cada vendedor solo ve lo suyo.
+- **Vendedor:** publica sus autos y confirma las reservas de sus autos. Cada vendedor solo ve lo suyo. Se registra con teléfono obligatorio: es el número por el que lo contactan los compradores (WhatsApp).
 
 ## Documentación
 

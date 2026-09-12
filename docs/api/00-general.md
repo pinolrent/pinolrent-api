@@ -21,7 +21,7 @@ El token lo sacas de `POST /auth/login`: el access dura **15 min** y el refresh 
 Roles:
 
 - **`buyer`** (comprador): reserva, paga y ve sus reservas.
-- **`seller`** (vendedor): publica sus autos y confirma reservas de sus autos. Se crea con `POST /auth/register/seller`.
+- **`seller`** (vendedor): publica sus autos y confirma reservas de sus autos. Se crea con `POST /auth/register/seller` y **requiere teléfono**, porque es el número con el que lo contactan los compradores.
 
 Un vendedor también puede reservar como comprador.
 
@@ -73,9 +73,11 @@ Responden un **array simple**. Para saber si hay más, pedí `limit+1` y fijate 
 | POST | `/auth/login` | no | [auth](auth.md) |
 | POST | `/auth/refresh` | no | [auth](auth.md) |
 | GET | `/auth/me` | sí | [auth](auth.md) |
+| PATCH | `/auth/me` | sí | [auth](auth.md) |
 | POST | `/auth/logout` | sí | [auth](auth.md) |
 | GET | `/cars` | no | [cars](cars.md) |
 | GET | `/cars/{id}` | no | [cars](cars.md) |
+| GET | `/cars/{id}/contact` | sí | [cars](cars.md) |
 | GET | `/seller/cars` | vendedor | [cars](cars.md) |
 | POST | `/seller/cars` | vendedor | [cars](cars.md) |
 | PATCH | `/seller/cars/{id}` | vendedor | [cars](cars.md) |
@@ -90,6 +92,14 @@ Responden un **array simple**. Para saber si hay más, pedí `limit+1` y fijate 
 | GET | `/uploads/{nombre}` | no | [uploads](uploads.md) |
 
 ## Formas que devuelve la API
+
+**Usuario (perfil propio):**
+
+```json
+{"id":3,"email":"demo@example.com","role":"buyer","phone":"+56912345678"}
+```
+
+`phone` viene vacío si no cargaste uno. Se normaliza a E.164 (`+56912345678`).
 
 **Auto:**
 
