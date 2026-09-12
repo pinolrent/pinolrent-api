@@ -158,8 +158,10 @@ stateDiagram-v2
 
 ## Límite de intentos
 
-- En rutas `/auth/*` (auth) por IP: **30 por minuto** (0.5/s, ráfaga 30).
-- En escritura (todo `POST`/`PATCH` fuera de `/auth/*`, p. ej. `POST /reservations`, `POST /seller/cars`, `PATCH /reservations/*/cancel`): **120 por minuto** (2/s, ráfaga 20). Sale de la tabla de rutas, así que un endpoint nuevo hereda su límite al declararse.
+- En rutas `/auth/*` (auth) por IP: **30 por minuto** (0.5/s, ráfaga 30). Se aplica como namespace, así que también cuentan los paths inexistentes bajo `/auth/`.
+- En escritura (todo `POST`/`PATCH` fuera de `/auth/*`, p. ej. `POST /reservations`, `POST /seller/cars`, `PATCH /reservations/*/cancel`): **120 por minuto** (2/s, ráfaga 60). Sale de la tabla de rutas, así que un endpoint nuevo hereda su límite al declararse.
+- `GET /cars/{id}/contact` (el que devuelve el WhatsApp del vendedor) usa el cupo estricto de 30/min, porque expone un dato personal.
+- Cada límite se engancha por ruta, no por prefijo de path: un patrón con `{id}` no matchea el path real, y un prefijo como `/reservations/` limitaría endpoints que deben quedar libres.
 - Si te pasas → `429 {"error":"too many requests"}` con header `Retry-After: 60`.
 - `X-Forwarded-For` / `X-Real-IP` solo valen si la conexión viene de un proxy local (loopback); si no, cuenta la IP de la conexión.
 - Es en memoria, por proceso. Los contadores se borran tras 10 min sin uso.

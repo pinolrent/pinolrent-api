@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"net/url"
 	"regexp"
 	"strings"
 )
@@ -58,4 +59,12 @@ func normalizePhone(raw string) (string, bool) {
 		return "", false
 	}
 	return s, true
+}
+
+// waLink builds a wa.me link with a prefilled message. The stored number is
+// already canonical E.164, so only the leading + has to go. Spaces are encoded
+// as %20 instead of + so the message survives any query-string parser.
+func waLink(phone, text string) string {
+	msg := strings.ReplaceAll(url.QueryEscape(text), "+", "%20")
+	return "https://wa.me/" + strings.TrimPrefix(phone, "+") + "?text=" + msg
 }

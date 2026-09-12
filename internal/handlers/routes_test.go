@@ -18,7 +18,7 @@ var knownHTTPMethods = map[string]bool{
 }
 
 // isMutating reports whether a method changes server state, which means the
-// route needs the write limiter.
+// route needs the standard limiter.
 func isMutating(method string) bool {
 	return method != http.MethodGet && method != http.MethodHead && method != http.MethodOptions
 }
@@ -45,11 +45,11 @@ func TestRouteTableInvariants(t *testing.T) {
 		if !strings.HasPrefix(r.pattern, "/") {
 			t.Errorf("route %q pattern must start with /", key)
 		}
-		if strings.HasPrefix(r.pattern, authNamespace) && r.limit != limitAuth {
-			t.Errorf("route %q lives under %s and must use the auth limiter", key, authNamespace)
+		if strings.HasPrefix(r.pattern, authNamespace) && r.limit != limitStrict {
+			t.Errorf("route %q lives under %s and must use the strict limiter", key, authNamespace)
 		}
-		if isMutating(r.method) && !strings.HasPrefix(r.pattern, authNamespace) && r.limit != limitWrite {
-			t.Errorf("route %q mutates state and must declare the write limiter", key)
+		if isMutating(r.method) && !strings.HasPrefix(r.pattern, authNamespace) && r.limit != limitStandard {
+			t.Errorf("route %q mutates state and must declare the standard limiter", key)
 		}
 	}
 
@@ -76,29 +76,6 @@ func TestEveryRouteIsRegistered(t *testing.T) {
 		}
 		if rec.Code == http.StatusMethodNotAllowed {
 			t.Errorf("route %s %s is registered under another method", r.method, path)
-		}
-	}
-}
-
-// TestLimiterPatterns pin the derived prefixes: the auth limiter covers its
-// whole namespace, and every route marked limitWrite (and no other) is listed.
-func TestLimiterPatterns(t *testing.T) {
-	a := newTestAPI(t)
-
-	auth := a.limiterPatterns(limitAuth)
-	if len(auth) != 1 || auth[0] != authNamespace {
-		t.Fatalf("auth patterns = %v, want [%s]", auth, authNamespace)
-	}
-
-	write := a.limiterPatterns(limitWrite)
-	got := make(map[string]bool, len(write))
-	for _, p := range write {
-		got[p] = true
-	}
-	for _, r := range a.routes() {
-		key := r.method + " " + r.pattern
-		if want := r.limit == limitWrite; got[key] != want {
-			t.Errorf("route %q: listed as write-limited = %v, want %v", key, got[key], want)
 		}
 	}
 }

@@ -144,6 +144,40 @@ func (a *API) GetCar(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, car)
 }
 
+// GetCarContact returns the WhatsApp link of the seller who owns an active car.
+// This is the only place a phone number is exposed, and it requires auth on
+// purpose: the public catalog must not be harvestable for phone numbers.
+func (a *API) GetCarContact(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid car id")
+		return
+	}
+
+	var name, phone string
+	err = a.DB.QueryRowContext(r.Context(),
+		`SELECT c.name, u.phone FROM cars c JOIN users u ON u.id = c.owner_id
+		 WHERE c.id = ? AND c.active = 1`, id).Scan(&name, &phone)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "car not found")
+		return
+	}
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	// Accounts created before phones were mandatory, or a buyer-owned car,
+	// have no number to contact.
+	if phone == "" {
+		writeError(w, http.StatusConflict, "seller has no contact phone")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"whatsapp_url": waLink(phone, "Hola, vi tu "+name+" en PinolRent"),
+	})
+}
+
 // CreateCar adds a new car to the catalog, owned by the authenticated seller.
 func (a *API) CreateCar(w http.ResponseWriter, r *http.Request) {
 	u, _ := auth.CurrentUser(r.Context())

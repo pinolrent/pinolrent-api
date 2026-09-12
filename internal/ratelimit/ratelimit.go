@@ -74,6 +74,21 @@ func (l *Limiter) gc(now time.Time) {
 	}
 }
 
+// Handler wraps a handler so every request it receives is rate-limited. Unlike
+// Middleware there is no path matching involved: it belongs to a single route,
+// which is what lets a route table attach an exact limiter per endpoint.
+func (l *Limiter) Handler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		l.maybeGC()
+		if !l.Allow(clientIP(r)) {
+			w.Header().Set("Retry-After", "60")
+			writeJSONError(w, http.StatusTooManyRequests, "too many requests")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // Middleware wraps a handler and rate-limits requests whose path starts with
 // any of the given prefixes, returning 429 when over the limit. Each prefix
 // may optionally be prefixed with a method like "POST /path" to limit only
@@ -81,12 +96,7 @@ func (l *Limiter) gc(now time.Time) {
 func (l *Limiter) Middleware(next http.Handler, limitPaths ...string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if matchesRequest(r, limitPaths) {
-			l.mu.Lock()
-			if time.Since(l.lastGC) > l.gcEvery {
-				l.gc(time.Now())
-				l.lastGC = time.Now()
-			}
-			l.mu.Unlock()
+			l.maybeGC()
 
 			if !l.Allow(clientIP(r)) {
 				w.Header().Set("Retry-After", "60")
@@ -96,6 +106,16 @@ func (l *Limiter) Middleware(next http.Handler, limitPaths ...string) http.Handl
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// maybeGC drops idle buckets once per gcEvery.
+func (l *Limiter) maybeGC() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if time.Since(l.lastGC) > l.gcEvery {
+		l.gc(time.Now())
+		l.lastGC = time.Now()
+	}
 }
 
 // clientIP returns the client IP. Proxy headers (X-Forwarded-For/X-Real-IP)
