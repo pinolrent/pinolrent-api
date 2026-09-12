@@ -22,18 +22,17 @@ type reservationView struct {
 	Payment *models.Payment `json:"payment,omitempty"`
 }
 
+// reservationSelect lists the columns scanReservation expects: the reservation
+// itself, its car, and an optional payment from the LEFT JOIN. The car block is
+// built from carColumnsQualified so adding a car column cannot desync the JOIN.
 const reservationSelect = `
 SELECT r.id, r.user_id, r.car_id, r.start_date, r.end_date, r.status,
-	c.id, c.owner_id, c.name, c.photo_url, c.price_per_day, c.active,
+	` + carColumnsQualified + `,
 	p.id, p.reservation_id, p.method, p.status, p.proof_url
 FROM reservations r
 JOIN cars c ON c.id = r.car_id
 LEFT JOIN payments p ON p.reservation_id = r.id
 `
-
-type rowScanner interface {
-	Scan(dest ...any) error
-}
 
 func scanReservation(row rowScanner, v *reservationView) error {
 	var c models.Car

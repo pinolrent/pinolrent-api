@@ -325,11 +325,15 @@ func todayStart() time.Time {
 	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 }
 
-func scanCar(row *sql.Row, c *models.Car) error {
+// scanCar reads one row of carColumns into c. It takes the rowScanner
+// interface so the single-row and multi-row paths share the field order.
+func scanCar(row rowScanner, c *models.Car) error {
 	var active int
-	err := row.Scan(&c.ID, &c.OwnerID, &c.Name, &c.PhotoURL, &c.PricePerDay, &active)
+	if err := row.Scan(&c.ID, &c.OwnerID, &c.Name, &c.PhotoURL, &c.PricePerDay, &active); err != nil {
+		return err
+	}
 	c.Active = active == 1
-	return err
+	return nil
 }
 
 func scanCars(rows *sql.Rows) ([]models.Car, error) {
@@ -337,11 +341,9 @@ func scanCars(rows *sql.Rows) ([]models.Car, error) {
 	var cars []models.Car
 	for rows.Next() {
 		var c models.Car
-		var active int
-		if err := rows.Scan(&c.ID, &c.OwnerID, &c.Name, &c.PhotoURL, &c.PricePerDay, &active); err != nil {
+		if err := scanCar(rows, &c); err != nil {
 			return nil, err
 		}
-		c.Active = active == 1
 		cars = append(cars, c)
 	}
 	return cars, rows.Err()

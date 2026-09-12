@@ -224,6 +224,15 @@ func (a *Auth) GCRevoked(ctx context.Context) error {
 	return err
 }
 
+// userByID loads the full user row, the one place the users column list lives.
+func (a *Auth) userByID(ctx context.Context, id int64) (models.User, error) {
+	var u models.User
+	err := a.db.QueryRowContext(ctx,
+		`SELECT id, email, password_hash, role FROM users WHERE id = ?`, id).
+		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role)
+	return u, err
+}
+
 // RotateRefresh validates a single-use refresh token and swaps it for a
 // fresh access+refresh pair. The presented token is revoked so it cannot be
 // replayed; a reuse attempt fails with errRefreshReused.
@@ -239,10 +248,7 @@ func (a *Auth) RotateRefresh(ctx context.Context, token string) (access, refresh
 	if revoked {
 		return "", "", errRefreshReused
 	}
-	var u models.User
-	err = a.db.QueryRowContext(ctx,
-		`SELECT id, email, password_hash, role FROM users WHERE id = ?`, claims.UserID).
-		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role)
+	u, err := a.userByID(ctx, claims.UserID)
 	if err != nil {
 		return "", "", err
 	}
@@ -300,10 +306,7 @@ func (a *Auth) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		var u models.User
-		err = a.db.QueryRowContext(r.Context(),
-			`SELECT id, email, password_hash, role FROM users WHERE id = ?`, claims.UserID).
-			Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role)
+		u, err := a.userByID(r.Context(), claims.UserID)
 		if err != nil {
 			writeError(w, http.StatusUnauthorized, "user not found")
 			return
