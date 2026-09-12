@@ -3,7 +3,7 @@
 - **[Arquitectura](arquitectura.md)** — con qué está hecho, cómo está organizado, base de datos y reglas del negocio.
 - **[Configuración](configuracion.md)** — variables de entorno y cómo arrancar en producción.
 - **[Referencia de la API](api/00-general.md)** — cómo usar la API y detalle de cada endpoint:
-  - [Auth](api/auth.md) · [Autos](api/cars.md) · [Reservas](api/reservations.md) · [Pagos](api/payments.md)
+  - [Auth](api/auth.md) · [Autos](api/cars.md) · [Reservas](api/reservations.md) · [Pagos](api/payments.md) · [Archivos](api/uploads.md)
 - **[Flujo completo](flujo-completo.md)** — recorrido real con `curl`, del registro a la confirmación.
 - **[Desarrollo](desarrollo.md)** — Makefile, herramientas, colección Bruno y tests.
 
