@@ -14,8 +14,8 @@ func withCORSRequest(t *testing.T, method, path, origin string) *httptest.Respon
 		req.Header.Set("Origin", origin)
 	}
 	rec := httptest.NewRecorder()
-	mux := Routes(newTestAPI(t))
-	WithCORS([]string{"https://app.example.com"})(mux).ServeHTTP(rec, req)
+	a := newTestAPI(t)
+	WithCORS([]string{"https://app.example.com"}, a.allowedMethods())(Routes(a)).ServeHTTP(rec, req)
 	return rec
 }
 
@@ -62,7 +62,7 @@ func TestWildcardOrigin(t *testing.T) {
 		called = true
 		w.WriteHeader(http.StatusOK)
 	})
-	WithCORS([]string{"*"})(inner).ServeHTTP(rec, req)
+	WithCORS([]string{"*"}, []string{"GET"})(inner).ServeHTTP(rec, req)
 
 	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "*" {
 		t.Fatalf("ACAO = %q, want *", got)
@@ -84,7 +84,7 @@ func TestPreflight(t *testing.T) {
 		called = true
 		w.WriteHeader(http.StatusOK)
 	})
-	WithCORS([]string{"https://app.example.com"})(inner).ServeHTTP(rec, req)
+	WithCORS([]string{"https://app.example.com"}, []string{"POST"})(inner).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204", rec.Code)
@@ -120,7 +120,7 @@ func TestPreflightDisallowedOrigin(t *testing.T) {
 		called = true
 		w.WriteHeader(http.StatusOK)
 	})
-	WithCORS([]string{"https://app.example.com"})(inner).ServeHTTP(rec, req)
+	WithCORS([]string{"https://app.example.com"}, []string{"POST"})(inner).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204", rec.Code)
@@ -133,5 +133,40 @@ func TestPreflightDisallowedOrigin(t *testing.T) {
 	}
 	if rec.Header().Get("Access-Control-Allow-Methods") != "" {
 		t.Fatal("no Allow-Methods expected for a disallowed origin")
+	}
+}
+
+// TestPreflightMethodFromTable proves the CORS method list follows the route
+// table: any method the API exposes is accepted in preflights, and one it does
+// not expose (DELETE) is still rejected.
+func TestPreflightMethodFromTable(t *testing.T) {
+	a := newTestAPI(t)
+	handler := func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }
+	router := WithCORS([]string{"https://app.example.com"}, a.allowedMethods())(http.HandlerFunc(handler))
+
+	preflight := func(method string) *httptest.ResponseRecorder {
+		req := httptest.NewRequestWithContext(context.Background(), "OPTIONS", "/cars", nil)
+		req.Header.Set("Origin", "https://app.example.com")
+		req.Header.Set("Access-Control-Request-Method", method)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		return rec
+	}
+
+	for _, method := range a.allowedMethods() {
+		if method == http.MethodOptions {
+			continue
+		}
+		rec := preflight(method)
+		if rec.Code != http.StatusNoContent {
+			t.Errorf("preflight %s: status = %d, want 204", method, rec.Code)
+		}
+		if got := rec.Header().Get("Access-Control-Allow-Methods"); got != method {
+			t.Errorf("preflight %s: Allow-Methods = %q", method, got)
+		}
+	}
+
+	if got := preflight(http.MethodDelete).Header().Get("Access-Control-Allow-Methods"); got != "" {
+		t.Errorf("DELETE is not exposed by the API but preflight allowed it: %q", got)
 	}
 }
