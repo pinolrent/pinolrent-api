@@ -20,7 +20,7 @@ curl -s -X POST "$BASE/auth/register" \
 
 curl -s -X POST "$BASE/auth/register/seller" \
   -H 'Content-Type: application/json' \
-  -d '{"email":"vende@example.com","password":"secret123"}'
+  -d '{"email":"vende@example.com","password":"secret123","phone":"+56912345678"}'
 ```
 
 En ambos casos (`201`, igual exista o no el email):

@@ -57,6 +57,33 @@ Detalle de un auto **activo**. No necesita login.
 
 ---
 
+## `GET /cars/{id}/contact`
+
+Devuelve el link de WhatsApp del vendedor para coordinar. **Necesita login** — es el único lugar donde se expone un teléfono, a propósito: el catálogo público no se puede cosechar.
+
+```
+Authorization: Bearer <token>
+```
+
+**Responde** `200`:
+
+```json
+{"whatsapp_url":"https://wa.me/56912345678?text=Hola%2C%20vi%20tu%20Toyota%20Yaris%20en%20PinolRent"}
+```
+
+El mensaje viene precargado con el nombre del auto, y el número va en formato internacional sin `+`, como pide `wa.me`.
+
+| Código | Mensaje | Cuándo |
+|--------|---------|--------|
+| `400` | `invalid car id` | `{id}` no es número |
+| `401` | ver [00-general](00-general.md) | Sin token |
+| `404` | `car not found` | No existe o está inactivo |
+| `409` | `seller has no contact phone` | El vendedor no tiene teléfono cargado |
+
+> Cuenta para el cupo estricto de 30/min (el mismo de `/auth/*`), porque expone un dato personal.
+
+---
+
 ## `GET /seller/cars`
 
 Tus autos como vendedor, más nuevos primero. Necesita ser `seller`. Acepta `limit`/`offset`.
