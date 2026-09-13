@@ -2,7 +2,7 @@
 
 ## Con qué está hecho
 
-- **Go 1.26.5** con librería estándar: `net/http`, `database/sql`, `log/slog`.
+- **Go 1.26.6** con librería estándar: `net/http`, `database/sql`, `log/slog`.
 - **SQLite** embebido con `modernc.org/sqlite` (no necesita nada instalado en el sistema).
 - **Migraciones** con `pressly/goose/v3`: SQL versionado que se aplica solo al arrancar. Quedan registradas en `goose_db_version` y nunca borran datos.
 - **Límite de intentos** con `golang.org/x/time/rate` (por IP, solo en `/auth/*`).

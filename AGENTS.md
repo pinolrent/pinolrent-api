@@ -3,7 +3,7 @@
 ## Project overview
 
 PinolRent API — P2P car rental between private owners. Sellers publish cars, buyers reserve and pay.
-Go 1.26.5, `net/http` stdlib, SQLite (`modernc.org/sqlite`), `goose` migrations, JWT HS256, bcrypt.
+Go 1.26.6, `net/http` stdlib, SQLite (`modernc.org/sqlite`), `goose` migrations, JWT HS256, bcrypt.
 
 ```
 cmd/api/                  # server entrypoint, middleware wiring, graceful shutdown

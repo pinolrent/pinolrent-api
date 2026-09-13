@@ -57,7 +57,7 @@ Si intentas ver o tocar algo que no es tuyo, la API responde `404` como si no ex
 
 ## Stack y reglas básicas
 
-- **Go 1.26.5**, `net/http` sin framework, **SQLite** (`modernc.org/sqlite`) + migraciones `goose`.
+- **Go 1.26.6**, `net/http` sin framework, **SQLite** (`modernc.org/sqlite`) + migraciones `goose`.
 - Auth con **JWT HS256** (access 15 min + refresh 7 días con rotación) y **bcrypt** para contraseñas.
 - `price_per_day` va en **centavos** (ej. 45000 = $450). Fechas como `YYYY-MM-DD`.
 - Cada request con body no puede pasar de **1 MB**. JSON con campos desconocidos da error.
