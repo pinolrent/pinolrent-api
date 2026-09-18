@@ -75,7 +75,9 @@ Fix every failure before committing. Never push with a red check that you could 
 `.github/workflows/ci.yml` runs on every push to `main` and every PR:
 `go mod verify` → `gofmt` check → `go mod tidy` check → `make vet` → `make test` →
 `make test-race` → `golangci-lint v2.13.2` → `govulncheck` → `make cover` → `make build` →
-`make demo`. Keep `GOLANGCI_VERSION` in `Makefile` and the workflow in sync.
+`make demo`, plus a `docker` job that only builds the image (no push) so a broken Dockerfile
+fails in the PR instead of in the deploy. Keep `GOLANGCI_VERSION` in `Makefile` and the workflow
+in sync.
 
 ## Testing
 
