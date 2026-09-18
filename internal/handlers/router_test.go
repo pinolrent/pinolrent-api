@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -16,6 +17,50 @@ func doRouter(t *testing.T, h http.Handler, method, path string) *httptest.Respo
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	return rec
+}
+
+// parseCIDRs is the test-side counterpart of config.TrustedProxies.
+func parseCIDRs(t *testing.T, entries ...string) []*net.IPNet {
+	t.Helper()
+	var nets []*net.IPNet
+	for _, e := range entries {
+		_, n, err := net.ParseCIDR(e)
+		if err != nil {
+			t.Fatalf("parse CIDR %q: %v", e, err)
+		}
+		nets = append(nets, n)
+	}
+	return nets
+}
+
+// TestRouterKeysLimiterByForwardedIPFromTrustedProxy checks the wiring: with a
+// trusted proxy configured, the strict bucket follows the forwarded client IP
+// instead of collapsing every client into the proxy's address.
+func TestRouterKeysLimiterByForwardedIPFromTrustedProxy(t *testing.T) {
+	a := newTestAPI(t)
+	a.TrustedProxies = parseCIDRs(t, "172.18.0.0/16")
+	router := NewRouter(a, []string{"*"})
+
+	do := func(xff string) int {
+		req := httptest.NewRequestWithContext(context.Background(), "POST", "/auth/login", nil)
+		req.RemoteAddr = "172.18.0.5:43210"
+		req.Header.Set("X-Forwarded-For", xff)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	for i := 0; i < strictLimiterBurst; i++ {
+		if code := do("198.51.100.7"); code == http.StatusTooManyRequests {
+			t.Fatalf("request %d: 429 inside the burst", i)
+		}
+	}
+	if code := do("198.51.100.7"); code != http.StatusTooManyRequests {
+		t.Fatalf("burst not enforced for the forwarded IP: status = %d", code)
+	}
+	if code := do("198.51.100.8"); code == http.StatusTooManyRequests {
+		t.Fatal("a different client behind the same proxy shares the bucket")
+	}
 }
 
 func TestRouterSecurityHeaders(t *testing.T) {

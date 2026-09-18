@@ -54,6 +54,15 @@ func main() {
 	h := handlers.New(d, a)
 	h.Version = version
 	h.UploadDir = cfg.UploadDir
+	// Networks whose forwarding headers we believe. Without this the server
+	// ignores X-Forwarded-For from a non-loopback proxy, which behind a
+	// container platform (Coolify, Fly, any PaaS) would collapse every client
+	// into a single rate-limit bucket.
+	h.TrustedProxies, err = cfg.TrustedProxies()
+	if err != nil {
+		slog.Error("invalid config", "error", err)
+		os.Exit(1)
+	}
 
 	// #nosec G301 -- the upload directory must be readable by the static
 	// file server and any reverse proxy user; uploaded files stay 0600.

@@ -165,7 +165,7 @@ stateDiagram-v2
 - `GET /cars/{id}/contact` (el que devuelve el WhatsApp del vendedor) usa el cupo estricto de 30/min, porque expone un dato personal.
 - Cada límite se engancha por ruta, no por prefijo de path: un patrón con `{id}` no matchea el path real, y un prefijo como `/reservations/` limitaría endpoints que deben quedar libres.
 - Si te pasas → `429 {"error":"too many requests"}` con header `Retry-After: 60`.
-- `X-Forwarded-For` / `X-Real-IP` solo valen si la conexión viene de un proxy local (loopback); si no, cuenta la IP de la conexión.
+- `X-Forwarded-For` / `X-Real-IP` solo valen si la conexión viene de un proxy confiable: loopback siempre, más las redes que liste `TRUSTED_PROXY_CIDRS` (hace falta detrás de contenedores o un PaaS). Dentro de la cadena se toma el valor más a la derecha que no sea un proxy confiable, así un header falsificado no elige el bucket.
 - Es en memoria, por proceso. Los contadores se borran tras 10 min sin uso.
 
 ## Server y logs

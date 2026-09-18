@@ -1,6 +1,7 @@
 package config
 
 import (
+	"net"
 	"strings"
 	"testing"
 )
@@ -21,9 +22,53 @@ func TestLoadOverrides(t *testing.T) {
 	t.Setenv("DATABASE_URL", "custom.db")
 	t.Setenv("JWT_SECRET", testJWTSecret)
 	t.Setenv("CORS_ALLOWED_ORIGINS", "https://app.example.com")
+	t.Setenv("TRUSTED_PROXY_CIDRS", "172.18.0.0/16")
 	cfg := Load()
 	if cfg.Port != "9999" || cfg.DatabaseURL != "custom.db" || cfg.CORSAllowedOrigins != "https://app.example.com" {
 		t.Fatalf("overrides not applied: %+v", cfg)
+	}
+	if cfg.TrustedProxyCIDRs != "172.18.0.0/16" {
+		t.Fatalf("TRUSTED_PROXY_CIDRS not applied: %+v", cfg)
+	}
+}
+
+func TestTrustedProxies(t *testing.T) {
+	cfg := Config{TrustedProxyCIDRs: "172.18.0.0/16, 10.0.0.0/8"}
+	nets, err := cfg.TrustedProxies()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(nets) != 2 {
+		t.Fatalf("got %d networks, want 2", len(nets))
+	}
+	if !nets[0].Contains(net.ParseIP("172.18.5.5")) {
+		t.Fatalf("first network should contain 172.18.5.5: %v", nets[0])
+	}
+
+	// Unset means no proxy is trusted beyond loopback.
+	nets, err = Config{}.TrustedProxies()
+	if err != nil {
+		t.Fatalf("unexpected error for empty value: %v", err)
+	}
+	if len(nets) != 0 {
+		t.Fatalf("empty value should yield no networks, got %v", nets)
+	}
+}
+
+func TestValidateBadTrustedProxy(t *testing.T) {
+	cfg := Config{
+		Port:              "8080",
+		DatabaseURL:       "x.db",
+		JWTSecret:         testJWTSecret,
+		UploadDir:         "uploads",
+		TrustedProxyCIDRs: "10.0.0.1", // a bare IP is not a CIDR
+	}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for a bare IP")
+	}
+	if !strings.Contains(err.Error(), "TRUSTED_PROXY_CIDRS") {
+		t.Fatalf("error %q should mention TRUSTED_PROXY_CIDRS", err.Error())
 	}
 }
 

@@ -3,6 +3,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"strconv"
 	"strings"
@@ -18,6 +19,7 @@ type Config struct {
 	CORSAllowedOrigins string `env:"CORS_ALLOWED_ORIGINS" envDefault:"*"`
 	Env                string `env:"ENV" envDefault:"dev"`
 	UploadDir          string `env:"UPLOAD_DIR" envDefault:"uploads"`
+	TrustedProxyCIDRs  string `env:"TRUSTED_PROXY_CIDRS"`
 }
 
 // Load reads the configuration from the environment, applying defaults for
@@ -53,7 +55,30 @@ func (c Config) Validate() error {
 	if strings.TrimSpace(c.UploadDir) == "" {
 		return fmt.Errorf("UPLOAD_DIR must not be empty")
 	}
+	if _, err := c.TrustedProxies(); err != nil {
+		return err
+	}
 	return nil
+}
+
+// TrustedProxies parses the comma-separated list of networks whose forwarding
+// headers (X-Forwarded-For/X-Real-IP) the server believes. Loopback is always
+// trusted, so the empty default keeps the single-host behaviour: only a proxy
+// running on the same machine can set the client IP.
+func (c Config) TrustedProxies() ([]*net.IPNet, error) {
+	var nets []*net.IPNet
+	for _, entry := range strings.Split(c.TrustedProxyCIDRs, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		_, ipNet, err := net.ParseCIDR(entry)
+		if err != nil {
+			return nil, fmt.Errorf("invalid TRUSTED_PROXY_CIDRS entry %q: want a CIDR like 172.18.0.0/16", entry)
+		}
+		nets = append(nets, ipNet)
+	}
+	return nets, nil
 }
 
 // CORSOrigins parses the comma-separated allow-list for cross-origin requests.
