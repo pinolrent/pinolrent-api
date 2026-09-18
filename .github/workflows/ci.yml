@@ -117,6 +117,26 @@ jobs:
       - name: End-to-end smoke
         run: make demo
 
+  docker:
+    name: docker image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [test]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Solo compila: la imagen que se despliega la construye Coolify desde el
+      # repo. Esto existe para que un Dockerfile roto se vea en el PR.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          build-args: VERSION=ci-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   bruno:
     name: bruno collection
     runs-on: ubuntu-latest
