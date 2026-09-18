@@ -1,0 +1,17 @@
+# Contexto de build: solo lo que hace falta para compilar y lo que no debe
+# terminar dentro de la imagen. En Coolify el contexto es el clon del repo, pero
+# un `docker build` local usa el directorio completo: sin estos ignores un
+# dev.db viejo o un .env con secretos quedarían horneados en la imagen.
+.git
+.github
+.codegraph
+bin/
+tmp/
+uploads/
+*.db*
+.env
+docs/
+bruno/
+scripts/
+README.md
+AGENTS.md
