@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -53,12 +54,13 @@ type rowScanner interface {
 }
 
 // API bundles the shared dependencies used by every handler: the database
-// pool and the auth provider.
+// pool, the auth provider and the operational settings wired at startup.
 type API struct {
-	DB        *sql.DB
-	Auth      *auth.Auth
-	Version   string
-	UploadDir string
+	DB             *sql.DB
+	Auth           *auth.Auth
+	Version        string
+	UploadDir      string
+	TrustedProxies []*net.IPNet
 }
 
 // New returns an API bound to the given database pool and auth provider.

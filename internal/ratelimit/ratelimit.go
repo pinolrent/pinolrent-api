@@ -24,25 +24,29 @@ type entry struct {
 
 // Limiter is a token bucket rate limiter with per-key refill and expiry.
 type Limiter struct {
-	mu       sync.Mutex
-	rate     float64
-	burst    int
-	limits   map[string]*entry
-	lastGC   time.Time
-	gcEvery  time.Duration
-	tokenTTL time.Duration
+	mu         sync.Mutex
+	rate       float64
+	burst      int
+	trustedFor []*net.IPNet
+	limits     map[string]*entry
+	lastGC     time.Time
+	gcEvery    time.Duration
+	tokenTTL   time.Duration
 }
 
 // New returns a Limiter that refills at the given tokens-per-second rate with
-// the given burst capacity for each key.
-func New(rate float64, burst int) *Limiter {
+// the given burst capacity for each key. trustedProxies are the networks whose
+// forwarding headers are believed (loopback always is); pass none when the
+// server is reached directly.
+func New(rate float64, burst int, trustedProxies ...*net.IPNet) *Limiter {
 	return &Limiter{
-		rate:     rate,
-		burst:    burst,
-		limits:   make(map[string]*entry),
-		lastGC:   time.Now(),
-		gcEvery:  time.Minute,
-		tokenTTL: 10 * time.Minute,
+		rate:       rate,
+		burst:      burst,
+		trustedFor: trustedProxies,
+		limits:     make(map[string]*entry),
+		lastGC:     time.Now(),
+		gcEvery:    time.Minute,
+		tokenTTL:   10 * time.Minute,
 	}
 }
 
@@ -80,7 +84,7 @@ func (l *Limiter) gc(now time.Time) {
 func (l *Limiter) Handler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		l.maybeGC()
-		if !l.Allow(clientIP(r)) {
+		if !l.Allow(clientIP(r, l.trustedFor)) {
 			w.Header().Set("Retry-After", "60")
 			writeJSONError(w, http.StatusTooManyRequests, "too many requests")
 			return
@@ -98,7 +102,7 @@ func (l *Limiter) Middleware(next http.Handler, limitPaths ...string) http.Handl
 		if matchesRequest(r, limitPaths) {
 			l.maybeGC()
 
-			if !l.Allow(clientIP(r)) {
+			if !l.Allow(clientIP(r, l.trustedFor)) {
 				w.Header().Set("Retry-After", "60")
 				writeJSONError(w, http.StatusTooManyRequests, "too many requests")
 				return
@@ -118,41 +122,57 @@ func (l *Limiter) maybeGC() {
 	}
 }
 
-// clientIP returns the client IP. Proxy headers (X-Forwarded-For/X-Real-IP)
-// are honored only when the direct peer is a loopback proxy that overwrites
-// them; otherwise any client could spoof an arbitrary IP and get a fresh
-// rate-limit bucket. Direct connections always key on RemoteAddr.
-func clientIP(r *http.Request) string {
-	if isLocalProxy(r.RemoteAddr) {
+// clientIP returns the client IP for rate limiting. Forwarding headers are
+// honored only when the direct peer is a trusted proxy (loopback or one of the
+// configured networks); otherwise any client could spoof a header and get a
+// fresh bucket. Within a trusted chain the header is read from right to left
+// and the first value that is not itself a trusted proxy wins, so a client that
+// injects its own X-Forwarded-For cannot choose the bucket: our proxy appends
+// the address it saw at the end of the chain.
+func clientIP(r *http.Request, trustedProxies []*net.IPNet) string {
+	peer := remoteHost(r.RemoteAddr)
+	if isTrustedProxy(peer, trustedProxies) {
 		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 			parts := strings.Split(xff, ",")
-			if ip := strings.TrimSpace(parts[0]); ip != "" {
+			for i := len(parts) - 1; i >= 0; i-- {
+				ip := strings.TrimSpace(parts[i])
+				if ip == "" || isTrustedProxy(ip, trustedProxies) {
+					continue
+				}
 				return ip
 			}
 		}
-		if xri := r.Header.Get("X-Real-IP"); xri != "" {
-			if ip := strings.TrimSpace(xri); ip != "" {
-				return ip
-			}
+		if xri := strings.TrimSpace(r.Header.Get("X-Real-IP")); xri != "" {
+			return xri
 		}
 	}
-	host := r.RemoteAddr
-	if h, _, err := net.SplitHostPort(host); err == nil {
-		return h
-	}
-	return host
+	return peer
 }
 
-// isLocalProxy reports whether remoteAddr belongs to a loopback peer, i.e.
-// the request arrived via a reverse proxy on the same host that sets the
-// forwarding headers itself.
-func isLocalProxy(remoteAddr string) bool {
-	host, _, err := net.SplitHostPort(remoteAddr)
-	if err != nil {
-		host = remoteAddr
+// remoteHost strips the port from a RemoteAddr-shaped string.
+func remoteHost(remoteAddr string) string {
+	if h, _, err := net.SplitHostPort(remoteAddr); err == nil {
+		return h
 	}
+	return remoteAddr
+}
+
+// isTrustedProxy reports whether a host belongs to a loopback peer or to one of
+// the configured proxy networks.
+func isTrustedProxy(host string, trustedProxies []*net.IPNet) bool {
 	ip := net.ParseIP(strings.TrimSpace(host))
-	return ip != nil && ip.IsLoopback()
+	if ip == nil {
+		return false
+	}
+	if ip.IsLoopback() {
+		return true
+	}
+	for _, n := range trustedProxies {
+		if n.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 func matchesPrefix(path string, prefixes []string) bool {

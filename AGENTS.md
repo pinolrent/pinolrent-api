@@ -32,7 +32,8 @@ make watch   # hot-reload via air (requires make tools)
 
 Required env: `JWT_SECRET` (min 32 bytes). Optional: `PORT` (default 8080, must be 1-65535),
 `DATABASE_URL` (default `pinolrent.db`, dev uses `dev.db`), `CORS_ALLOWED_ORIGINS` (default `*`),
-`ENV` (default `dev`; `prod`/`production` rejects `CORS_ALLOWED_ORIGINS=*`).
+`ENV` (default `dev`; `prod`/`production` rejects `CORS_ALLOWED_ORIGINS=*`),
+`TRUSTED_PROXY_CIDRS` (default empty: only a loopback proxy is trusted for `X-Forwarded-For`).
 
 Priority: shell env > `.env` > defaults. A malformed `.env` is a hard error. See `.env.example`
 and `docs/configuracion.md` for details.
@@ -132,5 +133,8 @@ Assertions use `res.status` / `res.body.*` (the `$res` variant throws `Reference
 
 - `JWT_SECRET` must be set in prod (min 32 bytes, generate with `openssl rand -base64 32`).
 - Set `ENV=prod` and `CORS_ALLOWED_ORIGINS` to your frontend origin(s).
+- Behind a proxy that is not on loopback (containers, Coolify/Traefik, any PaaS) set
+  `TRUSTED_PROXY_CIDRS` to the proxy network, or every client shares one rate-limit bucket and the
+  logs show the proxy IP instead of the caller.
 - `PORT` must be a valid port. `.env` errors fail fast.
 - The server handles `SIGINT`/`SIGTERM` with a 10s graceful shutdown.

@@ -31,8 +31,8 @@ const (
 // short-circuit before reaching a rate limiter, and every response (even a
 // 429) ships the CORS headers the browser needs to read it.
 func NewRouter(a *API, origins []string) http.Handler {
-	strict := ratelimit.New(strictLimiterRate, strictLimiterBurst)
-	standard := ratelimit.New(standardLimiterRate, standardLimiterBurst)
+	strict := ratelimit.New(strictLimiterRate, strictLimiterBurst, a.TrustedProxies...)
+	standard := ratelimit.New(standardLimiterRate, standardLimiterBurst, a.TrustedProxies...)
 
 	mux := http.NewServeMux()
 	for _, r := range a.routes() {
