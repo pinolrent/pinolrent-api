@@ -6,7 +6,7 @@ meta {
 
 post {
   url: {{baseUrl}}/uploads
-  body: multipart-form
+  body: multipartForm
 }
 
 headers {
@@ -14,7 +14,7 @@ headers {
 }
 
 body:multipart-form {
-  file: @file(../fixtures/fit.png)
+  file: @file(fixtures/fit.png)
 }
 
 assert {
