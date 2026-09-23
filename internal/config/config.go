@@ -19,12 +19,15 @@ type Config struct {
 	CORSAllowedOrigins string `env:"CORS_ALLOWED_ORIGINS" envDefault:"*"`
 	Env                string `env:"ENV" envDefault:"dev"`
 	UploadDir          string `env:"UPLOAD_DIR" envDefault:"uploads"`
-	TrustedProxyCIDRs  string `env:"TRUSTED_PROXY_CIDRS"`
+	// UploadMaxTotalMB caps the total size of UploadDir in MB; 0 disables
+	// the cap. Bounds disk usage against a client uploading at the rate
+	// limit forever.
+	UploadMaxTotalMB  int    `env:"UPLOAD_MAX_TOTAL_MB" envDefault:"1024"`
+	TrustedProxyCIDRs string `env:"TRUSTED_PROXY_CIDRS"`
 }
 
 // Load reads the configuration from the environment, applying defaults for
-// optional values. All fields are strings, so parsing cannot fail here;
-// semantic validation happens in Validate.
+// optional values. Malformed values surface in Validate where that matters.
 func Load() Config {
 	cfg := Config{}
 	_ = env.Parse(&cfg)

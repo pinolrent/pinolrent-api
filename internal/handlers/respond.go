@@ -60,6 +60,7 @@ type API struct {
 	Auth           *auth.Auth
 	Version        string
 	UploadDir      string
+	UploadMaxTotal int64
 	TrustedProxies []*net.IPNet
 }
 

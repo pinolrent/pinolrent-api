@@ -68,6 +68,6 @@ Un archivo a nivel de fichero de una base que está escribiendo puede salir inco
 ## Limitaciones conocidas
 
 - Con snapshot diario se puede perder hasta 24 h de datos si el servidor muere; la copia off-site no cambia eso, solo evita perderlo todo.
-- `uploads/` crece sin límite: no hay limpieza de imágenes huérfanas, así que conviene mirar el disco cada tanto.
+- `uploads/` tiene cuota total (`UPLOAD_MAX_TOTAL_MB`, default 1 GB) y un sweep cada 6 horas borra los archivos huérfanos con más de 7 días; aun así conviene mirar el disco cada tanto.
 - El `WriteTimeout` es de 120 s: una subida de 5 MB sobrevive desde ~37 KB/s, pero en enlaces realmente miserables aún puede cortar.
 - El rate limit es en memoria y por proceso: con una sola instancia es correcto, pero reiniciar el proceso lo resetea.
