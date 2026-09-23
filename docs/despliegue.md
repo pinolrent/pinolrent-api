@@ -69,5 +69,5 @@ Un archivo a nivel de fichero de una base que está escribiendo puede salir inco
 
 - Con snapshot diario se puede perder hasta 24 h de datos si el servidor muere; la copia off-site no cambia eso, solo evita perderlo todo.
 - `uploads/` crece sin límite: no hay limpieza de imágenes huérfanas, así que conviene mirar el disco cada tanto.
-- El `WriteTimeout` del server es de 30 s, que en conexiones móviles lentas puede cortar una subida de 5 MB.
+- El `WriteTimeout` es de 120 s: una subida de 5 MB sobrevive desde ~37 KB/s, pero en enlaces realmente miserables aún puede cortar.
 - El rate limit es en memoria y por proceso: con una sola instancia es correcto, pero reiniciar el proceso lo resetea.
