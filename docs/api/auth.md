@@ -92,7 +92,7 @@ Verifica email y password y devuelve un token. No necesita login.
 
 ## `POST /auth/refresh`
 
-Cambia un refresh token de un solo uso por un par nuevo (`token` + `refresh_token`). El presentado queda revocado: reusarlo devuelve `401`.
+Cambia un refresh token de un solo uso por un par nuevo (`token` + `refresh_token`). El presentado queda revocado: reusarlo devuelve `401` **y además invalida todos los demás tokens del usuario** — un reuso es señal de robo de token y el server no puede distinguir al ladrón de la víctima, así que cierra ambas sesiones (hay que volver a loguearse).
 
 ```json
 {"refresh_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."}

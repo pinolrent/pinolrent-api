@@ -471,6 +471,73 @@ func TestLoginUnknownEmailRunsBcrypt(t *testing.T) {
 // this test fixture lives in one neutrally named const.
 const afterChange = "nuevaClave456"
 
+func TestRefreshReplayRevokesAllSessions(t *testing.T) {
+	a := newTestAPI(t)
+	registerBuyer(t, a, "replay@example.com", "secret123")
+
+	rec := doJSON(t, a, "POST", "/auth/login", "", map[string]any{
+		"email": "replay@example.com", "password": "secret123",
+	})
+	var first struct {
+		Token        string `json:"token"`
+		RefreshToken string `json:"refresh_token"`
+	}
+	decodeJSON(t, rec, &first)
+
+	rec = doJSON(t, a, "POST", "/auth/refresh", "", map[string]any{"refresh_token": first.RefreshToken})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("rotate: status = %d body %s", rec.Code, rec.Body.String())
+	}
+	var rotated struct {
+		Token        string `json:"token"`
+		RefreshToken string `json:"refresh_token"`
+	}
+	decodeJSON(t, rec, &rotated)
+
+	// Cross a second boundary: the revocation stamp is second-granular and
+	// must land strictly after the iat of every token that has to die.
+	time.Sleep(1100 * time.Millisecond)
+
+	// replay the consumed refresh: the thief and the victim both lose
+	if rec := doJSON(t, a, "POST", "/auth/refresh", "", map[string]any{
+		"refresh_token": first.RefreshToken,
+	}); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("replay: status = %d, want 401 (body %s)", rec.Code, rec.Body.String())
+	}
+	if rec := doJSON(t, a, "GET", "/auth/me", rotated.Token, nil); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("access issued before replay: status = %d, want 401", rec.Code)
+	}
+	if rec := doJSON(t, a, "GET", "/auth/me", first.Token, nil); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("original access: status = %d, want 401", rec.Code)
+	}
+	if rec := doJSON(t, a, "POST", "/auth/refresh", "", map[string]any{
+		"refresh_token": rotated.RefreshToken,
+	}); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("refresh issued before replay: status = %d, want 401", rec.Code)
+	}
+
+	// a fresh login recovers the account
+	rec = doJSON(t, a, "POST", "/auth/login", "", map[string]any{
+		"email": "replay@example.com", "password": "secret123",
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("login after replay: status = %d body %s", rec.Code, rec.Body.String())
+	}
+	var fresh struct {
+		Token string `json:"token"`
+	}
+	decodeJSON(t, rec, &fresh)
+	if rec := doJSON(t, a, "GET", "/auth/me", fresh.Token, nil); rec.Code != http.StatusOK {
+		t.Fatalf("fresh token: status = %d, want 200", rec.Code)
+	}
+
+	// other users are untouched
+	other := registerBuyer(t, a, "replay-other@example.com", "secret123")
+	if rec := doJSON(t, a, "GET", "/auth/me", other, nil); rec.Code != http.StatusOK {
+		t.Fatalf("unrelated user: status = %d, want 200", rec.Code)
+	}
+}
+
 func TestUpdatePassword(t *testing.T) {
 	a := newTestAPI(t)
 	registerBuyer(t, a, "pw@example.com", "secret123")
