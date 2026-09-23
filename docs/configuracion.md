@@ -10,6 +10,7 @@
 | `CORS_ALLOWED_ORIGINS` | `*` | no | Qué orígenes pueden llamar a la API, separados por coma. `*` = todos |
 | `ENV` | `dev` | no | Entorno: `dev` (default) o `prod`/`production`. En prod `CORS_ALLOWED_ORIGINS=*` es rechazado |
 | `UPLOAD_DIR` | `uploads` | no | Directorio donde se guardan las imágenes de `POST /uploads`. Se crea al arrancar; no vacío |
+| `UPLOAD_MAX_TOTAL_MB` | `1024` | no | Cap total de `UPLOAD_DIR` en MB; `0` = sin límite. Al superarse, `POST /uploads` responde `507` |
 | `TRUSTED_PROXY_CIDRS` | — (vacío) | no | Redes de las que se cree `X-Forwarded-For`/`X-Real-IP`, separadas por coma (ej. `172.18.0.0/16`). Vacío = solo se confía en un proxy en loopback |
 
 El orden de prioridad es: **variables del shell > `.env` > valores por defecto**. Si una variable está vacía se ignora.

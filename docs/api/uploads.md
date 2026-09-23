@@ -14,6 +14,8 @@ Sube una imagen y devuelve su ruta local. Necesita login (cualquier rol). La rut
 
 Reglas: solo `jpg`, `png` o `webp` (se detecta por contenido, no por extensión), máximo **5 MB** por archivo. El nombre se genera en el server, se ignora el original.
 
+El directorio además tiene **cuota total** (`UPLOAD_MAX_TOTAL_MB`, default 1 GB, ver [configuración](../configuracion.md)): si la suma de lo ya subido más el archivo nuevo la supera, responde `507` sin tocar el disco. Los archivos que ninguna fila de la base referencia (subidas abandonadas o fotos de autos ya borrados) se limpian solos pasados **7 días**.
+
 **Errores:**
 
 | Código | Mensaje | Cuándo |
@@ -22,6 +24,7 @@ Reglas: solo `jpg`, `png` o `webp` (se detecta por contenido, no por extensión)
 | `400` | `invalid multipart body` | Body no es multipart válido |
 | `413` | `request body too large` | Más de 5 MB |
 | `415` | `only jpg, png or webp images are allowed` | No es imagen soportada |
+| `507` | `storage quota exceeded` | El directorio estaría sobre la cuota |
 | `401` | ver [00-general](00-general.md) | Sin token |
 
 ---

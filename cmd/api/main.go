@@ -54,6 +54,7 @@ func main() {
 	h := handlers.New(d, a)
 	h.Version = version
 	h.UploadDir = cfg.UploadDir
+	h.UploadMaxTotal = int64(cfg.UploadMaxTotalMB) << 20
 	// Networks whose forwarding headers we believe. Without this the server
 	// ignores X-Forwarded-For from a non-loopback proxy, which behind a
 	// container platform (Coolify, Fly, any PaaS) would collapse every client
@@ -84,6 +85,23 @@ func main() {
 			case <-ticker.C:
 				if err := a.GCRevoked(ctx); err != nil {
 					slog.Error("revoked tokens gc", "error", err)
+				}
+			}
+		}
+	}()
+
+	// Sweep orphaned uploads: image files no cars/payments row references
+	// after the grace period (abandoned uploads, photos of deleted cars).
+	go func() {
+		ticker := time.NewTicker(6 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := h.CleanupOrphanUploads(ctx); err != nil {
+					slog.Error("orphan uploads cleanup", "error", err)
 				}
 			}
 		}
