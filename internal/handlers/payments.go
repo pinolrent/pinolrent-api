@@ -200,3 +200,89 @@ func (a *API) ConfirmReservation(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, v)
 }
+
+// RejectReservation rejects the recorded payment and cancels the reservation,
+// atomically, freeing the dates. It is the escape hatch for a bogus or missing
+// transfer: without it a paid pending reservation could only move forward to
+// confirmed, and its dates would stay blocked forever. Only the seller that
+// owns the car can reject.
+func (a *API) RejectReservation(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.CurrentUser(r.Context())
+
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid reservation id")
+		return
+	}
+
+	rejected := false
+	err = withImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
+		ctx := r.Context()
+
+		var status string
+		var ownerID int64
+		if err := conn.QueryRowContext(ctx, `
+			SELECT r.status, c.owner_id FROM reservations r
+			JOIN cars c ON c.id = r.car_id
+			WHERE r.id = ?`, id).Scan(&status, &ownerID); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				writeError(w, http.StatusNotFound, "reservation not found")
+				return errTxHandled
+			}
+			serverError(w, err)
+			return errTxHandled
+		}
+		if ownerID != u.ID {
+			writeError(w, http.StatusNotFound, "reservation not found")
+			return errTxHandled
+		}
+		if status != "pending" {
+			writeError(w, http.StatusConflict, "reservation is not pending")
+			return errTxHandled
+		}
+
+		var pStatus string
+		if err := conn.QueryRowContext(ctx, `SELECT status FROM payments WHERE reservation_id = ?`, id).Scan(&pStatus); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				writeError(w, http.StatusConflict, "no payment recorded for this reservation")
+				return errTxHandled
+			}
+			serverError(w, err)
+			return errTxHandled
+		}
+		if pStatus != "pending" {
+			writeError(w, http.StatusConflict, "payment is not pending")
+			return errTxHandled
+		}
+
+		res, err := conn.ExecContext(ctx, `UPDATE payments SET status = 'rejected' WHERE reservation_id = ? AND status = 'pending'`, id)
+		if err != nil {
+			serverError(w, err)
+			return errTxHandled
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			writeError(w, http.StatusConflict, "payment is not pending")
+			return errTxHandled
+		}
+		if _, err := conn.ExecContext(ctx, `UPDATE reservations SET status = 'cancelled' WHERE id = ?`, id); err != nil {
+			serverError(w, err)
+			return errTxHandled
+		}
+		rejected = true
+		return nil
+	})
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	if !rejected {
+		return
+	}
+
+	v, err := a.reservationView(r.Context(), id)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, v)
+}

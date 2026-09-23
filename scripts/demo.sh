@@ -196,6 +196,20 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/reservations" -H "A
   -d "{\"car_id\":$car,\"start_date\":\"2027-02-01\",\"end_date\":\"2027-02-03\"}")
 check "re-reservar rango liberado -> 201" "201" "$code"
 
+echo "== rechazo =="
+res3=$(curl -s -X POST "$BASE/reservations" -H "Authorization: Bearer $buyer" \
+  -H 'Content-Type: application/json' \
+  -d "{\"car_id\":$car,\"start_date\":\"2027-02-10\",\"end_date\":\"2027-02-12\"}" | jq -r .id)
+check "reserva para rechazar" "numero" "$([ "$res3" != "null" ] && echo numero)"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/reservations/$res3/payment" \
+  -H "Authorization: Bearer $buyer" -H 'Content-Type: application/json' -d '{"method":"cash"}')
+check "pago para rechazar -> 201" "201" "$code"
+rej=$(curl -s -X PATCH "$BASE/seller/reservations/$res3/reject" -H "Authorization: Bearer $seller")
+check "rechazar -> cancelled" "cancelled" "$(printf '%s' "$rej" | jq -r .status)"
+check "pago rechazado" "rejected" "$(printf '%s' "$rej" | jq -r .payment.status)"
+n=$(curl -s "$BASE/cars?start_date=2027-02-11&end_date=2027-02-11" | jq --argjson id "$car" '[.[] | select(.id == $id)] | length')
+check "fechas liberadas tras rechazo" "1" "$n"
+
 echo "== límite de días =="
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/reservations" -H "Authorization: Bearer $buyer" \
   -H 'Content-Type: application/json' \

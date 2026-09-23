@@ -55,6 +55,7 @@ func (a *API) routes() []route {
 		{http.MethodGet, "/uploads/", a.serveUpload, limitNone},
 		{http.MethodGet, "/seller/reservations", a.Auth.RequireRole("seller", a.ListSellerReservations), limitNone},
 		{http.MethodPatch, "/seller/reservations/{id}/confirm", a.Auth.RequireRole("seller", a.ConfirmReservation), limitStandard},
+		{http.MethodPatch, "/seller/reservations/{id}/reject", a.Auth.RequireRole("seller", a.RejectReservation), limitStandard},
 	}
 }
 

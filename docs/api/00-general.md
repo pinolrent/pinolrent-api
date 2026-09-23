@@ -88,6 +88,7 @@ Responden un **array simple**. Para saber si hay más, pedí `limit+1` y fijate 
 | POST | `/reservations/{id}/payment` | sí | [payments](payments.md) |
 | GET | `/seller/reservations` | vendedor | [payments](payments.md) |
 | PATCH | `/seller/reservations/{id}/confirm` | vendedor | [payments](payments.md) |
+| PATCH | `/seller/reservations/{id}/reject` | vendedor | [payments](payments.md) |
 | POST | `/uploads` | sí | [uploads](uploads.md) |
 | GET | `/uploads/{nombre}` | no | [uploads](uploads.md) |
 
