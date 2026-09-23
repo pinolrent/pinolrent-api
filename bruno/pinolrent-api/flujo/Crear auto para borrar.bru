@@ -1,0 +1,34 @@
+meta {
+  name: Crear auto para borrar
+  type: http
+  seq: 27
+}
+
+post {
+  url: {{baseUrl}}/seller/cars
+  body: json
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{sellerToken}}
+}
+
+body:json {
+  {
+    "name": "Auto Borrable",
+    "price_per_day": 10000
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.id: isDefined
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (body.id) {
+    bru.setVar("throwawayCarId", body.id);
+  }
+}

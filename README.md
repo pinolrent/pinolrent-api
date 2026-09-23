@@ -33,7 +33,8 @@ make watch   # levanta con recarga automática al editar (requiere make tools)
 | GET | `/cars/{id}` | no | Ver el detalle de un auto |
 | GET | `/cars/{id}/contact` | sí | Link de WhatsApp del vendedor (para coordinar) |
 | GET · POST | `/seller/cars` | vendedor | Ver tus autos y agregar uno nuevo |
-| PATCH | `/seller/cars/{id}` | vendedor | Activar o desactivar uno de tus autos |
+| PATCH | `/seller/cars/{id}` | vendedor | Editar nombre, precio o foto; activar/desactivar |
+| DELETE | `/seller/cars/{id}` | vendedor | Eliminar un auto que nunca tuvo reservas |
 | POST | `/reservations` | sí | Reservar un auto |
 | GET | `/reservations` · `/reservations/{id}` | sí | Ver tus reservas |
 | PATCH | `/reservations/{id}/cancel` | sí | Cancelar una reserva tuya (solo si aún no pagaste) |
@@ -64,6 +65,6 @@ Si intentas ver o tocar algo que no es tuyo, la API responde `404` como si no ex
 - Auth con **JWT HS256** (access 15 min + refresh 7 días con rotación) y **bcrypt** para contraseñas.
 - `price_per_day` va en **centavos** (ej. 45000 = $450). Fechas como `YYYY-MM-DD`.
 - Cada request con body no puede pasar de **1 MB**. JSON con campos desconocidos da error.
-- Login y registro limitados a **30 intentos por minuto por IP**; escritura (`POST` y `PATCH` fuera de `/auth/`) a **120 por minuto** (ráfaga 60). CORS abierto por defecto (se puede cerrar con `CORS_ALLOWED_ORIGINS`; con `ENV=prod` no permite `*`).
+- Login y registro limitados a **30 intentos por minuto por IP**; escritura (`POST`, `PATCH` y `DELETE` fuera de `/auth/`) a **120 por minuto** (ráfaga 60). CORS abierto por defecto (se puede cerrar con `CORS_ALLOWED_ORIGINS`; con `ENV=prod` no permite `*`).
 - Listas paginadas con `limit`/`offset` (por defecto 50, máximo 200, `offset` máx. 10000). Reservas de máximo **30 días**.
 - `GET /health` responde la versión del binario (`make build` la inyecta).

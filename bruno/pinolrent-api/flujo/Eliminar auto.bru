@@ -1,0 +1,19 @@
+meta {
+  name: Eliminar auto
+  type: http
+  seq: 28
+}
+
+delete {
+  url: {{baseUrl}}/seller/cars/{{throwawayCarId}}
+  body: none
+}
+
+headers {
+  Authorization: Bearer {{sellerToken}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.status: eq ok
+}

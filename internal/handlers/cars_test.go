@@ -198,6 +198,129 @@ func TestPatchCarValidates(t *testing.T) {
 	if rec := doJSON(t, a, "PATCH", "/seller/cars/"+itoa(car.ID), token, map[string]any{}); rec.Code != http.StatusBadRequest {
 		t.Fatalf("missing active: status = %d, want 400", rec.Code)
 	}
+	if rec := doJSON(t, a, "PATCH", "/seller/cars/"+itoa(car.ID), token, map[string]any{"nope": 1}); rec.Code != http.StatusBadRequest {
+		t.Fatalf("unknown field: status = %d, want 400", rec.Code)
+	}
+	if rec := doJSON(t, a, "PATCH", "/seller/cars/"+itoa(car.ID), token, map[string]any{"name": strings.Repeat("x", 201)}); rec.Code != http.StatusBadRequest {
+		t.Fatalf("name too long: status = %d, want 400", rec.Code)
+	}
+	if rec := doJSON(t, a, "PATCH", "/seller/cars/"+itoa(car.ID), token, map[string]any{"price_per_day": -1}); rec.Code != http.StatusBadRequest {
+		t.Fatalf("negative price: status = %d, want 400", rec.Code)
+	}
+	if rec := doJSON(t, a, "PATCH", "/seller/cars/"+itoa(car.ID), token, map[string]any{"price_per_day": 100000001}); rec.Code != http.StatusBadRequest {
+		t.Fatalf("price over cap: status = %d, want 400", rec.Code)
+	}
+	if rec := doJSON(t, a, "PATCH", "/seller/cars/"+itoa(car.ID), token, map[string]any{"photo_url": "::not-a-url::"}); rec.Code != http.StatusBadRequest {
+		t.Fatalf("bad photo url: status = %d, want 400", rec.Code)
+	}
+}
+
+func TestPatchCarEditsFields(t *testing.T) {
+	a := newTestAPI(t)
+	token := newSeller(t, a)
+	car := createCar(t, a, token, map[string]any{
+		"name": "Toyota Yaris", "photo_url": "https://example.com/yaris.jpg", "price_per_day": 45000,
+	})
+
+	rec := doJSON(t, a, "PATCH", "/seller/cars/"+itoa(car.ID), token, map[string]any{
+		"name": "  Toyota Yaris LX  ", "price_per_day": 50000,
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body %s", rec.Code, rec.Body.String())
+	}
+	var out models.Car
+	decodeJSON(t, rec, &out)
+	if out.Name != "Toyota Yaris LX" || out.PricePerDay != 50000 || out.PhotoURL != car.PhotoURL || !out.Active {
+		t.Fatalf("unexpected edited car: %+v", out)
+	}
+
+	// a partial edit leaves the rest untouched (photo_url is omitted when
+	// empty, so decode into a fresh value)
+	out = models.Car{}
+	rec = doJSON(t, a, "PATCH", "/seller/cars/"+itoa(car.ID), token, map[string]any{"photo_url": ""})
+	decodeJSON(t, rec, &out)
+	if out.Name != "Toyota Yaris LX" || out.PricePerDay != 50000 || out.PhotoURL != "" {
+		t.Fatalf("unexpected car after clearing photo: %+v", out)
+	}
+
+	// editing content on a car with future reservations must not be blocked
+	buyer := registerBuyer(t, a, "edit-buyer@example.com", "secret123")
+	createReservation(t, a, buyer, map[string]any{
+		"car_id": car.ID, "start_date": futureDate(10), "end_date": futureDate(12),
+	})
+	rec = doJSON(t, a, "PATCH", "/seller/cars/"+itoa(car.ID), token, map[string]any{"price_per_day": 51000})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("edit with future reservation: status = %d body %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestDeleteCar(t *testing.T) {
+	a := newTestAPI(t)
+	token := newSeller(t, a)
+	car := createCar(t, a, token, map[string]any{"name": "Borrable", "price_per_day": 100})
+
+	rec := doJSON(t, a, "DELETE", "/seller/cars/"+itoa(car.ID), token, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body %s", rec.Code, rec.Body.String())
+	}
+
+	if rec := doJSON(t, a, "GET", "/cars/"+itoa(car.ID), "", nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("deleted car in catalog: status = %d, want 404", rec.Code)
+	}
+	rec = doJSON(t, a, "GET", "/seller/cars", token, nil)
+	var mine []models.Car
+	decodeJSON(t, rec, &mine)
+	if len(mine) != 0 {
+		t.Fatalf("deleted car still listed: %+v", mine)
+	}
+	// second delete: 404
+	if rec := doJSON(t, a, "DELETE", "/seller/cars/"+itoa(car.ID), token, nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("re-delete: status = %d, want 404", rec.Code)
+	}
+}
+
+func TestDeleteCarWithReservations(t *testing.T) {
+	a := newTestAPI(t)
+	token := newSeller(t, a)
+	car := createCar(t, a, token, map[string]any{"name": "Con historial", "price_per_day": 100})
+	buyer := registerBuyer(t, a, "del-buyer@example.com", "secret123")
+	createReservation(t, a, buyer, map[string]any{
+		"car_id": car.ID, "start_date": futureDate(10), "end_date": futureDate(12),
+	})
+
+	rec := doJSON(t, a, "DELETE", "/seller/cars/"+itoa(car.ID), token, nil)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("delete with reservations: status = %d, want 409 (body %s)", rec.Code, rec.Body.String())
+	}
+	// even a cancelled reservation keeps the history
+	if _, err := a.DB.ExecContext(context.Background(),
+		`UPDATE reservations SET status = 'cancelled' WHERE car_id = ?`, car.ID); err != nil {
+		t.Fatalf("cancel: %v", err)
+	}
+	if rec := doJSON(t, a, "DELETE", "/seller/cars/"+itoa(car.ID), token, nil); rec.Code != http.StatusConflict {
+		t.Fatalf("delete with cancelled history: status = %d, want 409", rec.Code)
+	}
+}
+
+func TestDeleteCarOwnership(t *testing.T) {
+	a := newTestAPI(t)
+	owner := newSeller(t, a)
+	car := createCar(t, a, owner, map[string]any{"name": "Ajeno", "price_per_day": 100})
+
+	other := newSeller(t, a)
+	if rec := doJSON(t, a, "DELETE", "/seller/cars/"+itoa(car.ID), other, nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("other seller: status = %d, want 404", rec.Code)
+	}
+	buyer := registerBuyer(t, a, "del-role@example.com", "secret123")
+	if rec := doJSON(t, a, "DELETE", "/seller/cars/"+itoa(car.ID), buyer, nil); rec.Code != http.StatusForbidden {
+		t.Fatalf("buyer: status = %d, want 403", rec.Code)
+	}
+	if rec := doJSON(t, a, "DELETE", "/seller/cars/garbage", owner, nil); rec.Code != http.StatusBadRequest {
+		t.Fatalf("bad id: status = %d, want 400", rec.Code)
+	}
+	if rec := doJSON(t, a, "DELETE", "/seller/cars/999999", owner, nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("missing: status = %d, want 404", rec.Code)
+	}
 }
 
 func TestListCarsByDates(t *testing.T) {

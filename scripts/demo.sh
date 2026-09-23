@@ -254,6 +254,20 @@ curl -s -o /dev/null -X PATCH "$BASE/seller/cars/$car2" -H "Authorization: Beare
 code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/cars/$car2")
 check "detalle inactivo -> 404" "404" "$code"
 
+echo "== edición y borrado de auto =="
+price=$(curl -s -X PATCH "$BASE/seller/cars/$car" -H "Authorization: Bearer $seller" \
+  -H 'Content-Type: application/json' -d '{"name":"Honda Fit LX","price_per_day":30000}' | jq -r .price_per_day)
+check "editar auto -> precio" "30000" "$price"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/seller/cars/$car" \
+  -H "Authorization: Bearer $seller" -H 'Content-Type: application/json' -d '{}')
+check "editar sin campos -> 400" "400" "$code"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "$BASE/seller/cars/$car" -H "Authorization: Bearer $seller")
+check "borrar auto con reservas -> 409" "409" "$code"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "$BASE/seller/cars/$car2" -H "Authorization: Bearer $seller")
+check "borrar auto sin reservas -> 200" "200" "$code"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "$BASE/seller/cars/$car2" -H "Authorization: Bearer $seller")
+check "borrar dos veces -> 404" "404" "$code"
+
 echo "== /auth/me =="
 me=$(curl -s "$BASE/auth/me" -H "Authorization: Bearer $seller")
 check "auth/me rol seller" "seller" "$(printf '%s' "$me" | jq -r .role)"
