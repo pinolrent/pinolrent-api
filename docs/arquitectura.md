@@ -114,7 +114,7 @@ stateDiagram-v2
 
 ## Server y logs
 
-- Timeouts: header 5 s, lectura 10 s, escritura 30 s, idle 60 s. Header máximo 1 MB.
+- Timeouts: header 5 s, lectura 10 s, escritura 120 s (holgado para que una subida de 5 MB entre desde un link lento), idle 60 s. Header máximo 1 MB.
 - Cada request deja una línea de log con método, ruta, status y duración; si manda `X-Request-Id` se incluye para correlación.
 - `GET /health` responde `{"status":"ok","version":"..."}` (o `503 degraded` si la base no responde); la versión se inyecta con `make build`. Al recibir `SIGINT`/`SIGTERM` apaga limpio en hasta 10 s.
 

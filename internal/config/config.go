@@ -55,6 +55,9 @@ func (c Config) Validate() error {
 	if strings.TrimSpace(c.UploadDir) == "" {
 		return fmt.Errorf("UPLOAD_DIR must not be empty")
 	}
+	if c.UploadMaxTotalMB < 0 {
+		return fmt.Errorf("UPLOAD_MAX_TOTAL_MB must be >= 0 (got %d); 0 disables the quota", c.UploadMaxTotalMB)
+	}
 	if _, err := c.TrustedProxies(); err != nil {
 		return err
 	}
