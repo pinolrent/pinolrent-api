@@ -1,10 +1,14 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"image"
+	"image/jpeg"
+	"image/png"
 	"io"
 	"log/slog"
 	"net/http"
@@ -16,6 +20,24 @@ import (
 
 // maxUploadBytes caps the decoded size of a single uploaded image.
 const maxUploadBytes = 5 << 20
+
+// maxDecodePixels caps the canvas an image may declare before it is decoded.
+// A few hundred bytes of PNG header can claim a canvas of millions of pixels,
+// and decoding it allocates width*height*4 bytes: the cap keeps the worst case
+// around 200 MB. It sits far above any real camera (a 48 MP phone sensor
+// outputs roughly 8000x6000, i.e. 48 million pixels).
+const maxDecodePixels = 50_000_000
+
+// jpegQuality is the quality used when re-encoding a jpeg upload. 85 is the
+// usual "visually lossless" point for photos.
+const jpegQuality = 85
+
+// Errors that stripImageMetadata reports so the handler can map them to a
+// status without leaking decoder internals to the client.
+var (
+	errImageTooLarge    = errors.New("image dimensions too large")
+	errInvalidImageData = errors.New("invalid image data")
+)
 
 // orphanGrace is how long an unreferenced file survives the cleanup sweep:
 // long enough for the slowest flow (upload now, attach it to a car or a
@@ -87,16 +109,48 @@ func (a *API) UploadFile(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	head := make([]byte, 512)
-	n, err := io.ReadFull(f, head)
-	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
+	// The part is already fully buffered (ParseMultipartForm spools it to disk
+	// past maxUploadBytes, and the size check above bounds it), so reading it
+	// into memory costs at most maxUploadBytes. Decoding is the risky part,
+	// not the read, which is what maxDecodePixels guards.
+	data, err := io.ReadAll(f)
+	if err != nil {
 		serverError(w, err)
 		return
 	}
-	ext, ok := uploadExtByType[strings.Split(http.DetectContentType(head[:n]), ";")[0]]
+	if len(data) > maxUploadBytes {
+		writeError(w, http.StatusRequestEntityTooLarge, "request body too large")
+		return
+	}
+
+	sniff := data
+	if len(sniff) > 512 {
+		sniff = sniff[:512]
+	}
+	ext, ok := uploadExtByType[strings.Split(http.DetectContentType(sniff), ";")[0]]
 	if !ok {
 		writeError(w, http.StatusUnsupportedMediaType, "only jpg, png or webp images are allowed")
 		return
+	}
+
+	body := data
+	// jpeg and png are re-encoded from their decoded pixels, so the stored
+	// file cannot carry metadata: EXIF (GPS, camera serial, timestamps) and
+	// ancillary chunks are dropped by construction. webp has no encoder in
+	// the stdlib, so it stays a passthrough and keeps whatever it carries.
+	if ext != ".webp" {
+		body, err = stripImageMetadata(data, ext)
+		if err != nil {
+			switch {
+			case errors.Is(err, errImageTooLarge):
+				writeError(w, http.StatusRequestEntityTooLarge, "image dimensions too large")
+			case errors.Is(err, errInvalidImageData):
+				writeError(w, http.StatusBadRequest, "invalid image data")
+			default:
+				serverError(w, err)
+			}
+			return
+		}
 	}
 
 	var raw [16]byte
@@ -120,20 +174,9 @@ func (a *API) UploadFile(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	if _, err := dst.Write(head[:n]); err != nil {
+	if _, err := dst.Write(body); err != nil {
 		_ = dst.Close()
 		_ = os.Remove(dst.Name())
-		serverError(w, err)
-		return
-	}
-	if _, err := io.Copy(dst, f); err != nil {
-		_ = dst.Close()
-		_ = os.Remove(dst.Name())
-		var mbe *http.MaxBytesError
-		if errors.As(err, &mbe) {
-			writeError(w, http.StatusRequestEntityTooLarge, "request body too large")
-			return
-		}
 		serverError(w, err)
 		return
 	}
@@ -144,6 +187,37 @@ func (a *API) UploadFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, map[string]string{"url": "/uploads/" + fname})
+}
+
+// stripImageMetadata re-encodes a jpeg or png from its decoded pixels. The
+// stdlib encoders write pixel data only, so the result carries no EXIF (where
+// a phone camera records the GPS position of, say, the seller's home) and no
+// ancillary chunks such as tEXt.
+func stripImageMetadata(data []byte, ext string) ([]byte, error) {
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return nil, errInvalidImageData
+	}
+	// int64 keeps the product meaningful on 32-bit builds, where the declared
+	// dimensions would overflow an int.
+	if int64(cfg.Width)*int64(cfg.Height) > maxDecodePixels {
+		return nil, errImageTooLarge
+	}
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, errInvalidImageData
+	}
+
+	var buf bytes.Buffer
+	if ext == ".jpg" {
+		err = jpeg.Encode(&buf, img, &jpeg.Options{Quality: jpegQuality})
+	} else {
+		err = png.Encode(&buf, img)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 // dirUsageBytes sums the size of the regular files in dir. A missing
