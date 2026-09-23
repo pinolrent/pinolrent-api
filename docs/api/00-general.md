@@ -48,7 +48,7 @@ Siempre así:
 
 ## Límites
 
-- **Body máximo 1 MB** (JSON estricto: si mandas campos que no existen o JSON roto → `400 {"error":"invalid JSON body"}`; si te pasas del tamaño → `413`). `POST /uploads` acepta hasta **5 MB** por imagen (`jpg`/`png`/`webp`).
+- **Body máximo 1 MB** (JSON estricto: si mandas campos que no existen o JSON roto → `400 {"error":"invalid JSON body"}`; si te pasas del tamaño → `413`). `POST /uploads` acepta hasta **5 MB** por imagen (`jpg`/`png`/`webp`); las `jpg`/`png` se re-codifican sin metadatos y no pueden declarar más de 50 megapíxeles.
 - **Límite por IP**: `/auth/*` → **30 por minuto** (ráfaga 30); escritura (`POST`, `PATCH` y `DELETE` fuera de `/auth/`, p. ej. `POST /reservations`, `POST /seller/cars`, `POST /uploads`, `PATCH /reservations/*/cancel`) → **120 por minuto** (ráfaga 60). Si te pasas → `429 {"error":"too many requests"}` con header `Retry-After: 60`. `X-Forwarded-For` / `X-Real-IP` solo se tienen en cuenta si la conexión viene de un proxy confiable (loopback, o las redes que liste `TRUSTED_PROXY_CIDRS`); si no, cuenta la IP de la conexión.
 - **CORS** abierto a todos por defecto (`CORS_ALLOWED_ORIGINS=*`), con `ENV=prod` o `production` es rechazado. En producción poné tus orígenes separados por coma, ej. `CORS_ALLOWED_ORIGINS=https://app.example.com`. Los preflights `OPTIONS` responden `204`; si el origen no está permitido, no lleva `Access-Control-Allow-Origin` y el navegador lo bloquea. Los métodos permitidos salen de las rutas que existen (`GET`, `POST`, `PATCH`, `DELETE` y `OPTIONS` hoy), y los headers son `Authorization` y `Content-Type`. Trailing `/` en origen es tolerado.
 

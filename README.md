@@ -43,7 +43,7 @@ make watch   # levanta con recarga automática al editar (requiere make tools)
 | GET | `/seller/reservations` | vendedor | Ver reservas de tus autos |
 | PATCH | `/seller/reservations/{id}/confirm` | vendedor | Confirmar una reserva y aprobar su pago |
 | PATCH | `/seller/reservations/{id}/reject` | vendedor | Rechazar el pago, cancelar la reserva y liberar fechas |
-| POST | `/uploads` | sí | Subir una imagen (jpg/png/webp, 5 MB) y obtener su URL local |
+| POST | `/uploads` | sí | Subir una imagen (jpg/png/webp, 5 MB) y obtener su URL local; las jpg/png se re-codifican sin metadatos |
 | GET | `/uploads/{nombre}` | no | Ver una imagen subida |
 
 Si intentas ver o tocar algo que no es tuyo, la API responde `404` como si no existiera.

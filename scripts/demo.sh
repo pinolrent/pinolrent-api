@@ -134,16 +134,22 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/seller/cars" \
 check "comprador no crea autos -> 403" "403" "$code"
 
 echo "== uploads =="
-png_tmp="$(mktemp /tmp/pinolrent-upload.XXXXXX.png)"
-printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde' > "$png_tmp"
-upload_json=$(curl -s -X POST "$BASE/uploads" -H "Authorization: Bearer $seller" -F "file=@$png_tmp;type=image/png")
+# The upload must be a complete, decodable PNG: the server re-encodes jpg/png
+# to drop metadata, so a bare header no longer passes.
+png_fixture="bruno/pinolrent-api/fixtures/fit.png"
+upload_json=$(curl -s -X POST "$BASE/uploads" -H "Authorization: Bearer $seller" -F "file=@$png_fixture;type=image/png")
 upload_url=$(printf '%s' "$upload_json" | jq -r .url)
 [ -n "$upload_url" ] && [ "$upload_url" != "null" ]; cond "subir imagen -> url ($upload_url)" $?
-rm -f "$png_tmp"
 code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE$upload_url")
 check "descargar imagen -> 200" "200" "$code"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/uploads" -H "Authorization: Bearer $seller" -F "file=@$0;type=text/x-shellscript")
 check "subir no-imagen -> 415" "415" "$code"
+# A bare PNG header: it sniffs as a png but declares no pixels to decode.
+bad_png="$(mktemp /tmp/pinolrent-badpng.XXXXXX.png)"
+printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde' > "$bad_png"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/uploads" -H "Authorization: Bearer $seller" -F "file=@$bad_png;type=image/png")
+check "png sin pixeles -> 400" "400" "$code"
+rm -f "$bad_png"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/uploads")
 check "subir sin token -> 401" "401" "$code"
 
