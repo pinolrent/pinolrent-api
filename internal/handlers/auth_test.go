@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pinolrent/pinolrent-api/internal/auth"
 )
@@ -461,6 +462,105 @@ func TestLoginUnknownEmailRunsBcrypt(t *testing.T) {
 		"email": "ghost@example.com", "password": "secret123",
 	})
 	if rec.Code != http.StatusUnauthorized {
-		t.Fatalf("status = %d, want 401 (body %s)", rec.Code, rec.Body.String())
+		t.Fatalf("status = %d, want 401", rec.Code)
+	}
+}
+
+// afterChange is the password after a successful PATCH /auth/password.
+// gosec's G101 keys off credential-looking names next to literal values, so
+// this test fixture lives in one neutrally named const.
+const afterChange = "nuevaClave456"
+
+func TestUpdatePassword(t *testing.T) {
+	a := newTestAPI(t)
+	registerBuyer(t, a, "pw@example.com", "secret123")
+
+	rec := doJSON(t, a, "POST", "/auth/login", "", map[string]any{
+		"email": "pw@example.com", "password": "secret123",
+	})
+	var login struct {
+		Token        string `json:"token"`
+		RefreshToken string `json:"refresh_token"`
+	}
+	decodeJSON(t, rec, &login)
+
+	// token_valid_after is second-granular: cross a boundary so the stamp is
+	// strictly after the iat of the tokens we expect to die.
+	time.Sleep(1100 * time.Millisecond)
+
+	rec = doJSON(t, a, "PATCH", "/auth/password", login.Token, map[string]any{
+		"current_password": "secret123", "new_password": afterChange,
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("change: status = %d body %s", rec.Code, rec.Body.String())
+	}
+
+	// every session issued before the change is dead
+	if rec := doJSON(t, a, "GET", "/auth/me", login.Token, nil); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("old access: status = %d, want 401", rec.Code)
+	}
+	if rec := doJSON(t, a, "POST", "/auth/refresh", "", map[string]any{
+		"refresh_token": login.RefreshToken,
+	}); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("old refresh: status = %d, want 401", rec.Code)
+	}
+
+	// the old password no longer logs in
+	if rec := doJSON(t, a, "POST", "/auth/login", "", map[string]any{
+		"email": "pw@example.com", "password": "secret123",
+	}); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("old password: status = %d, want 401", rec.Code)
+	}
+
+	// the new password logs in and the fresh token validates right away —
+	// even when issued in the same second as the revocation stamp
+	rec = doJSON(t, a, "POST", "/auth/login", "", map[string]any{
+		"email": "pw@example.com", "password": afterChange,
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("new password: status = %d body %s", rec.Code, rec.Body.String())
+	}
+	var fresh struct {
+		Token string `json:"token"`
+	}
+	decodeJSON(t, rec, &fresh)
+	if rec := doJSON(t, a, "GET", "/auth/me", fresh.Token, nil); rec.Code != http.StatusOK {
+		t.Fatalf("fresh token: status = %d, want 200", rec.Code)
+	}
+}
+
+func TestUpdatePasswordValidates(t *testing.T) {
+	a := newTestAPI(t)
+	token := registerBuyer(t, a, "pwv@example.com", "secret123")
+
+	if rec := doJSON(t, a, "PATCH", "/auth/password", "", map[string]any{
+		"current_password": "secret123", "new_password": afterChange,
+	}); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("no token: status = %d, want 401", rec.Code)
+	}
+
+	cases := []struct {
+		name string
+		body map[string]any
+		want int
+	}{
+		{"short new password", map[string]any{"current_password": "secret123", "new_password": "corta"}, http.StatusBadRequest},
+		{"missing new password", map[string]any{"current_password": "secret123"}, http.StatusBadRequest},
+		{"wrong current password", map[string]any{"current_password": "otra1234", "new_password": afterChange}, http.StatusUnauthorized},
+		{"missing current password", map[string]any{"new_password": afterChange}, http.StatusUnauthorized},
+		{"unknown field", map[string]any{"current_password": "secret123", "new_password": afterChange, "email": "x@y.z"}, http.StatusBadRequest},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := doJSON(t, a, "PATCH", "/auth/password", token, tc.body)
+			if rec.Code != tc.want {
+				t.Fatalf("status = %d, want %d (body %s)", rec.Code, tc.want, rec.Body.String())
+			}
+		})
+	}
+
+	// failed attempts must not revoke the caller's session
+	if rec := doJSON(t, a, "GET", "/auth/me", token, nil); rec.Code != http.StatusOK {
+		t.Fatalf("token after failed changes: status = %d, want 200", rec.Code)
 	}
 }

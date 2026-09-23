@@ -55,6 +55,7 @@ Lo importante del esquema (`internal/db/migrations/`):
 - Las reservas tienen `CHECK(end_date >= start_date)` en DB.
 - Una reserva tiene **a lo sumo un pago** (`payments.reservation_id` es único).
 - `revoked_tokens` guarda los `jti` de access tokens cerrados con `/auth/logout` y de refresh tokens ya rotados en `/auth/refresh`. Un proceso interno borra cada 10 minutos los que ya vencieron.
+- `users.token_valid_after` invalida todos los tokens emitidos antes de ese instante; se alza al cambiar la contraseña y mata todas las sesiones del usuario a la vez.
 - Las fechas se guardan como texto `YYYY-MM-DD`.
 - Las migraciones están embebidas en el binario y se aplican al arrancar. Solo se ejecutan las que faltan.
 

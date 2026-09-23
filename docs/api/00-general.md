@@ -74,6 +74,7 @@ Responden un **array simple**. Para saber si hay más, pedí `limit+1` y fijate 
 | POST | `/auth/refresh` | no | [auth](auth.md) |
 | GET | `/auth/me` | sí | [auth](auth.md) |
 | PATCH | `/auth/me` | sí | [auth](auth.md) |
+| PATCH | `/auth/password` | sí | [auth](auth.md) |
 | POST | `/auth/logout` | sí | [auth](auth.md) |
 | GET | `/cars` | no | [cars](cars.md) |
 | GET | `/cars/{id}` | no | [cars](cars.md) |

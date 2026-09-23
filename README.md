@@ -28,6 +28,7 @@ make watch   # levanta con recarga automática al editar (requiere make tools)
 | POST | `/auth/refresh` | no | Renovar el par con un refresh de un solo uso |
 | GET | `/auth/me` | sí | Ver tu propio perfil |
 | PATCH | `/auth/me` | sí | Corregir tu teléfono de contacto |
+| PATCH | `/auth/password` | sí | Cambiar tu contraseña (cierra todas tus sesiones) |
 | POST | `/auth/logout` | sí | Cerrar sesión (invalida tu token actual) |
 | GET | `/cars` | no | Ver autos disponibles (puedes filtrar por fechas o vendedor) |
 | GET | `/cars/{id}` | no | Ver el detalle de un auto |

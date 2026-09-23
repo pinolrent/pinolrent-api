@@ -3,12 +3,16 @@ package models
 
 // User is an account that can authenticate as a buyer or as a seller. Phone is
 // the seller's WhatsApp contact, stored in E.164 and empty when not provided.
+// TokenValidAfter is the Unix instant after which only newly issued tokens are
+// valid (0 = all tokens valid); password changes and refresh replays stamp it
+// to revoke every session at once. It is never serialized.
 type User struct {
-	ID           int64  `json:"id"`
-	Email        string `json:"email"`
-	PasswordHash string `json:"-"`
-	Phone        string `json:"phone,omitempty"`
-	Role         string `json:"role"`
+	ID              int64  `json:"id"`
+	Email           string `json:"email"`
+	PasswordHash    string `json:"-"`
+	Phone           string `json:"phone,omitempty"`
+	Role            string `json:"role"`
+	TokenValidAfter int64  `json:"-"`
 }
 
 // Car is a rentable vehicle in the catalog, owned by a seller account.

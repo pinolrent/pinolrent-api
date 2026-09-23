@@ -289,6 +289,20 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/auth/register" \
 rm -f /tmp/.pinolrent-big.json
 check "body > 1MB -> 413" "413" "$code"
 
+echo "== cambio de contraseña =="
+code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/auth/password" \
+  -H "Authorization: Bearer $seller" -H 'Content-Type: application/json' \
+  -d '{"current_password":"secret123","new_password":"nuevaClave456"}')
+check "cambiar contraseña -> 200" "200" "$code"
+code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/auth/me" -H "Authorization: Bearer $seller")
+check "token viejo tras cambio -> 401" "401" "$code"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/auth/login" \
+  -H 'Content-Type: application/json' -d '{"email":"seller@example.com","password":"secret123"}')
+check "login contraseña vieja -> 401" "401" "$code"
+seller=$(curl -s -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
+  -d '{"email":"seller@example.com","password":"nuevaClave456"}' | jq -r .token)
+[ -n "$seller" ] && [ "$seller" != "null" ]; cond "login contraseña nueva" $?
+
 echo "== rate limit /auth/* =="
 blocked=0
 for _ in $(seq 1 35); do
