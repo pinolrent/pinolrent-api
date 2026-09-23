@@ -290,6 +290,9 @@ rm -f /tmp/.pinolrent-big.json
 check "body > 1MB -> 413" "413" "$code"
 
 echo "== cambio de contraseña =="
+# token_valid_after es de segundo: cruzar el borde garantiza que el token
+# viejo (emitido en el segundo anterior) quede estrictamente antes del sello.
+sleep 1.1
 code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/auth/password" \
   -H "Authorization: Bearer $seller" -H 'Content-Type: application/json' \
   -d '{"current_password":"secret123","new_password":"nuevaClave456"}')

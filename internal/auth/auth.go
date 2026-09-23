@@ -272,6 +272,13 @@ func (a *Auth) RotateRefresh(ctx context.Context, token string) (access, refresh
 		return "", "", err
 	}
 	if revoked {
+		// A replay is either a stolen refresh or a buggy client, and the
+		// server cannot tell which side holds the valid copy — so every
+		// session of this user dies and both sides must log in again.
+		// Best effort: on failure the caller still gets the 401 below.
+		if err := a.InvalidateUserTokens(ctx, claims.UserID); err != nil {
+			slog.Error("revoke sessions on refresh replay", "user_id", claims.UserID, "error", err)
+		}
 		return "", "", errRefreshReused
 	}
 	u, err := a.userByID(ctx, claims.UserID)
