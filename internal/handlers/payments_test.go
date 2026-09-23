@@ -183,3 +183,78 @@ func TestConfirmReservationRequires(t *testing.T) {
 		t.Fatalf("bad id: status = %d, want 400", rec.Code)
 	}
 }
+
+func TestRejectReservation(t *testing.T) {
+	a := newTestAPI(t)
+	token, seller, v := seedReservation(t, a)
+	doJSON(t, a, "POST", "/reservations/"+itoa(v.ID)+"/payment", token, map[string]any{
+		"method": "cash", "proof_url": "https://example.com/proof.jpg",
+	})
+
+	rec := doJSON(t, a, "PATCH", "/seller/reservations/"+itoa(v.ID)+"/reject", seller, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body %s", rec.Code, rec.Body.String())
+	}
+	var view reservationView
+	decodeJSON(t, rec, &view)
+	if view.Status != "cancelled" || view.Payment == nil || view.Payment.Status != "rejected" {
+		t.Fatalf("unexpected rejected view: %+v", view)
+	}
+
+	// the dates are free again: the car shows up for the same range
+	rec = doJSON(t, a, "GET", "/cars?start_date="+futureDate(11)+"&end_date="+futureDate(11), "", nil)
+	var cars []models.Car
+	decodeJSON(t, rec, &cars)
+	if len(cars) != 1 {
+		t.Fatalf("car not available after reject: %+v", cars)
+	}
+
+	// terminal: rejecting twice is a 409
+	if rec := doJSON(t, a, "PATCH", "/seller/reservations/"+itoa(v.ID)+"/reject", seller, nil); rec.Code != http.StatusConflict {
+		t.Fatalf("re-reject: status = %d, want 409", rec.Code)
+	}
+	// and the buyer cannot pay it again either
+	if rec := doJSON(t, a, "POST", "/reservations/"+itoa(v.ID)+"/payment", token, map[string]any{"method": "pos"}); rec.Code != http.StatusConflict {
+		t.Fatalf("re-pay: status = %d, want 409", rec.Code)
+	}
+}
+
+func TestRejectReservationRequires(t *testing.T) {
+	a := newTestAPI(t)
+	token, seller, v := seedReservation(t, a)
+
+	if rec := doJSON(t, a, "PATCH", "/seller/reservations/"+itoa(v.ID)+"/reject", token, nil); rec.Code != http.StatusForbidden {
+		t.Fatalf("buyer: status = %d, want 403", rec.Code)
+	}
+	if rec := doJSON(t, a, "PATCH", "/seller/reservations/"+itoa(v.ID)+"/reject", "", nil); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("no auth: status = %d, want 401", rec.Code)
+	}
+	if rec := doJSON(t, a, "PATCH", "/seller/reservations/"+itoa(v.ID)+"/reject", newSeller(t, a), nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("foreign seller: status = %d, want 404", rec.Code)
+	}
+
+	// no payment yet
+	if rec := doJSON(t, a, "PATCH", "/seller/reservations/"+itoa(v.ID)+"/reject", seller, nil); rec.Code != http.StatusConflict {
+		t.Fatalf("no payment: status = %d, want 409", rec.Code)
+	}
+
+	if rec := doJSON(t, a, "PATCH", "/seller/reservations/99999/reject", seller, nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown: status = %d, want 404", rec.Code)
+	}
+	if rec := doJSON(t, a, "PATCH", "/seller/reservations/garbage/reject", seller, nil); rec.Code != http.StatusBadRequest {
+		t.Fatalf("bad id: status = %d, want 400", rec.Code)
+	}
+}
+
+func TestRejectReservationAfterConfirm(t *testing.T) {
+	a := newTestAPI(t)
+	token, seller, v := seedReservation(t, a)
+	doJSON(t, a, "POST", "/reservations/"+itoa(v.ID)+"/payment", token, map[string]any{"method": "cash"})
+	if rec := doJSON(t, a, "PATCH", "/seller/reservations/"+itoa(v.ID)+"/confirm", seller, nil); rec.Code != http.StatusOK {
+		t.Fatalf("confirm: status = %d", rec.Code)
+	}
+
+	if rec := doJSON(t, a, "PATCH", "/seller/reservations/"+itoa(v.ID)+"/reject", seller, nil); rec.Code != http.StatusConflict {
+		t.Fatalf("reject after confirm: status = %d, want 409", rec.Code)
+	}
+}

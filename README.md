@@ -40,6 +40,7 @@ make watch   # levanta con recarga automática al editar (requiere make tools)
 | POST | `/reservations/{id}/payment` | sí | Pagar una reserva (`pos` o `cash`) |
 | GET | `/seller/reservations` | vendedor | Ver reservas de tus autos |
 | PATCH | `/seller/reservations/{id}/confirm` | vendedor | Confirmar una reserva y aprobar su pago |
+| PATCH | `/seller/reservations/{id}/reject` | vendedor | Rechazar el pago, cancelar la reserva y liberar fechas |
 | POST | `/uploads` | sí | Subir una imagen (jpg/png/webp, 5 MB) y obtener su URL local |
 | GET | `/uploads/{nombre}` | no | Ver una imagen subida |
 

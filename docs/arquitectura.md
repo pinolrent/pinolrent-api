@@ -79,12 +79,12 @@ stateDiagram-v2
     state "pago" as p {
         [*] --> pendingPay: POST /reservations/{id}/payment
         pendingPay --> approved: vendedor confirma
-        pendingPay --> rejected
+        pendingPay --> rejected: vendedor rechaza
     }
 ```
 
 - Una reserva nace `pending`. El comprador puede cancelarla mientras siga `pending` y no tenga pago. El vendedor la confirma y pasa a `confirmed` (y el pago a `approved`).
-- Un pago nace `pending` y pasa a `approved` al confirmar. `rejected` existe en el esquema pero no tiene endpoint todavía.
+- Un pago nace `pending` y pasa a `approved` al confirmar, o a `rejected` si el vendedor lo rechaza: la reserva queda `cancelled` y las fechas se liberan. Como solo puede haber un pago por reserva, después del rechazo el comprador crea una nueva reserva.
 
 ## Reglas del negocio
 

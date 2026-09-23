@@ -74,3 +74,36 @@ Pasa `payments.status` → `approved` y `reservations.status` → `confirmed`.
 | `404` | `reservation not found` | No existe o el auto no es tuyo |
 | `409` | `reservation is not pending` | Ya confirmada o cancelada |
 | `409` | `no payment recorded for this reservation` | No hay pago que aprobar |
+
+---
+
+## `PATCH /seller/reservations/{id}/reject`
+
+Rechaza el pago registrado y **cancela la reserva** en la misma transacción, liberando las fechas. Es la salida para una transferencia trucha o que nunca llegó: sin este endpoint una reserva pagada solo podía avanzar a `confirmed`. Necesita ser `seller` y que el auto sea tuyo. Sin body.
+
+Pasa `payments.status` → `rejected` y `reservations.status` → `cancelled`. La fila de pago se conserva (auditoría), y como solo puede haber un pago por reserva, el comprador debe crear una nueva reserva si aún quiere reservar.
+
+**Responde** `200`:
+
+```json
+{
+  "id":1,
+  "user_id":3,
+  "car_id":1,
+  "start_date":"2026-10-01",
+  "end_date":"2026-10-05",
+  "status":"cancelled",
+  "car":{"id":1,"owner_id":4,"name":"Toyota Yaris","price_per_day":45000,"active":true},
+  "payment":{"id":1,"reservation_id":1,"method":"pos","status":"rejected","proof_url":"https://..."}
+}
+```
+
+**Errores:**
+
+| Código | Mensaje | Cuándo |
+|--------|---------|--------|
+| `400` | `invalid reservation id` | `{id}` no es número |
+| `404` | `reservation not found` | No existe o el auto no es tuyo |
+| `409` | `reservation is not pending` | Ya confirmada o cancelada |
+| `409` | `no payment recorded for this reservation` | No hay pago que rechazar |
+| `409` | `payment is not pending` | El pago ya no está `pending` |
