@@ -52,9 +52,10 @@ Si intentas ver o tocar algo que no es tuyo, la API responde `404` como si no ex
 
 ## Documentación
 
-- **[Índice de docs](docs/README.md)** — arquitectura, configuración, desarrollo y flujo paso a paso.
-- **[Despliegue](docs/despliegue.md)** — la API en un VPS con Docker y Coolify: variables, backups y rollback.
 - **[Referencia de la API](docs/api/00-general.md)** — cómo se usa la API, autenticación y detalle de cada endpoint.
+- **[Configuración](docs/configuracion.md)** — variables de entorno y arranque.
+- **[Arquitectura](docs/arquitectura.md)** — esquema, estados de reserva y reglas del negocio.
+- **[Despliegue](docs/despliegue.md)** — restricciones de operación, backups y restauración.
 
 ## Stack y reglas básicas
 
