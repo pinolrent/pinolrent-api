@@ -21,6 +21,46 @@ const carColumns = "id, owner_id, name, photo_url, price_per_day, active"
 
 const carColumnsQualified = "c.id, c.owner_id, c.name, c.photo_url, c.price_per_day, c.active"
 
+// normalizeCarName trims the name and returns the validation error message
+// ("" when valid), so create and patch enforce the same rules.
+func normalizeCarName(s string) (string, string) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", "name is required"
+	}
+	if !lenBetween(s, 1, maxNameLen) {
+		return "", "name is too long (max " + strconv.Itoa(maxNameLen) + " characters)"
+	}
+	return s, ""
+}
+
+// validateCarPrice returns the error message for a price outside the allowed
+// range in centavos, or "" when valid.
+func validateCarPrice(p int64) string {
+	if p < 0 {
+		return "price_per_day must be >= 0"
+	}
+	if p > maxPricePerDay {
+		return "price_per_day must be <= " + strconv.FormatInt(maxPricePerDay, 10)
+	}
+	return ""
+}
+
+// validateCarPhotoURL returns the error message for an invalid photo URL, or
+// "" — which also covers the empty value, meaning "no photo".
+func validateCarPhotoURL(u string) string {
+	if u == "" {
+		return ""
+	}
+	if len(u) > maxURLLen {
+		return "photo_url is too long"
+	}
+	if !validURL(u) {
+		return "invalid photo_url"
+	}
+	return ""
+}
+
 // ListCars returns active cars, optionally filtered by owner and excluding
 // those already reserved in the [start_date, end_date] range.
 func (a *API) ListCars(w http.ResponseWriter, r *http.Request) {
@@ -192,32 +232,18 @@ func (a *API) CreateCar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	in.Name = strings.TrimSpace(in.Name)
-	if in.Name == "" {
-		writeError(w, http.StatusBadRequest, "name is required")
+	var msg string
+	if in.Name, msg = normalizeCarName(in.Name); msg != "" {
+		writeError(w, http.StatusBadRequest, msg)
 		return
 	}
-	if !lenBetween(in.Name, 1, maxNameLen) {
-		writeError(w, http.StatusBadRequest, "name is too long (max "+strconv.Itoa(maxNameLen)+" characters)")
+	if msg = validateCarPrice(in.PricePerDay); msg != "" {
+		writeError(w, http.StatusBadRequest, msg)
 		return
 	}
-	if in.PricePerDay < 0 {
-		writeError(w, http.StatusBadRequest, "price_per_day must be >= 0")
+	if msg = validateCarPhotoURL(in.PhotoURL); msg != "" {
+		writeError(w, http.StatusBadRequest, msg)
 		return
-	}
-	if in.PricePerDay > maxPricePerDay {
-		writeError(w, http.StatusBadRequest, "price_per_day must be <= "+strconv.FormatInt(maxPricePerDay, 10))
-		return
-	}
-	if in.PhotoURL != "" {
-		if len(in.PhotoURL) > maxURLLen {
-			writeError(w, http.StatusBadRequest, "photo_url is too long")
-			return
-		}
-		if !validURL(in.PhotoURL) {
-			writeError(w, http.StatusBadRequest, "invalid photo_url")
-			return
-		}
 	}
 
 	res, err := a.DB.ExecContext(r.Context(),
@@ -267,7 +293,11 @@ func (a *API) ListMyCars(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, cars)
 }
 
-// PatchCar toggles the active flag of a car owned by the authenticated seller.
+// PatchCar updates the editable fields of a car owned by the authenticated
+// seller: name, photo, price and the active flag, in any combination. A new
+// price only applies to future reservations (the reservation row does not
+// store a price). Deactivating keeps the existing guard: a car with future
+// reservations cannot go inactive.
 func (a *API) PatchCar(w http.ResponseWriter, r *http.Request) {
 	u, _ := auth.CurrentUser(r.Context())
 
@@ -278,21 +308,77 @@ func (a *API) PatchCar(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var in struct {
-		Active *bool `json:"active"`
+		Name        *string `json:"name"`
+		PhotoURL    *string `json:"photo_url"`
+		PricePerDay *int64  `json:"price_per_day"`
+		Active      *bool   `json:"active"`
 	}
 	if err := decodeBody(w, r, &in); err != nil {
 		writeBodyErr(w, err)
 		return
 	}
-	if in.Active == nil {
-		writeError(w, http.StatusBadRequest, "active is required")
+	if in.Name == nil && in.PhotoURL == nil && in.PricePerDay == nil && in.Active == nil {
+		writeError(w, http.StatusBadRequest, "no fields to update")
 		return
 	}
+	if in.Name != nil {
+		name, msg := normalizeCarName(*in.Name)
+		if msg != "" {
+			writeError(w, http.StatusBadRequest, msg)
+			return
+		}
+		*in.Name = name
+	}
+	if in.PricePerDay != nil {
+		if msg := validateCarPrice(*in.PricePerDay); msg != "" {
+			writeError(w, http.StatusBadRequest, msg)
+			return
+		}
+	}
+	if in.PhotoURL != nil {
+		if msg := validateCarPhotoURL(*in.PhotoURL); msg != "" {
+			writeError(w, http.StatusBadRequest, msg)
+			return
+		}
+	}
 
-	if !*in.Active {
-		deactivated := false
-		err = withImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
-			ctx := r.Context()
+	var updated bool
+	err = withImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
+		ctx := r.Context()
+
+		var curName, curPhoto string
+		var curPrice int64
+		var curActive int
+		if err := conn.QueryRowContext(ctx,
+			`SELECT name, photo_url, price_per_day, active FROM cars WHERE id = ? AND owner_id = ?`,
+			id, u.ID).Scan(&curName, &curPhoto, &curPrice, &curActive); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				writeError(w, http.StatusNotFound, "car not found")
+				return errTxHandled
+			}
+			serverError(w, err)
+			return errTxHandled
+		}
+
+		if in.Name != nil {
+			curName = *in.Name
+		}
+		if in.PhotoURL != nil {
+			curPhoto = *in.PhotoURL
+		}
+		if in.PricePerDay != nil {
+			curPrice = *in.PricePerDay
+		}
+		if in.Active != nil {
+			curActive = 0
+			if *in.Active {
+				curActive = 1
+			}
+		}
+
+		// The guard only gates the transition to inactive; editing content or
+		// reactivating must not be blocked by existing bookings.
+		if in.Active != nil && !*in.Active {
 			var hasFuture int
 			if err := conn.QueryRowContext(ctx,
 				`SELECT COUNT(*) FROM reservations WHERE car_id = ? AND status != 'cancelled' AND end_date >= date('now')`, id).Scan(&hasFuture); err != nil {
@@ -303,35 +389,28 @@ func (a *API) PatchCar(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusConflict, "car has future reservations, cannot deactivate")
 				return errTxHandled
 			}
-			res, err := conn.ExecContext(ctx, `UPDATE cars SET active = ? WHERE id = ? AND owner_id = ?`, *in.Active, id, u.ID)
-			if err != nil {
-				serverError(w, err)
-				return errTxHandled
-			}
-			if n, _ := res.RowsAffected(); n == 0 {
-				writeError(w, http.StatusNotFound, "car not found")
-				return errTxHandled
-			}
-			deactivated = true
-			return nil
-		})
+		}
+
+		res, err := conn.ExecContext(ctx,
+			`UPDATE cars SET name = ?, photo_url = ?, price_per_day = ?, active = ? WHERE id = ? AND owner_id = ?`,
+			curName, curPhoto, curPrice, curActive, id, u.ID)
 		if err != nil {
 			serverError(w, err)
-			return
-		}
-		if !deactivated {
-			return
-		}
-	} else {
-		res, err := a.DB.ExecContext(r.Context(), `UPDATE cars SET active = ? WHERE id = ? AND owner_id = ?`, *in.Active, id, u.ID)
-		if err != nil {
-			serverError(w, err)
-			return
+			return errTxHandled
 		}
 		if n, _ := res.RowsAffected(); n == 0 {
 			writeError(w, http.StatusNotFound, "car not found")
-			return
+			return errTxHandled
 		}
+		updated = true
+		return nil
+	})
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	if !updated {
+		return
 	}
 
 	var car models.Car
@@ -341,6 +420,64 @@ func (a *API) PatchCar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, car)
+}
+
+// DeleteCar removes a car owned by the authenticated seller, but only when it
+// never had reservations: every reservation row references the car (FK) and
+// every reservation view joins it, so a car with history must be deactivated
+// instead. Responds 409 to keep the raw FK violation from surfacing as a 500.
+func (a *API) DeleteCar(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.CurrentUser(r.Context())
+
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid car id")
+		return
+	}
+
+	deleted := false
+	err = withImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
+		ctx := r.Context()
+
+		var ownerID int64
+		if err := conn.QueryRowContext(ctx, `SELECT owner_id FROM cars WHERE id = ?`, id).Scan(&ownerID); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				writeError(w, http.StatusNotFound, "car not found")
+				return errTxHandled
+			}
+			serverError(w, err)
+			return errTxHandled
+		}
+		if ownerID != u.ID {
+			writeError(w, http.StatusNotFound, "car not found")
+			return errTxHandled
+		}
+
+		var reservations int
+		if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM reservations WHERE car_id = ?`, id).Scan(&reservations); err != nil {
+			serverError(w, err)
+			return errTxHandled
+		}
+		if reservations > 0 {
+			writeError(w, http.StatusConflict, "car has reservations, cannot delete")
+			return errTxHandled
+		}
+
+		if _, err := conn.ExecContext(ctx, `DELETE FROM cars WHERE id = ? AND owner_id = ?`, id, u.ID); err != nil {
+			serverError(w, err)
+			return errTxHandled
+		}
+		deleted = true
+		return nil
+	})
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	if !deleted {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func parseDate(s string) (time.Time, error) {

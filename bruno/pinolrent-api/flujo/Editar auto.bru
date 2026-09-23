@@ -1,0 +1,27 @@
+meta {
+  name: Editar auto
+  type: http
+  seq: 23
+}
+
+patch {
+  url: {{baseUrl}}/seller/cars/{{carId}}
+  body: json
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{sellerToken}}
+}
+
+body:json {
+  {
+    "name": "Honda Fit LX",
+    "price_per_day": 27000
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.price_per_day: eq 27000
+}

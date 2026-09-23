@@ -46,6 +46,7 @@ func (a *API) routes() []route {
 		{http.MethodGet, "/seller/cars", a.Auth.RequireRole("seller", a.ListMyCars), limitNone},
 		{http.MethodPost, "/seller/cars", a.Auth.RequireRole("seller", a.CreateCar), limitStandard},
 		{http.MethodPatch, "/seller/cars/{id}", a.Auth.RequireRole("seller", a.PatchCar), limitStandard},
+		{http.MethodDelete, "/seller/cars/{id}", a.Auth.RequireRole("seller", a.DeleteCar), limitStandard},
 		{http.MethodPost, "/reservations", a.Auth.RequireAuth(a.CreateReservation), limitStandard},
 		{http.MethodGet, "/reservations", a.Auth.RequireAuth(a.ListReservations), limitNone},
 		{http.MethodGet, "/reservations/{id}", a.Auth.RequireAuth(a.GetReservation), limitNone},

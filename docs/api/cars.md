@@ -134,26 +134,55 @@ Agrega un auto tuyo. Necesita ser `seller`.
 
 ## `PATCH /seller/cars/{id}`
 
-Prende o apaga uno de tus autos. Necesita ser `seller`.
+Edita uno de tus autos. Necesita ser `seller`. Acepta **cualquier combinación** de estos campos (al menos uno):
+
+| Campo | Tipo | Reglas |
+|-------|------|--------|
+| `name` | texto | no vacío, hasta 200 caracteres |
+| `photo_url` | texto | URL `http(s)` o ruta `/uploads/...` hasta 2048; vacío quita la foto |
+| `price_per_day` | número | `0..100_000_000` centavos. Aplica a **reservas futuras**: las ya hechas no cambian |
+| `active` | boolean | prende o apaga el auto (reglas abajo) |
 
 ```json
-{"active":false}
+{"name":"Toyota Yaris LX","price_per_day":46000}
 ```
 
 **Responde** `200` con el auto actualizado:
 
 ```json
-{"id":1,"owner_id":4,"name":"Toyota Yaris","photo_url":"https://example.com/yaris.jpg","price_per_day":45000,"active":false}
+{"id":1,"owner_id":4,"name":"Toyota Yaris LX","photo_url":"https://example.com/yaris.jpg","price_per_day":46000,"active":true}
 ```
 
 | Código | Mensaje | Cuándo |
 |--------|---------|--------|
 | `400` | `invalid car id` | `{id}` no es número |
-| `400` | `active is required` | Falta el campo (debe ser `true` o `false`) |
+| `400` | `no fields to update` | Body sin ningún campo |
+| `400` | `name is required` / `name is too long` / `price_per_day ...` / `invalid photo_url` | Reglas de creación, mismos mensajes |
 | `409` | `car has future reservations, cannot deactivate` | Intentás apagar con reservas futuras |
 | `404` | `car not found` | No existe o no es tuyo |
 | `401` / `403` | ver [00-general](00-general.md) | Sin token o sin permiso |
 
+Editar nombre, precio o foto **no** está bloqueado por reservas existentes; el guard solo aplica a la transición a `active:false`.
+
 ---
 
-> Apagar un auto no borra sus reservas viejas, solo deja de aparecer en `GET /cars` y no acepta reservas nuevas (`409 car is not active`). Si tiene reservas futuras (`pending`/`confirmed`) no deja desactivar (`409`).
+## `DELETE /seller/cars/{id}`
+
+Elimina un auto **que nunca tuvo reservas** (ningún estado). Necesita ser `seller`. Con historial de reservas responde `409`, porque toda reserva referencia a su auto: en ese caso usá `PATCH` con `active:false` para sacarlo del catálogo. La foto del auto la limpia después el proceso de huérfanos.
+
+**Responde** `200`:
+
+```json
+{"status":"ok"}
+```
+
+| Código | Mensaje | Cuándo |
+|--------|---------|--------|
+| `400` | `invalid car id` | `{id}` no es número |
+| `404` | `car not found` | No existe o no es tuyo |
+| `409` | `car has reservations, cannot delete` | Tiene reservas (cualquier estado) |
+| `401` / `403` | ver [00-general](00-general.md) | Sin token o sin permiso |
+
+---
+
+> Apagar un auto no borra sus reservas viejas, solo deja de aparecer en `GET /cars` y no acepta reservas nuevas (`409 car is not active`). Si tiene reservas futuras (`pending`/`confirmed`) no deja desactivar (`409`). Si nunca tuvo reservas, `DELETE` lo elimina de raíz.

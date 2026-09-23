@@ -138,7 +138,7 @@ func TestPreflightDisallowedOrigin(t *testing.T) {
 
 // TestPreflightMethodFromTable proves the CORS method list follows the route
 // table: any method the API exposes is accepted in preflights, and one it does
-// not expose (DELETE) is still rejected.
+// not expose (PUT — no route uses it) is still rejected.
 func TestPreflightMethodFromTable(t *testing.T) {
 	a := newTestAPI(t)
 	handler := func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }
@@ -166,7 +166,7 @@ func TestPreflightMethodFromTable(t *testing.T) {
 		}
 	}
 
-	if got := preflight(http.MethodDelete).Header().Get("Access-Control-Allow-Methods"); got != "" {
-		t.Errorf("DELETE is not exposed by the API but preflight allowed it: %q", got)
+	if got := preflight(http.MethodPut).Header().Get("Access-Control-Allow-Methods"); got != "" {
+		t.Errorf("PUT is not exposed by the API but preflight allowed it: %q", got)
 	}
 }
