@@ -1,0 +1,31 @@
+meta {
+  name: Cambiar contrasena
+  type: http
+  seq: 29
+}
+
+patch {
+  url: {{baseUrl}}/auth/password
+  body: json
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{sellerToken}}
+}
+
+body:json {
+  {
+    "current_password": "{{sellerPassword}}",
+    "new_password": "NuevaClave456"
+  }
+}
+
+assert {
+  res.status: eq 200
+}
+
+script:post-response {
+  bru.setVar("oldSellerToken", bru.getVar("sellerToken"));
+  bru.setVar("sellerPassword", "NuevaClave456");
+}

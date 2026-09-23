@@ -87,6 +87,47 @@ func (a *API) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// UpdatePassword changes the authenticated user's password. It also stamps
+// token_valid_after, which revokes every session of the user — including the
+// token that made this request — so the client must log in again with the new
+// password. That is the whole point: a password change is an account-takeover
+// response, and stale tokens must not survive it.
+func (a *API) UpdatePassword(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.CurrentUser(r.Context())
+
+	var in struct {
+		CurrentPassword string `json:"current_password"`
+		NewPassword     string `json:"new_password"`
+	}
+	if err := decodeBody(w, r, &in); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+	if !lenBetween(in.NewPassword, minPasswordLen, maxPasswordLen) {
+		writeError(w, http.StatusBadRequest, "password must be 8-72 characters")
+		return
+	}
+	// The caller is authenticated, but proving the current password keeps a
+	// stolen session from silently becoming permanent.
+	if !a.Auth.CheckPassword(u.PasswordHash, in.CurrentPassword) {
+		writeError(w, http.StatusUnauthorized, "invalid credentials")
+		return
+	}
+
+	hash, err := a.Auth.HashPassword(in.NewPassword)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	if _, err := a.DB.ExecContext(r.Context(),
+		`UPDATE users SET password_hash = ?, token_valid_after = ? WHERE id = ?`,
+		hash, time.Now().Unix(), u.ID); err != nil {
+		serverError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // Register creates a new buyer account.
 func (a *API) Register(w http.ResponseWriter, r *http.Request) {
 	a.register(w, r, "buyer")

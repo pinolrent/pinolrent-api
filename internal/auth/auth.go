@@ -227,10 +227,36 @@ func (a *Auth) GCRevoked(ctx context.Context) error {
 // userByID loads the full user row, the one place the users column list lives.
 func (a *Auth) userByID(ctx context.Context, id int64) (models.User, error) {
 	var u models.User
+	var validAfter sql.NullInt64
 	err := a.db.QueryRowContext(ctx,
-		`SELECT id, email, password_hash, phone, role FROM users WHERE id = ?`, id).
-		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Phone, &u.Role)
-	return u, err
+		`SELECT id, email, password_hash, phone, role, token_valid_after FROM users WHERE id = ?`, id).
+		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Phone, &u.Role, &validAfter)
+	if err != nil {
+		return u, err
+	}
+	if validAfter.Valid {
+		u.TokenValidAfter = validAfter.Int64
+	}
+	return u, nil
+}
+
+// InvalidateUserTokens stamps token_valid_after with the current instant, so
+// every JWT issued before it stops validating — access and refresh alike. It
+// is the "log out everywhere" switch: used when the password changes and when
+// a refresh token is replayed.
+func (a *Auth) InvalidateUserTokens(ctx context.Context, userID int64) error {
+	_, err := a.db.ExecContext(ctx,
+		`UPDATE users SET token_valid_after = ? WHERE id = ?`, time.Now().Unix(), userID)
+	return err
+}
+
+// tokenSuperseded reports whether the token was issued before the user's
+// token_valid_after stamp. The comparison is strict: a token issued in the
+// same second as the stamp survives (iat is second-granular), which is the
+// accepted one-second race — worst case an old token lives out its remaining
+// 15 minutes, and a login racing a password change is never killed twice.
+func tokenSuperseded(u *models.User, claims *Claims) bool {
+	return u.TokenValidAfter > 0 && claims.IssuedAt != nil && claims.IssuedAt.Unix() < u.TokenValidAfter
 }
 
 // RotateRefresh validates a single-use refresh token and swaps it for a
@@ -252,6 +278,9 @@ func (a *Auth) RotateRefresh(ctx context.Context, token string) (access, refresh
 	if err != nil {
 		return "", "", err
 	}
+	if tokenSuperseded(&u, claims) {
+		return "", "", errTokenSuperseded
+	}
 	if err := a.Revoke(ctx, claims.UserID, claims.JTI(), claims.ExpiresAtUnix()); err != nil {
 		return "", "", err
 	}
@@ -267,6 +296,11 @@ func (a *Auth) RotateRefresh(ctx context.Context, token string) (access, refresh
 }
 
 var errRefreshReused = errors.New("refresh token already used")
+
+// errTokenSuperseded marks a token that was cryptographically fine but issued
+// before the user's revocation stamp; handlers map it to the same 401 as an
+// expired token so nothing leaks about why it died.
+var errTokenSuperseded = errors.New("token superseded by a newer credential event")
 
 // IsRevoked reports whether the given jti is in the revoked_tokens table.
 func (a *Auth) IsRevoked(ctx context.Context, jti string) (bool, error) {
@@ -309,6 +343,10 @@ func (a *Auth) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 		u, err := a.userByID(r.Context(), claims.UserID)
 		if err != nil {
 			writeError(w, http.StatusUnauthorized, "user not found")
+			return
+		}
+		if tokenSuperseded(&u, claims) {
+			writeError(w, http.StatusUnauthorized, "invalid or expired token")
 			return
 		}
 

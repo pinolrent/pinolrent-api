@@ -188,6 +188,39 @@ Actualiza tu teléfono. Necesita login. Es lo único editable: el email identifi
 
 ---
 
+## `PATCH /auth/password`
+
+Cambia tu contraseña. Necesita login. **Revoca todas tus sesiones**, incluida la que hace este request: todos los tokens emitidos antes de este momento dejan de valer, así que después del cambio hay que volver a entrar con la contraseña nueva.
+
+**Body:**
+
+| Campo | Tipo | ¿Obligatorio? | Reglas |
+|-------|------|---------------|--------|
+| `current_password` | texto | sí | tu contraseña actual |
+| `new_password` | texto | sí | 8 a 72 caracteres |
+
+```json
+{"current_password":"secret123","new_password":"nuevaClave456"}
+```
+
+**Responde** `200`:
+
+```json
+{"status":"ok"}
+```
+
+**Errores:**
+
+| Código | Mensaje | Cuándo |
+|--------|---------|--------|
+| `401` | `invalid credentials` | La contraseña actual no coincide |
+| `400` | `password must be 8-72 characters` | La nueva está fuera de rango |
+| `400` | `invalid JSON body` | JSON roto o campos desconocidos |
+| `413` | `request body too large` | Más de 1 MB |
+| `401` | ver la tabla de más arriba | Sin token o token revocado |
+
+---
+
 ## Cómo es el token (JWT)
 
 Lo que devuelve `POST /auth/login` es un JWT firmado con **HS256**. El access dura **15 min** y el refresh **7 días** (un solo uso, con rotación):

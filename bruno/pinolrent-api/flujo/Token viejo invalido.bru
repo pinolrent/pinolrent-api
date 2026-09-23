@@ -1,0 +1,17 @@
+meta {
+  name: Token viejo invalido
+  type: http
+  seq: 31
+}
+
+get {
+  url: {{baseUrl}}/auth/me
+}
+
+headers {
+  Authorization: Bearer {{oldSellerToken}}
+}
+
+assert {
+  res.status: eq 401
+}
