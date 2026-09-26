@@ -56,8 +56,8 @@ func main() {
 	h.UploadDir = cfg.UploadDir
 	h.UploadMaxTotal = int64(cfg.UploadMaxTotalMB) << 20
 	// Networks whose forwarding headers we believe. Without this the server
-	// ignores X-Forwarded-For from a non-loopback proxy, which behind a
-	// container platform (Coolify, Fly, any PaaS) would collapse every client
+	// ignores X-Forwarded-For from a non-loopback proxy, which behind
+	// containers or any PaaS would collapse every client
 	// into a single rate-limit bucket.
 	h.TrustedProxies, err = cfg.TrustedProxies()
 	if err != nil {

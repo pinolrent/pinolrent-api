@@ -58,13 +58,13 @@ go run ./cmd/api   # o el binario compilado con make build
 El rate limit por IP y los logs necesitan la IP real del cliente, así que la app solo lee `X-Forwarded-For` / `X-Real-IP` cuando el pedido viene de un proxy en el que confía:
 
 - **Proxy en loopback** (nginx o Caddy en la misma máquina): confiable siempre, no hay que configurar nada.
-- **Proxy en otra red** (contenedores, Coolify/Traefik, cualquier PaaS): hay que declarar esa red en `TRUSTED_PROXY_CIDRS`. Si no, todos los clientes comparten un mismo contador de límite (30 logins por minuto entre todos) y los logs registran la IP del proxy.
+- **Proxy en otra red** (contenedores, cualquier PaaS): hay que declarar esa red en `TRUSTED_PROXY_CIDRS`. Si no, todos los clientes comparten un mismo contador de límite (30 logins por minuto entre todos) y los logs registran la IP del proxy.
 
 ```sh
 export TRUSTED_PROXY_CIDRS=172.18.0.0/16
 ```
 
-Cuando el peer es confiable, la cadena de `X-Forwarded-For` se recorre **de derecha a izquierda** y se toma el primer valor que no sea a su vez un proxy confiable. Así, si un cliente manda un header inventado, no puede elegirse el propio bucket: la dirección que agregó nuestro proxy queda al final de la cadena. El rango exacto sale de la red del proxy (por ejemplo `docker network inspect coolify --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}'`).
+Cuando el peer es confiable, la cadena de `X-Forwarded-For` se recorre **de derecha a izquierda** y se toma el primer valor que no sea a su vez un proxy confiable. Así, si un cliente manda un header inventado, no puede elegirse el propio bucket: la dirección que agregó nuestro proxy queda al final de la cadena. El rango exacto sale de la red del proxy (por ejemplo `docker network inspect proxy --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}'`).
 
 Qué pasa al arrancar:
 

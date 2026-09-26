@@ -135,7 +135,7 @@ Assertions use `res.status` / `res.body.*` (the `$res` variant throws `Reference
 
 - `JWT_SECRET` must be set in prod (min 32 bytes, generate with `openssl rand -base64 32`).
 - Set `ENV=prod` and `CORS_ALLOWED_ORIGINS` to your frontend origin(s).
-- Behind a proxy that is not on loopback (containers, Coolify/Traefik, any PaaS) set
+- Behind a proxy that is not on loopback (containers, any PaaS) set
   `TRUSTED_PROXY_CIDRS` to the proxy network, or every client shares one rate-limit bucket and the
   logs show the proxy IP instead of the caller.
 - `PORT` must be a valid port. `.env` errors fail fast.

@@ -9,7 +9,7 @@ Notas de operación: qué restricciones impone este backend y cómo se respalda 
 - **Detrás de un proxy que no es loopback** (nginx/Caddy en otra red, contenedores, cualquier PaaS) hay que declarar esa red en `TRUSTED_PROXY_CIDRS`, o todos los clientes comparten un mismo bucket de límite (30 logins por minuto entre todos) y los logs registran la IP del proxy en lugar de la del cliente. Ejemplo para obtener la subred de una red de contenedores:
 
 ```sh
-docker network inspect coolify --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}'
+docker network inspect proxy --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}'
 # ej. 10.0.0.0/16
 ```
 
