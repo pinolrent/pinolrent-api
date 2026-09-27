@@ -516,6 +516,20 @@ func TestRefreshReplayRevokesAllSessions(t *testing.T) {
 		t.Fatalf("refresh issued before replay: status = %d, want 401", rec.Code)
 	}
 
+	// The wall clock can step backwards, so the revocation stamp (which
+	// never precedes the replayed iat+1) can sit in a wall second ahead of
+	// now; a login issued before the wall reaches it would come back
+	// superseded. Cross the next second boundary so the fresh login lands
+	// after the stamp.
+	sec := time.Now().Unix()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Unix() == sec {
+		if time.Now().After(deadline) {
+			t.Fatal("wall clock did not advance within 5s")
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
 	// a fresh login recovers the account
 	rec = doJSON(t, a, "POST", "/auth/login", "", map[string]any{
 		"email": "replay@example.com", "password": "secret123",

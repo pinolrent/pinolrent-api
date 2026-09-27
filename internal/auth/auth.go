@@ -240,13 +240,14 @@ func (a *Auth) userByID(ctx context.Context, id int64) (models.User, error) {
 	return u, nil
 }
 
-// InvalidateUserTokens stamps token_valid_after with the current instant, so
-// every JWT issued before it stops validating — access and refresh alike. It
-// is the "log out everywhere" switch: used when the password changes and when
-// a refresh token is replayed.
-func (a *Auth) InvalidateUserTokens(ctx context.Context, userID int64) error {
+// InvalidateUserTokens stamps token_valid_after, so every JWT issued before
+// stamp stops validating — access and refresh alike. It is the "log out
+// everywhere" switch: used when a refresh token is replayed. The caller passes
+// the stamp because the wall clock can step backwards (NTP): a bare `now` can
+// land at or before the iat of tokens issued moments ago and leave them alive.
+func (a *Auth) InvalidateUserTokens(ctx context.Context, userID int64, stamp int64) error {
 	_, err := a.db.ExecContext(ctx,
-		`UPDATE users SET token_valid_after = ? WHERE id = ?`, time.Now().Unix(), userID)
+		`UPDATE users SET token_valid_after = ? WHERE id = ?`, stamp, userID)
 	return err
 }
 
@@ -276,7 +277,14 @@ func (a *Auth) RotateRefresh(ctx context.Context, token string) (access, refresh
 		// server cannot tell which side holds the valid copy — so every
 		// session of this user dies and both sides must log in again.
 		// Best effort: on failure the caller still gets the 401 below.
-		if err := a.InvalidateUserTokens(ctx, claims.UserID); err != nil {
+		// The stamp never precedes the replayed token's iat+1: the wall
+		// clock can step backwards, and a stamp from `now` alone would
+		// leave it and its same-second siblings alive.
+		stamp := time.Now().Unix()
+		if claims.IssuedAt != nil && claims.IssuedAt.Unix()+1 > stamp {
+			stamp = claims.IssuedAt.Unix() + 1
+		}
+		if err := a.InvalidateUserTokens(ctx, claims.UserID, stamp); err != nil {
 			slog.Error("revoke sessions on refresh replay", "user_id", claims.UserID, "error", err)
 		}
 		return "", "", errRefreshReused
