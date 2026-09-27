@@ -2,6 +2,8 @@
 # Go puro, sin cgo), así que el runtime no necesita toolchain ni libc extra.
 
 FROM golang:1.26.6-alpine AS build
+# git solo en la etapa build: lo usa git describe para versionar el binario.
+RUN apk add --no-cache git
 WORKDIR /src
 
 # Las dependencias primero: así el cache de capas no se invalida con cada
@@ -10,9 +12,13 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-# La versión que reporta GET /health; se puede sobrescribir con --build-arg.
-ARG VERSION=dev
-RUN CGO_ENABLED=0 go build -ldflags "-X main.version=${VERSION}" -o /out/pinolrent-api ./cmd/api
+# Versión que reporta GET /health: si no se pasa --build-arg, sale de
+# git describe sobre el clone (requiere .git en el contexto de build, así que
+# no va en .dockerignore). Solo la etapa build lo usa; la imagen final solo
+# recibe el binario.
+ARG VERSION=
+RUN V="${VERSION:-$(git describe --tags --always 2>/dev/null || echo dev)}"; \
+	CGO_ENABLED=0 go build -ldflags "-X main.version=${V}" -o /out/pinolrent-api ./cmd/api
 
 FROM alpine:3.22
 # sqlite (CLI) es para el snapshot diario de la base; su-exec baja privilegios
