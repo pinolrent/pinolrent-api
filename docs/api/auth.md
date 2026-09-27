@@ -12,7 +12,7 @@ Dice si el server y la base están bien. No necesita login.
 
 ## `POST /auth/register`
 
-Crea cuenta de **comprador**. No necesita login.
+Crea una cuenta. Una sola cuenta por email: sin `phone` queda solo compradora (`["buyer"]`), con `phone` válido queda compradora y vendedora desde el inicio (`["buyer","seller"]`). Una cuenta compradora puede subir a vendedora después con `POST /auth/become-seller`. No necesita login.
 
 **Body:**
 
@@ -20,7 +20,7 @@ Crea cuenta de **comprador**. No necesita login.
 |-------|------|---------------|--------|
 | `email` | texto | sí | formato email (TLD de 2+ letras, sin `..` ni punto/guion en bordes), hasta 254 caracteres, se guarda en minúsculas |
 | `password` | texto | sí | 8 a 72 caracteres |
-| `phone` | texto | no | teléfono de contacto; se normaliza a E.164 (ver abajo) |
+| `phone` | texto | no | teléfono de contacto; si viene, se normaliza a E.164 (ver abajo) y la cuenta nace también vendedora |
 
 ```json
 {"email":"demo@example.com","password":"secret123","phone":"+56912345678"}
@@ -49,18 +49,27 @@ Crea cuenta de **comprador**. No necesita login.
 
 ---
 
-## `POST /auth/register/seller`
+## `POST /auth/become-seller`
 
-Igual que el anterior pero crea cuenta de **vendedor**. Mismo body y mismas reglas, con una diferencia: **`phone` es obligatorio**, porque es el número que usan los compradores para contactarlo.
+Convierte tu cuenta compradora en compradora + vendedora. Necesita login. Es la vía de upgrade `["buyer"]` → `["buyer","seller"]`; es idempotente (si ya sos vendedor, devuelve tu perfil actual).
+
+**Body:**
+
+| Campo | Tipo | ¿Obligatorio? | Reglas |
+|-------|------|---------------|--------|
+| `phone` | texto | sí | teléfono de contacto E.164 (mismas reglas que en el registro) |
 
 ```json
-{"email":"vendedor@example.com","password":"secret123","phone":"+56912345678"}
+{"phone":"+56912345678"}
 ```
+
+**Responde** `200` con tu perfil actualizado, igual que `GET /auth/me`.
 
 | Código | Mensaje | Cuándo |
 |--------|---------|--------|
-| `400` | `phone is required for sellers` | Falta el teléfono |
-| `400` | `invalid phone` | Teléfono mal formado |
+| `400` | `phone is required for sellers` | Falta el teléfono o está mal formado |
+| `400` | `invalid JSON body` | JSON roto o campos desconocidos |
+| `401` | ver abajo | Sin token o token inválido |
 
 ---
 
@@ -148,10 +157,10 @@ Authorization: Bearer <token>
 **Responde** `200`:
 
 ```json
-{"id":3,"email":"demo@example.com","role":"buyer","phone":"+56912345678"}
+{"id":3,"email":"demo@example.com","roles":["buyer"],"phone":"+56912345678"}
 ```
 
-`phone` viene vacío (`""`) si no cargaste uno; los vendedores siempre lo tienen.
+`phone` viene vacío (`""`) si no cargaste uno; los vendedores siempre lo tienen. `roles` es `["buyer"]` o `["buyer","seller"]`.
 
 | Código | Mensaje | Cuándo |
 |--------|---------|--------|
@@ -165,7 +174,7 @@ Authorization: Bearer <token>
 
 ## `PATCH /auth/me`
 
-Actualiza tu teléfono. Necesita login. Es lo único editable: el email identifica la cuenta y el rol se define al registrarse.
+Actualiza tu teléfono. Necesita login. Es lo único editable: el email identifica la cuenta y los roles se otorgan al registrarse (con `phone`) o vía `POST /auth/become-seller`. Guardar `phone` acá nunca te vuelve vendedor.
 
 **Body:**
 
@@ -183,7 +192,7 @@ Actualiza tu teléfono. Necesita login. Es lo único editable: el email identifi
 |--------|---------|--------|
 | `400` | `invalid phone` | Teléfono mal formado |
 | `400` | `phone is required for sellers` | Un vendedor intentó dejarlo vacío |
-| `400` | `invalid JSON body` | Mandaste `email` o `role` (no son editables) |
+| `400` | `invalid JSON body` | Mandaste `email` o `roles` (no son editables) |
 | `401` | ver arriba | Sin token o token inválido |
 
 ---
@@ -228,7 +237,7 @@ Lo que devuelve `POST /auth/login` es un JWT firmado con **HS256**. El access du
 | Claim | Qué es |
 |-------|--------|
 | `uid` | tu id |
-| `role` | `buyer` o `seller` |
+| `roles` | `["buyer"]` o `["buyer","seller"]` |
 | `sub` | tu id como texto |
 | `iss` | `pinolrent-api` |
 | `aud` | `pinolrent-api` (access) o `pinolrent-api-refresh` (refresh) |
@@ -241,8 +250,10 @@ El `jti` es lo que permite invalidar un token con `/auth/logout`. El server lo g
 El server rechaza tokens con:
 
 - Algoritmo que no sea `HS256` (incluido `none`).
-- Falta de `exp`, `iss` o `aud`.
+- Falta de `exp`, `iss`, `aud` o `roles`.
 - Firma inválida, vencido o `jti` revocado.
+
+Los tokens emitidos antes de la migración a `roles` (con el claim singular `role`) se rechazan: hay que volver a loguearse.
 
 ---
 

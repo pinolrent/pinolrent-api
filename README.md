@@ -23,7 +23,8 @@ make watch   # levanta con recarga automática al editar (requiere make tools)
 | Método | Ruta | ¿Necesita login? | Para qué sirve |
 |--------|------|-----------------|----------------|
 | GET | `/health` | no | Ver si el server y la base están bien |
-| POST | `/auth/register` · `/auth/register/seller` | no | Crear cuenta de comprador / vendedor |
+| POST | `/auth/register` | no | Crear cuenta (con teléfono: también vendedora) |
+| POST | `/auth/become-seller` | sí | Activar modo vendedor en tu cuenta |
 | POST | `/auth/login` | no | Entrar y obtener access (15 min) + refresh (7 días) |
 | POST | `/auth/refresh` | no | Renovar el par con un refresh de un solo uso |
 | GET | `/auth/me` | sí | Ver tu propio perfil |
