@@ -232,17 +232,106 @@ func TestRoleConstraint(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = d.Close() })
 
+	ctx := context.Background()
+	res, err := d.ExecContext(ctx,
+		`INSERT INTO users (email, password_hash) VALUES ('u@example.com', 'h')`)
+	if err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+	uid, err := res.LastInsertId()
+	if err != nil {
+		t.Fatalf("last id: %v", err)
+	}
+
 	for _, role := range []string{"buyer", "seller"} {
-		if _, err := d.ExecContext(context.Background(),
-			`INSERT INTO users (email, password_hash, role) VALUES (?, 'h', ?)`,
-			role+"@example.com", role); err != nil {
+		if _, err := d.ExecContext(ctx,
+			`INSERT INTO user_roles (user_id, role) VALUES (?, ?)`, uid, role); err != nil {
 			t.Fatalf("insert %s: %v", role, err)
+		}
+		// buyer+seller must coexist on one account.
+		if _, err := d.ExecContext(ctx, `DELETE FROM user_roles WHERE user_id = ? AND role = ?`, uid, role); err != nil {
+			t.Fatalf("delete %s: %v", role, err)
 		}
 	}
 
-	if _, err := d.ExecContext(context.Background(),
-		`INSERT INTO users (email, password_hash, role) VALUES ('admin@example.com', 'h', 'admin')`); err == nil {
+	if _, err := d.ExecContext(ctx,
+		`INSERT INTO user_roles (user_id, role) VALUES (?, 'admin')`, uid); err == nil {
 		t.Fatal("expected role constraint to reject 'admin'")
+	}
+}
+
+func TestUserRolesBackfill(t *testing.T) {
+	ctx := context.Background()
+	legacyPath := filepath.Join(t.TempDir(), "roles.db")
+	legacy, err := sql.Open("sqlite", "file:"+legacyPath)
+	if err != nil {
+		t.Fatalf("open legacy: %v", err)
+	}
+	const legacySchema = `
+CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'buyer' CHECK (role IN ('buyer','seller')), created_at TEXT NOT NULL DEFAULT (datetime('now')));
+`
+	if _, err := legacy.ExecContext(ctx, legacySchema); err != nil {
+		t.Fatalf("legacy schema: %v", err)
+	}
+	seeds := map[string][]string{
+		"s@example.com": {"buyer", "seller"},
+		"b@example.com": {"buyer"},
+	}
+	for email := range seeds {
+		var role string
+		if email == "s@example.com" {
+			role = "seller"
+		} else {
+			role = "buyer"
+		}
+		if _, err := legacy.ExecContext(ctx,
+			`INSERT INTO users (email, password_hash, role) VALUES (?, 'h', ?)`, email, role); err != nil {
+			t.Fatalf("seed %s: %v", email, err)
+		}
+	}
+	if err := legacy.Close(); err != nil {
+		t.Fatalf("close legacy: %v", err)
+	}
+
+	d, err := Open(legacyPath)
+	if err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	t.Cleanup(func() { _ = d.Close() })
+
+	for email, want := range seeds {
+		var id int64
+		if err := d.QueryRowContext(ctx, `SELECT id FROM users WHERE email = ?`, email).Scan(&id); err != nil {
+			t.Fatalf("find %s: %v", email, err)
+		}
+		rows, err := d.QueryContext(ctx, `SELECT role FROM user_roles WHERE user_id = ? ORDER BY role`, id)
+		if err != nil {
+			t.Fatalf("roles %s: %v", email, err)
+		}
+		var got []string
+		for rows.Next() {
+			var role string
+			if err := rows.Scan(&role); err != nil {
+				_ = rows.Close()
+				t.Fatalf("scan: %v", err)
+			}
+			got = append(got, role)
+		}
+		_ = rows.Close()
+		if err := rows.Err(); err != nil {
+			t.Fatalf("rows: %v", err)
+		}
+		if len(got) != len(want) || (len(got) > 0 && (got[0] != want[0] || (len(got) > 1 && got[1] != want[1]))) {
+			t.Fatalf("roles %s = %v, want %v", email, got, want)
+		}
+	}
+
+	var n int
+	if err := d.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info('users') WHERE name = 'role'`).Scan(&n); err != nil {
+		t.Fatalf("table info: %v", err)
+	}
+	if n != 0 {
+		t.Fatal("users.role column should be gone after migration")
 	}
 }
 
@@ -254,7 +343,7 @@ func TestCarOwnerRequired(t *testing.T) {
 	t.Cleanup(func() { _ = d.Close() })
 
 	if _, err := d.ExecContext(context.Background(),
-		`INSERT INTO users (email, password_hash, role) VALUES ('seller@example.com', 'h', 'seller')`); err != nil {
+		`INSERT INTO users (email, password_hash) VALUES ('seller@example.com', 'h')`); err != nil {
 		t.Fatalf("insert seller: %v", err)
 	}
 	if _, err := d.ExecContext(context.Background(),
@@ -275,15 +364,14 @@ func TestEmailCaseInsensitiveUnique(t *testing.T) {
 	t.Cleanup(func() { _ = d.Close() })
 
 	ctx := context.Background()
-	if _, err := d.ExecContext(ctx,
-		`INSERT INTO users (email, password_hash, role) VALUES ('User@Example.COM', 'h', 'buyer')`); err != nil {
+	if _, err := d.ExecContext(ctx, `INSERT INTO users (email, password_hash) VALUES ('User@Example.COM', 'h')`); err != nil {
 		t.Fatalf("first insert: %v", err)
 	}
 
 	// The case-insensitive unique index (lower(email)) must reject a
 	// second row that differs only in casing.
 	_, err = d.ExecContext(ctx,
-		`INSERT INTO users (email, password_hash, role) VALUES ('user@example.com', 'h', 'buyer')`)
+		`INSERT INTO users (email, password_hash) VALUES ('user@example.com', 'h')`)
 	if err == nil {
 		t.Fatal("expected UNIQUE violation for case-different email")
 	}
@@ -296,7 +384,7 @@ func TestPriceCheckConstraint(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = d.Close() })
 	ctx := context.Background()
-	if _, err := d.ExecContext(ctx, `INSERT INTO users (email, password_hash, role) VALUES ('s@example.com','h','seller')`); err != nil {
+	if _, err := d.ExecContext(ctx, `INSERT INTO users (email, password_hash) VALUES ('s@example.com','h')`); err != nil {
 		t.Fatalf("insert seller: %v", err)
 	}
 	if _, err := d.ExecContext(ctx, `INSERT INTO cars (owner_id, name, price_per_day) VALUES (1,'Over',100000001)`); err == nil {
@@ -314,10 +402,10 @@ func TestReservationDateCheck(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = d.Close() })
 	ctx := context.Background()
-	if _, err := d.ExecContext(ctx, `INSERT INTO users (email, password_hash, role) VALUES ('u@example.com','h','buyer')`); err != nil {
+	if _, err := d.ExecContext(ctx, `INSERT INTO users (email, password_hash) VALUES ('u@example.com','h')`); err != nil {
 		t.Fatalf("insert user: %v", err)
 	}
-	if _, err := d.ExecContext(ctx, `INSERT INTO users (email, password_hash, role) VALUES ('s@example.com','h','seller')`); err != nil {
+	if _, err := d.ExecContext(ctx, `INSERT INTO users (email, password_hash) VALUES ('s@example.com','h')`); err != nil {
 		t.Fatalf("insert seller: %v", err)
 	}
 	if _, err := d.ExecContext(ctx, `INSERT INTO cars (owner_id, name, price_per_day) VALUES (2,'Car',100)`); err != nil {

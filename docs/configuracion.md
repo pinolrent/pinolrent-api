@@ -73,7 +73,7 @@ Qué pasa al arrancar:
 3. Abre SQLite con WAL y aplica las migraciones que falten (quedan registradas en `goose_db_version`, nunca borran datos). Si es `:memory:` usa una sola conexión, si no hasta 8 (con `MaxIdleTime` 5 min / `MaxLifetime` 30 min). Si la base está ocupada, reintenta con backoff.
 4. Levanta el HTTP y espera `SIGINT`/`SIGTERM` para apagarse limpio (hasta 10 s).
 
-No hay usuario admin: compradores y vendedores se crean con `POST /auth/register` y `POST /auth/register/seller`.
+No hay usuario admin: las cuentas se crean con `POST /auth/register` (sin `phone` = solo compradora, con `phone` = compradora + vendedora) y una compradora puede subir a vendedora con `POST /auth/become-seller`.
 
 ## Desarrollo
 

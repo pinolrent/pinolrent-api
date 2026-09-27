@@ -47,8 +47,8 @@ func New(secret string, d *sql.DB) *Auth {
 
 // Claims is the JWT payload carried by issued tokens.
 type Claims struct {
-	UserID int64  `json:"uid"`
-	Role   string `json:"role"`
+	UserID int64    `json:"uid"`
+	Roles  []string `json:"roles"`
 	jwt.RegisteredClaims
 }
 
@@ -102,7 +102,7 @@ func (a *Auth) sign(u *models.User, aud string, ttl time.Duration) (string, erro
 	}
 	claims := Claims{
 		UserID: u.ID,
-		Role:   u.Role,
+		Roles:  append([]string(nil), u.Roles...),
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   strconv.FormatInt(u.ID, 10),
 			Issuer:    jwtIssuer,
@@ -161,6 +161,11 @@ func (a *Auth) parseWith(p *jwt.Parser, token string) (*Claims, error) {
 		return nil, err
 	}
 	if claims.JTI() == "" {
+		return nil, jwt.ErrTokenRequiredClaimMissing
+	}
+	// Tokens issued before the roles migration carry no roles claim; reject
+	// them so their owners re-authenticate instead of running roleless.
+	if len(claims.Roles) == 0 {
 		return nil, jwt.ErrTokenRequiredClaimMissing
 	}
 	return claims, nil
@@ -224,16 +229,43 @@ func (a *Auth) GCRevoked(ctx context.Context) error {
 	return err
 }
 
+// UserRoles returns the role memberships of the user, alphabetically ordered.
+func (a *Auth) UserRoles(ctx context.Context, userID int64) ([]string, error) {
+	rows, err := a.db.QueryContext(ctx, `SELECT role FROM user_roles WHERE user_id = ? ORDER BY role`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var roles []string
+	for rows.Next() {
+		var role string
+		if err := rows.Scan(&role); err != nil {
+			return nil, err
+		}
+		roles = append(roles, role)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return roles, nil
+}
+
 // userByID loads the full user row, the one place the users column list lives.
+// Roles come from user_roles ordered alphabetically.
 func (a *Auth) userByID(ctx context.Context, id int64) (models.User, error) {
 	var u models.User
 	var validAfter sql.NullInt64
 	err := a.db.QueryRowContext(ctx,
-		`SELECT id, email, password_hash, phone, role, token_valid_after FROM users WHERE id = ?`, id).
-		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Phone, &u.Role, &validAfter)
+		`SELECT id, email, password_hash, phone, token_valid_after FROM users WHERE id = ?`, id).
+		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Phone, &validAfter)
 	if err != nil {
 		return u, err
 	}
+	roles, err := a.UserRoles(ctx, id)
+	if err != nil {
+		return u, err
+	}
+	u.Roles = roles
 	if validAfter.Valid {
 		u.TokenValidAfter = validAfter.Int64
 	}
@@ -375,12 +407,12 @@ func serverErrorFromAuth(w http.ResponseWriter, err error) {
 	httpx.WriteError(w, http.StatusInternalServerError, "server error")
 }
 
-// RequireRole wraps a handler so it only runs for authenticated users with the
-// given role.
+// RequireRole wraps a handler so it only runs for authenticated users holding
+// the given role.
 func (a *Auth) RequireRole(role string, next http.HandlerFunc) http.HandlerFunc {
 	return a.RequireAuth(func(w http.ResponseWriter, r *http.Request) {
 		u, ok := CurrentUser(r.Context())
-		if !ok || u.Role != role {
+		if !ok || !u.HasRole(role) {
 			writeError(w, http.StatusForbidden, "insufficient permissions")
 			return
 		}

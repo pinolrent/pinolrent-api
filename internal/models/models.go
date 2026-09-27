@@ -1,18 +1,29 @@
 // Package models defines the domain types exposed by the API.
 package models
 
-// User is an account that can authenticate as a buyer or as a seller. Phone is
-// the seller's WhatsApp contact, stored in E.164 and empty when not provided.
-// TokenValidAfter is the Unix instant after which only newly issued tokens are
-// valid (0 = all tokens valid); password changes and refresh replays stamp it
-// to revoke every session at once. It is never serialized.
+// User is an account that can authenticate as a buyer and optionally as a
+// seller. Roles holds the memberships (always buyer, sometimes also seller).
+// Phone is the seller's WhatsApp contact, stored in E.164 and empty when not
+// provided. TokenValidAfter is the Unix instant after which only newly issued
+// tokens are valid (0 = all tokens valid); password changes and refresh
+// replays stamp it to revoke every session at once. It is never serialized.
 type User struct {
-	ID              int64  `json:"id"`
-	Email           string `json:"email"`
-	PasswordHash    string `json:"-"`
-	Phone           string `json:"phone,omitempty"`
-	Role            string `json:"role"`
-	TokenValidAfter int64  `json:"-"`
+	ID              int64    `json:"id"`
+	Email           string   `json:"email"`
+	PasswordHash    string   `json:"-"`
+	Phone           string   `json:"phone,omitempty"`
+	Roles           []string `json:"roles"`
+	TokenValidAfter int64    `json:"-"`
+}
+
+// HasRole reports whether the user holds the given role.
+func (u *User) HasRole(role string) bool {
+	for _, r := range u.Roles {
+		if r == role {
+			return true
+		}
+	}
+	return false
 }
 
 // Car is a rentable vehicle in the catalog, owned by a seller account.

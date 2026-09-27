@@ -47,7 +47,7 @@ Reglas: la reserva debe existir y ser tuya, no estar `cancelled` y no tener ya u
 
 ## `PATCH /seller/reservations/{id}/confirm`
 
-El vendedor aprueba el pago y confirma la reserva, todo junto en una transacción. Necesita ser `seller` y que el auto sea tuyo. Sin body.
+El vendedor aprueba el pago y confirma la reserva, todo junto en una transacción. Necesita membresía `seller` y que el auto sea tuyo. Sin body.
 
 Pasa `payments.status` → `approved` y `reservations.status` → `confirmed`.
 
@@ -79,7 +79,7 @@ Pasa `payments.status` → `approved` y `reservations.status` → `confirmed`.
 
 ## `PATCH /seller/reservations/{id}/reject`
 
-Rechaza el pago registrado y **cancela la reserva** en la misma transacción, liberando las fechas. Es la salida para una transferencia trucha o que nunca llegó: sin este endpoint una reserva pagada solo podía avanzar a `confirmed`. Necesita ser `seller` y que el auto sea tuyo. Sin body.
+Rechaza el pago registrado y **cancela la reserva** en la misma transacción, liberando las fechas. Es la salida para una transferencia trucha o que nunca llegó: sin este endpoint una reserva pagada solo podía avanzar a `confirmed`. Necesita membresía `seller` y que el auto sea tuyo. Sin body.
 
 Pasa `payments.status` → `rejected` y `reservations.status` → `cancelled`. La fila de pago se conserva (auditoría), y como solo puede haber un pago por reserva, el comprador debe crear una nueva reserva si aún quiere reservar.
 

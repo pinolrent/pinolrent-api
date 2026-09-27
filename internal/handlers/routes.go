@@ -32,7 +32,7 @@ func (a *API) routes() []route {
 	return []route{
 		{http.MethodGet, "/health", a.Health, limitNone},
 		{http.MethodPost, "/auth/register", a.Register, limitStrict},
-		{http.MethodPost, "/auth/register/seller", a.RegisterSeller, limitStrict},
+		{http.MethodPost, "/auth/become-seller", a.Auth.RequireAuth(a.BecomeSeller), limitStrict},
 		{http.MethodPost, "/auth/login", a.Login, limitStrict},
 		{http.MethodPost, "/auth/refresh", a.Refresh, limitStrict},
 		{http.MethodPost, "/auth/logout", a.Auth.RequireAuth(a.Logout), limitStrict},

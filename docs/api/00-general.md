@@ -18,12 +18,12 @@ Authorization: Bearer <token>
 
 El token lo sacas de `POST /auth/login`: el access dura **15 min** y el refresh **7 días** (se renueva con `POST /auth/refresh`).
 
-Roles:
+Roles (una sola cuenta por email, con membresía a 1–2 roles):
 
-- **`buyer`** (comprador): reserva, paga y ve sus reservas.
-- **`seller`** (vendedor): publica sus autos y confirma reservas de sus autos. Se crea con `POST /auth/register/seller` y **requiere teléfono**, porque es el número con el que lo contactan los compradores.
+- **`buyer`** (comprador): reserva, paga y ve sus reservas. Toda cuenta nace al menos compradora.
+- **`seller`** (vendedor): publica sus autos y confirma reservas de sus autos. **Requiere teléfono**, porque es el número con el que lo contactan los compradores. Se obtiene registrando con `phone` o después con `POST /auth/become-seller`.
 
-Un vendedor también puede reservar como comprador.
+No existe cuenta "solo vendedora": un vendedor también reserva como comprador con el mismo token. El frontend deriva el switch Comprar | Vender de `GET /auth/me` → `roles`.
 
 Si algo falla con el login:
 
@@ -69,7 +69,7 @@ Responden un **array simple**. Para saber si hay más, pedí `limit+1` y fijate 
 |--------|------|---------|-----|
 | GET | `/health` | no | [auth](auth.md) |
 | POST | `/auth/register` | no | [auth](auth.md) |
-| POST | `/auth/register/seller` | no | [auth](auth.md) |
+| POST | `/auth/become-seller` | sí | [auth](auth.md) |
 | POST | `/auth/login` | no | [auth](auth.md) |
 | POST | `/auth/refresh` | no | [auth](auth.md) |
 | GET | `/auth/me` | sí | [auth](auth.md) |
@@ -99,7 +99,7 @@ Responden un **array simple**. Para saber si hay más, pedí `limit+1` y fijate 
 **Usuario (perfil propio):**
 
 ```json
-{"id":3,"email":"demo@example.com","role":"buyer","phone":"+56912345678"}
+{"id":3,"email":"demo@example.com","roles":["buyer"],"phone":"+56912345678"}
 ```
 
 `phone` viene vacío si no cargaste uno. Se normaliza a E.164 (`+56912345678`).

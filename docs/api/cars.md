@@ -86,7 +86,7 @@ El mensaje viene precargado con el nombre del auto, y el número va en formato i
 
 ## `GET /seller/cars`
 
-Tus autos como vendedor, más nuevos primero. Necesita ser `seller`. Acepta `limit`/`offset`.
+Tus autos como vendedor, más nuevos primero. Necesita membresía `seller`. Acepta `limit`/`offset`.
 
 ```json
 [{"id":1,"owner_id":4,"name":"Toyota Yaris","price_per_day":45000,"active":true}]
@@ -98,7 +98,7 @@ Sin autos → `[]`.
 
 ## `POST /seller/cars`
 
-Agrega un auto tuyo. Necesita ser `seller`.
+Agrega un auto tuyo. Necesita membresía `seller`.
 
 **Body:**
 
@@ -134,7 +134,7 @@ Agrega un auto tuyo. Necesita ser `seller`.
 
 ## `PATCH /seller/cars/{id}`
 
-Edita uno de tus autos. Necesita ser `seller`. Acepta **cualquier combinación** de estos campos (al menos uno):
+Edita uno de tus autos. Necesita membresía `seller`. Acepta **cualquier combinación** de estos campos (al menos uno):
 
 | Campo | Tipo | Reglas |
 |-------|------|--------|
@@ -168,7 +168,7 @@ Editar nombre, precio o foto **no** está bloqueado por reservas existentes; el 
 
 ## `DELETE /seller/cars/{id}`
 
-Elimina un auto **que nunca tuvo reservas** (ningún estado). Necesita ser `seller`. Con historial de reservas responde `409`, porque toda reserva referencia a su auto: en ese caso usá `PATCH` con `active:false` para sacarlo del catálogo. La foto del auto la limpia después el proceso de huérfanos.
+Elimina un auto **que nunca tuvo reservas** (ningún estado). Necesita membresía `seller`. Con historial de reservas responde `409`, porque toda reserva referencia a su auto: en ese caso usá `PATCH` con `active:false` para sacarlo del catálogo. La foto del auto la limpia después el proceso de huérfanos.
 
 **Responde** `200`:
 

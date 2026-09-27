@@ -43,14 +43,14 @@ func (a *API) Me(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"id":    u.ID,
 		"email": u.Email,
-		"role":  u.Role,
+		"roles": u.Roles,
 		"phone": u.Phone,
 	})
 }
 
 // UpdateMe updates the authenticated user's own profile. Only the phone is
-// mutable: the email identifies the account and the role is granted at
-// registration.
+// mutable: the email identifies the account and roles are granted at
+// registration or via become-seller.
 func (a *API) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	u, _ := auth.CurrentUser(r.Context())
 
@@ -68,7 +68,9 @@ func (a *API) UpdateMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Same rule as registration: a seller without a phone cannot be contacted.
-	if u.Role == "seller" && phone == "" {
+	// Saving a phone here never grants the seller role; only become-seller
+	// does that.
+	if u.HasRole("seller") && phone == "" {
 		writeError(w, http.StatusBadRequest, "phone is required for sellers")
 		return
 	}
@@ -82,7 +84,7 @@ func (a *API) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"id":    u.ID,
 		"email": u.Email,
-		"role":  u.Role,
+		"roles": u.Roles,
 		"phone": phone,
 	})
 }
@@ -128,18 +130,10 @@ func (a *API) UpdatePassword(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// Register creates a new buyer account.
+// Register creates a new account. Without a phone it is buyer-only; with a
+// valid phone it is buyer and seller from the start. A buyer-only account
+// can become a seller later via become-seller.
 func (a *API) Register(w http.ResponseWriter, r *http.Request) {
-	a.register(w, r, "buyer")
-}
-
-// RegisterSeller creates a new seller account that can publish and manage its
-// own cars.
-func (a *API) RegisterSeller(w http.ResponseWriter, r *http.Request) {
-	a.register(w, r, "seller")
-}
-
-func (a *API) register(w http.ResponseWriter, r *http.Request, role string) {
 	var in struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
@@ -169,12 +163,6 @@ func (a *API) register(w http.ResponseWriter, r *http.Request, role string) {
 		writeError(w, http.StatusBadRequest, "invalid phone")
 		return
 	}
-	// A seller is the one buyers contact, so the number is mandatory there;
-	// buyers can add it later from their profile.
-	if role == "seller" && phone == "" {
-		writeError(w, http.StatusBadRequest, "phone is required for sellers")
-		return
-	}
 
 	hash, err := a.Auth.HashPassword(in.Password)
 	if err != nil {
@@ -182,19 +170,115 @@ func (a *API) register(w http.ResponseWriter, r *http.Request, role string) {
 		return
 	}
 
+	roles := []string{"buyer"}
+	if phone != "" {
+		roles = append(roles, "seller")
+	}
+
 	// The response intentionally omits the user id: returning id=0 for a
 	// duplicate and the real id for a new account would let an attacker
 	// enumerate registered emails. Both paths return the identical body.
-	_, err = a.DB.ExecContext(r.Context(),
-		`INSERT INTO users (email, password_hash, role, phone) VALUES (?, ?, ?, ?)`,
-		in.Email, hash, role, phone)
+	tx, err := a.DB.BeginTx(r.Context(), nil)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+	res, err := tx.ExecContext(r.Context(),
+		`INSERT INTO users (email, password_hash, phone) VALUES (?, ?, ?)`,
+		in.Email, hash, phone)
 	if err != nil {
 		if !isUniqueViolation(err) {
 			serverError(w, err)
 			return
 		}
+		_ = tx.Rollback()
+		committed = true
+		writeJSON(w, http.StatusCreated, map[string]any{"email": in.Email})
+		return
 	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	for _, role := range roles {
+		if _, err := tx.ExecContext(r.Context(),
+			`INSERT INTO user_roles (user_id, role) VALUES (?, ?)`, id, role); err != nil {
+			serverError(w, err)
+			return
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		serverError(w, err)
+		return
+	}
+	committed = true
 	writeJSON(w, http.StatusCreated, map[string]any{"email": in.Email})
+}
+
+// BecomeSeller grants the seller role to the authenticated buyer account and
+// stores its contact phone. It is idempotent: a seller calling it again gets
+// its current profile back.
+func (a *API) BecomeSeller(w http.ResponseWriter, r *http.Request) {
+	u, _ := auth.CurrentUser(r.Context())
+
+	var in struct {
+		Phone string `json:"phone"`
+	}
+	if err := decodeBody(w, r, &in); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+
+	phone, ok := normalizePhone(in.Phone)
+	if !ok || phone == "" {
+		writeError(w, http.StatusBadRequest, "phone is required for sellers")
+		return
+	}
+
+	if !u.HasRole("seller") {
+		tx, err := a.DB.BeginTx(r.Context(), nil)
+		if err != nil {
+			serverError(w, err)
+			return
+		}
+		committed := false
+		defer func() {
+			if !committed {
+				_ = tx.Rollback()
+			}
+		}()
+		if _, err := tx.ExecContext(r.Context(),
+			`UPDATE users SET phone = ? WHERE id = ?`, phone, u.ID); err != nil {
+			serverError(w, err)
+			return
+		}
+		if _, err := tx.ExecContext(r.Context(),
+			`INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, 'seller')`, u.ID); err != nil {
+			serverError(w, err)
+			return
+		}
+		if err := tx.Commit(); err != nil {
+			serverError(w, err)
+			return
+		}
+		committed = true
+		u.Phone = phone
+		u.Roles = append(u.Roles, "seller")
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"id":    u.ID,
+		"email": u.Email,
+		"roles": u.Roles,
+		"phone": u.Phone,
+	})
 }
 
 // Logout revokes the bearer token used on the request by inserting its
@@ -242,9 +326,9 @@ func (a *API) Login(w http.ResponseWriter, r *http.Request) {
 
 	var u models.User
 	err := a.DB.QueryRowContext(r.Context(),
-		`SELECT id, email, password_hash, phone, role FROM users WHERE email = ?`,
+		`SELECT id, email, password_hash, phone FROM users WHERE email = ?`,
 		strings.ToLower(strings.TrimSpace(in.Email))).
-		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Phone, &u.Role)
+		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Phone)
 	if errors.Is(err, sql.ErrNoRows) {
 		// Run a bcrypt comparison against a fixed dummy hash so the
 		// response time is independent of whether the email exists.
@@ -260,6 +344,12 @@ func (a *API) Login(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
+	roles, err := a.Auth.UserRoles(r.Context(), u.ID)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	u.Roles = roles
 
 	token, err := a.Auth.SignToken(&u)
 	if err != nil {

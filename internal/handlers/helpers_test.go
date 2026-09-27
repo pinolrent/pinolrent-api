@@ -75,10 +75,10 @@ func loginBuyer(t *testing.T, a *API, email, password string) string {
 	return login(t, a, email, password)
 }
 
-// registerSeller registers a seller account and returns its login token.
+// registerSeller registers a buyer+seller account and returns its login token.
 func registerSeller(t *testing.T, a *API, email, password string) string {
 	t.Helper()
-	rec := doJSON(t, a, "POST", "/auth/register/seller", "", map[string]any{
+	rec := doJSON(t, a, "POST", "/auth/register", "", map[string]any{
 		"email": email, "password": password, "phone": "+56912345678",
 	})
 	if rec.Code != http.StatusCreated {

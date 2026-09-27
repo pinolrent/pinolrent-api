@@ -105,6 +105,6 @@ Al cancelar, esas fechas vuelven a estar disponibles.
 
 ## `GET /seller/reservations`
 
-Reservas de tus autos como vendedor, más nuevas primero. Necesita ser `seller`. Acepta `limit`/`offset`.
+Reservas de tus autos como vendedor, más nuevas primero. Necesita membresía `seller`. Acepta `limit`/`offset`.
 
 Array de reservas. Sin reservas → `[]`.

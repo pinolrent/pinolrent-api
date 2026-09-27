@@ -9,7 +9,10 @@ erDiagram
         text email UK
         text password_hash
         text phone "E.164, vacío si no cargó"
-        text role "buyer | seller"
+    }
+    user_roles {
+        int user_id PK_FK
+        text role PK "buyer | seller"
     }
     cars {
         int id PK
@@ -40,6 +43,7 @@ erDiagram
         int expires_at "cuándo vence el token"
     }
 
+    users ||--o{ user_roles : "tiene roles"
     users ||--o{ reservations : "reserva"
     users ||--o{ cars : "publica"
     cars ||--o{ reservations : "es reservado"
@@ -49,8 +53,8 @@ erDiagram
 
 Lo importante del esquema (`internal/db/migrations/`):
 
-- `users.email` es único (sin distinguir mayúsculas/minúsculas). `role` solo puede ser `buyer` o `seller`.
-- `users.phone` guarda E.164 (migración 00006, con `CHECK`), vacío si el usuario no cargó uno; es obligatorio para vendedores al registrarse.
+- `users.email` es único (sin distinguir mayúsculas/minúsculas). Los roles viven en `user_roles` (`buyer` y/o `seller`, migración 00008): toda cuenta es al menos compradora y puede sumar vendedora.
+- `users.phone` guarda E.164 (migración 00006, con `CHECK`), vacío si el usuario no cargó uno; es obligatorio para volverse vendedor (al registrarse con `phone` o vía `POST /auth/become-seller`).
 - `cars.owner_id` dice quién es el dueño del auto. `price_per_day` en centavos, `0..100_000_000` con `CHECK` en DB (migración 00005).
 - Las reservas tienen `CHECK(end_date >= start_date)` en DB.
 - Una reserva tiene **a lo sumo un pago** (`payments.reservation_id` es único).
