@@ -76,7 +76,7 @@ func TestRequireAuthExpired(t *testing.T) {
 
 	claims := auth.Claims{
 		UserID: 1,
-		Role:   "client",
+		Roles:  []string{"client"},
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(-time.Hour)),
 		},
@@ -192,7 +192,7 @@ func TestRequireAuthWrongAlg(t *testing.T) {
 
 	claims := auth.Claims{
 		UserID: 1,
-		Role:   "client",
+		Roles:  []string{"client"},
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    "pinolrent-api",
 			Audience:  jwt.ClaimStrings{"pinolrent-api"},
@@ -226,7 +226,7 @@ func TestRequireAuthMissingIssuer(t *testing.T) {
 
 	claims := auth.Claims{
 		UserID: 1,
-		Role:   "client",
+		Roles:  []string{"client"},
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
 		},

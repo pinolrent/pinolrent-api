@@ -12,7 +12,7 @@ func TestWithImmediateTxCommits(t *testing.T) {
 	ctx := context.Background()
 
 	err := withImmediateTx(ctx, a.DB, func(conn *sql.Conn) error {
-		_, err := conn.ExecContext(ctx, `INSERT INTO users (email, password_hash, role) VALUES ('tx@example.com', 'h', 'buyer')`)
+		_, err := conn.ExecContext(ctx, `INSERT INTO users (email, password_hash) VALUES ('tx@example.com', 'h')`)
 		return err
 	})
 	if err != nil {
@@ -33,7 +33,7 @@ func TestWithImmediateTxHandledRollsBack(t *testing.T) {
 	ctx := context.Background()
 
 	err := withImmediateTx(ctx, a.DB, func(conn *sql.Conn) error {
-		if _, err := conn.ExecContext(ctx, `INSERT INTO users (email, password_hash, role) VALUES ('rb@example.com', 'h', 'buyer')`); err != nil {
+		if _, err := conn.ExecContext(ctx, `INSERT INTO users (email, password_hash) VALUES ('rb@example.com', 'h')`); err != nil {
 			t.Fatalf("insert: %v", err)
 		}
 		return errTxHandled

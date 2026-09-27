@@ -38,17 +38,23 @@ func newTestAuth(t *testing.T) *Auth {
 	return New(testSecret, d)
 }
 
-// seedUser inserts a user with the given role and returns its id.
-func seedUser(t *testing.T, a *Auth, email, role string) int64 {
+// seedUser inserts a user holding the given roles and returns its id.
+func seedUser(t *testing.T, a *Auth, email string, roles ...string) int64 {
 	t.Helper()
 	res, err := a.db.ExecContext(context.Background(),
-		`INSERT INTO users (email, password_hash, role) VALUES (?, 'hash', ?)`, email, role)
+		`INSERT INTO users (email, password_hash) VALUES (?, 'hash')`, email)
 	if err != nil {
 		t.Fatalf("insert user: %v", err)
 	}
 	id, err := res.LastInsertId()
 	if err != nil {
 		t.Fatalf("last id: %v", err)
+	}
+	for _, role := range roles {
+		if _, err := a.db.ExecContext(context.Background(),
+			`INSERT INTO user_roles (user_id, role) VALUES (?, ?)`, id, role); err != nil {
+			t.Fatalf("insert role: %v", err)
+		}
 	}
 	return id
 }
@@ -86,7 +92,7 @@ func TestHashPasswordIsBcrypt(t *testing.T) {
 
 func TestSignAndParseToken(t *testing.T) {
 	a := newTestAuth(t)
-	u := &models.User{ID: 42, Role: "buyer"}
+	u := &models.User{ID: 42, Roles: []string{"buyer"}}
 
 	tok, err := a.SignToken(u)
 	if err != nil {
@@ -100,8 +106,8 @@ func TestSignAndParseToken(t *testing.T) {
 	if claims.UserID != 42 {
 		t.Fatalf("UserID = %d, want 42", claims.UserID)
 	}
-	if claims.Role != "buyer" {
-		t.Fatalf("Role = %q, want buyer", claims.Role)
+	if len(claims.Roles) != 1 || claims.Roles[0] != "buyer" {
+		t.Fatalf("Roles = %v, want [buyer]", claims.Roles)
 	}
 	if claims.Subject != "42" {
 		t.Fatalf("Subject = %q, want 42", claims.Subject)
@@ -122,7 +128,7 @@ func TestSignAndParseToken(t *testing.T) {
 
 func TestRefreshTokenRoundtrip(t *testing.T) {
 	a := newTestAuth(t)
-	u := &models.User{ID: 7, Role: "seller"}
+	u := &models.User{ID: 7, Roles: []string{"seller"}}
 
 	rt, err := a.SignRefreshToken(u)
 	if err != nil {
@@ -156,7 +162,7 @@ func TestRotateRefreshSingleUse(t *testing.T) {
 	a := newTestAuth(t)
 	uid := seedUser(t, a, "u@example.com", "buyer")
 
-	rt, err := a.SignRefreshToken(&models.User{ID: uid, Role: "buyer"})
+	rt, err := a.SignRefreshToken(&models.User{ID: uid, Roles: []string{"buyer"}})
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}
@@ -177,7 +183,7 @@ func TestParseTokenExpired(t *testing.T) {
 
 	claims := Claims{
 		UserID: 1,
-		Role:   "buyer",
+		Roles:  []string{"buyer"},
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    jwtIssuer,
 			Audience:  jwt.ClaimStrings{jwtAudience},
@@ -197,7 +203,7 @@ func TestParseTokenBadSignature(t *testing.T) {
 	a := newTestAuth(t)
 	other := New("another-secret-also-32-bytes-long-xxx", a.db)
 
-	tok, err := other.SignToken(&models.User{ID: 1, Role: "buyer"})
+	tok, err := other.SignToken(&models.User{ID: 1, Roles: []string{"buyer"}})
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}
@@ -352,7 +358,7 @@ func TestRequireAuthInvalidToken(t *testing.T) {
 func TestRequireAuthUserNotFound(t *testing.T) {
 	a := newTestAuth(t)
 	// Sign a token for a user that does not exist in the DB.
-	tok, err := a.SignToken(&models.User{ID: 9999, Role: "buyer"})
+	tok, err := a.SignToken(&models.User{ID: 9999, Roles: []string{"buyer"}})
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}
@@ -368,7 +374,7 @@ func TestRequireAuthUserNotFound(t *testing.T) {
 func TestRequireAuthHappyPath(t *testing.T) {
 	a := newTestAuth(t)
 	id := seedUser(t, a, "u@example.com", "buyer")
-	tok, err := a.SignToken(&models.User{ID: id, Role: "buyer"})
+	tok, err := a.SignToken(&models.User{ID: id, Roles: []string{"buyer"}})
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}
@@ -382,15 +388,15 @@ func TestRequireAuthHappyPath(t *testing.T) {
 	if seen.ID != id {
 		t.Fatalf("context user id = %d, want %d", seen.ID, id)
 	}
-	if seen.Role != "buyer" {
-		t.Fatalf("context user role = %q, want buyer", seen.Role)
+	if !seen.HasRole("buyer") {
+		t.Fatalf("context user roles = %v, want buyer", seen.Roles)
 	}
 }
 
 func TestRequireRoleWrongRole(t *testing.T) {
 	a := newTestAuth(t)
 	id := seedUser(t, a, "buyer@example.com", "buyer")
-	tok, err := a.SignToken(&models.User{ID: id, Role: "buyer"})
+	tok, err := a.SignToken(&models.User{ID: id, Roles: []string{"buyer"}})
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}
@@ -407,8 +413,8 @@ func TestRequireRoleWrongRole(t *testing.T) {
 
 func TestRequireRoleHappyPath(t *testing.T) {
 	a := newTestAuth(t)
-	id := seedUser(t, a, "seller@example.com", "seller")
-	tok, err := a.SignToken(&models.User{ID: id, Role: "seller"})
+	id := seedUser(t, a, "seller@example.com", "buyer", "seller")
+	tok, err := a.SignToken(&models.User{ID: id, Roles: []string{"buyer", "seller"}})
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}
@@ -418,7 +424,7 @@ func TestRequireRoleHappyPath(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
 	}
-	if seen == nil || seen.Role != "seller" {
+	if seen == nil || !seen.HasRole("seller") {
 		t.Fatalf("user in context: %+v", seen)
 	}
 }
@@ -471,7 +477,7 @@ func contains(haystack, needle string) bool {
 // and the revoked_tokens check depend on.
 func TestSignAndParseJTI(t *testing.T) {
 	a := newTestAuth(t)
-	u := &models.User{ID: 1, Role: "buyer"}
+	u := &models.User{ID: 1, Roles: []string{"buyer"}}
 
 	tok1, err := a.SignToken(u)
 	if err != nil {
@@ -510,7 +516,7 @@ func TestSignAndParseJTI(t *testing.T) {
 func TestRevokeAndIsRevoked(t *testing.T) {
 	a := newTestAuth(t)
 	uid := seedUser(t, a, "u@example.com", "buyer")
-	tok, err := a.SignToken(&models.User{ID: uid, Role: "buyer"})
+	tok, err := a.SignToken(&models.User{ID: uid, Roles: []string{"buyer"}})
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}
@@ -577,7 +583,7 @@ func TestGCRevokedDropsExpired(t *testing.T) {
 func TestRequireAuthRejectsRevoked(t *testing.T) {
 	a := newTestAuth(t)
 	uid := seedUser(t, a, "u@example.com", "buyer")
-	tok, err := a.SignToken(&models.User{ID: uid, Role: "buyer"})
+	tok, err := a.SignToken(&models.User{ID: uid, Roles: []string{"buyer"}})
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}
@@ -601,7 +607,7 @@ func TestRequireAuthRejectsRevoked(t *testing.T) {
 func TestRevokeFromRequest(t *testing.T) {
 	a := newTestAuth(t)
 	uid := seedUser(t, a, "u@example.com", "buyer")
-	tok, err := a.SignToken(&models.User{ID: uid, Role: "buyer"})
+	tok, err := a.SignToken(&models.User{ID: uid, Roles: []string{"buyer"}})
 	if err != nil {
 		t.Fatalf("sign: %v", err)
 	}

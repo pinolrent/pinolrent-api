@@ -206,21 +206,18 @@ func TestLoginRejects(t *testing.T) {
 	}
 }
 
-func TestRegisterSellerRequiresPhone(t *testing.T) {
+func TestRegisterWithPhoneGrantsSeller(t *testing.T) {
 	a := newTestAPI(t)
 
-	rec := doJSON(t, a, "POST", "/auth/register/seller", "", map[string]any{
-		"email": "seller@example.com", "password": "secret123",
+	rec := doJSON(t, a, "POST", "/auth/register", "", map[string]any{
+		"email": "dual@example.com", "password": "secret123",
 	})
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400 (body %s)", rec.Code, rec.Body.String())
-	}
-	if !strings.Contains(rec.Body.String(), "phone") {
-		t.Fatalf("error should mention phone: %s", rec.Body.String())
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201 (body %s)", rec.Code, rec.Body.String())
 	}
 
-	rec = doJSON(t, a, "POST", "/auth/register/seller", "", map[string]any{
-		"email": "seller@example.com", "password": "secret123", "phone": "no-es-numero",
+	rec = doJSON(t, a, "POST", "/auth/register", "", map[string]any{
+		"email": "dual@example.com", "password": "secret123", "phone": "no-es-numero",
 	})
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("invalid phone: status = %d, want 400", rec.Code)
@@ -262,7 +259,7 @@ func TestRegisterNormalizesPhone(t *testing.T) {
 		{"b@example.com", "56912345678"},
 		{"c@example.com", "+56 9-1234-5678"},
 	} {
-		rec := doJSON(t, a, "POST", "/auth/register/seller", "", map[string]any{
+		rec := doJSON(t, a, "POST", "/auth/register", "", map[string]any{
 			"email": tc.email, "password": "secret123", "phone": tc.in,
 		})
 		if rec.Code != http.StatusCreated {
@@ -281,6 +278,95 @@ func TestRegisterNormalizesPhone(t *testing.T) {
 	}
 }
 
+func TestRegisterRolesByPhone(t *testing.T) {
+	a := newTestAPI(t)
+
+	rec := doJSON(t, a, "POST", "/auth/register", "", map[string]any{
+		"email": "plain@example.com", "password": "secret123",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("register: status = %d (body %s)", rec.Code, rec.Body.String())
+	}
+	token := login(t, a, "plain@example.com", "secret123")
+	rec = doJSON(t, a, "GET", "/auth/me", token, nil)
+	var out struct {
+		Roles []string `json:"roles"`
+	}
+	decodeJSON(t, rec, &out)
+	if len(out.Roles) != 1 || out.Roles[0] != "buyer" {
+		t.Fatalf("roles = %v, want [buyer]", out.Roles)
+	}
+	if rec := doJSON(t, a, "POST", "/seller/cars", token, map[string]any{
+		"name": "X", "price_per_day": 1,
+	}); rec.Code != http.StatusForbidden {
+		t.Fatalf("buyer on seller route: status = %d, want 403", rec.Code)
+	}
+
+	rec = doJSON(t, a, "POST", "/auth/register", "", map[string]any{
+		"email": "dual@example.com", "password": "secret123", "phone": "+56912345678",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("register with phone: status = %d (body %s)", rec.Code, rec.Body.String())
+	}
+	token = login(t, a, "dual@example.com", "secret123")
+	rec = doJSON(t, a, "GET", "/auth/me", token, nil)
+	decodeJSON(t, rec, &out)
+	if len(out.Roles) != 2 || out.Roles[0] != "buyer" || out.Roles[1] != "seller" {
+		t.Fatalf("roles = %v, want [buyer seller]", out.Roles)
+	}
+}
+
+func TestBecomeSeller(t *testing.T) {
+	a := newTestAPI(t)
+	token := registerBuyer(t, a, "up@example.com", "secret123")
+
+	for _, body := range []map[string]any{
+		{},
+		{"phone": ""},
+		{"phone": "no-es-numero"},
+	} {
+		if rec := doJSON(t, a, "POST", "/auth/become-seller", token, body); rec.Code != http.StatusBadRequest {
+			t.Fatalf("body %v: status = %d, want 400 (body %s)", body, rec.Code, rec.Body.String())
+		}
+	}
+	if rec := doJSON(t, a, "POST", "/auth/become-seller", "", map[string]any{
+		"phone": "+56912345678",
+	}); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("no token: status = %d, want 401", rec.Code)
+	}
+
+	rec := doJSON(t, a, "POST", "/auth/become-seller", token, map[string]any{"phone": "9 1234 5678"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("become seller: status = %d (body %s)", rec.Code, rec.Body.String())
+	}
+	var out struct {
+		Roles []string `json:"roles"`
+		Phone string   `json:"phone"`
+	}
+	decodeJSON(t, rec, &out)
+	if len(out.Roles) != 2 || out.Roles[0] != "buyer" || out.Roles[1] != "seller" {
+		t.Fatalf("roles = %v, want [buyer seller]", out.Roles)
+	}
+	if out.Phone != "+56912345678" {
+		t.Fatalf("phone = %q, want +56912345678", out.Phone)
+	}
+
+	if rec := doJSON(t, a, "POST", "/seller/cars", token, map[string]any{
+		"name": "X", "price_per_day": 1,
+	}); rec.Code != http.StatusCreated {
+		t.Fatalf("seller route after upgrade: status = %d, want 201 (body %s)", rec.Code, rec.Body.String())
+	}
+
+	rec = doJSON(t, a, "POST", "/auth/become-seller", token, map[string]any{"phone": "+56912345678"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("idempotent retry: status = %d (body %s)", rec.Code, rec.Body.String())
+	}
+	decodeJSON(t, rec, &out)
+	if len(out.Roles) != 2 {
+		t.Fatalf("roles after retry = %v, want 2 entries", out.Roles)
+	}
+}
+
 func TestMe(t *testing.T) {
 	a := newTestAPI(t)
 
@@ -294,12 +380,12 @@ func TestMe(t *testing.T) {
 		t.Fatalf("status = %d body %s", rec.Code, rec.Body.String())
 	}
 	var out struct {
-		ID    int64  `json:"id"`
-		Email string `json:"email"`
-		Role  string `json:"role"`
+		ID    int64    `json:"id"`
+		Email string   `json:"email"`
+		Roles []string `json:"roles"`
 	}
 	decodeJSON(t, rec, &out)
-	if out.ID == 0 || out.Email != "me@example.com" || out.Role != "buyer" {
+	if out.ID == 0 || out.Email != "me@example.com" || len(out.Roles) != 1 || out.Roles[0] != "buyer" {
 		t.Fatalf("unexpected profile: %+v", out)
 	}
 
@@ -308,8 +394,8 @@ func TestMe(t *testing.T) {
 		t.Fatalf("seller status = %d body %s", rec.Code, rec.Body.String())
 	}
 	decodeJSON(t, rec, &out)
-	if out.Role != "seller" {
-		t.Fatalf("seller role = %q, want seller", out.Role)
+	if len(out.Roles) != 2 || out.Roles[0] != "buyer" || out.Roles[1] != "seller" {
+		t.Fatalf("seller roles = %v, want [buyer seller]", out.Roles)
 	}
 }
 
@@ -319,7 +405,7 @@ func TestRequireAuth(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.Handle("GET /auth/me", a.Auth.RequireAuth(func(w http.ResponseWriter, r *http.Request) {
 		u, _ := auth.CurrentUser(r.Context())
-		writeJSON(w, http.StatusOK, map[string]string{"email": u.Email, "role": u.Role})
+		writeJSON(w, http.StatusOK, map[string]any{"email": u.Email, "roles": u.Roles})
 	}))
 
 	serve := func(method, path, token string) *httptest.ResponseRecorder {
@@ -345,11 +431,11 @@ func TestRequireAuth(t *testing.T) {
 		t.Fatalf("valid token: status = %d body %s", rec.Code, rec.Body.String())
 	}
 	var out struct {
-		Email string `json:"email"`
-		Role  string `json:"role"`
+		Email string   `json:"email"`
+		Roles []string `json:"roles"`
 	}
 	decodeJSON(t, rec, &out)
-	if out.Email != "me@example.com" || out.Role != "buyer" {
+	if out.Email != "me@example.com" || len(out.Roles) != 1 || out.Roles[0] != "buyer" {
 		t.Fatalf("unexpected user: %+v", out)
 	}
 }

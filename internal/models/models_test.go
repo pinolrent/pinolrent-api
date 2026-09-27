@@ -7,7 +7,7 @@ import (
 )
 
 func TestUserHidesPasswordHash(t *testing.T) {
-	b, err := json.Marshal(User{ID: 1, Email: "u@example.com", PasswordHash: "secret", Role: "buyer"})
+	b, err := json.Marshal(User{ID: 1, Email: "u@example.com", PasswordHash: "secret", Roles: []string{"buyer"}})
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}

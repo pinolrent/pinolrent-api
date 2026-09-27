@@ -64,12 +64,36 @@ func TestUpdateMeCannotChangeRoleOrEmail(t *testing.T) {
 	a := newTestAPI(t)
 	token := registerBuyer(t, a, "buyer@example.com", "secret123")
 
-	rec := doJSON(t, a, "PATCH", "/auth/me", token, map[string]any{"role": "seller"})
+	rec := doJSON(t, a, "PATCH", "/auth/me", token, map[string]any{"roles": []string{"seller"}})
 	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("role change: status = %d, want 400", rec.Code)
+		t.Fatalf("roles change: status = %d, want 400", rec.Code)
 	}
 	rec = doJSON(t, a, "PATCH", "/auth/me", token, map[string]any{"email": "other@example.com"})
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("email change: status = %d, want 400", rec.Code)
+	}
+}
+
+// TestUpdateMePhoneDoesNotGrantSeller pins the anti-escalation rule: saving a
+// phone never grants the seller role, only become-seller does.
+func TestUpdateMePhoneDoesNotGrantSeller(t *testing.T) {
+	a := newTestAPI(t)
+	token := registerBuyer(t, a, "buyer@example.com", "secret123")
+
+	rec := doJSON(t, a, "PATCH", "/auth/me", token, map[string]any{"phone": "+56912345678"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("save phone: status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
+	}
+	var out struct {
+		Roles []string `json:"roles"`
+	}
+	decodeJSON(t, rec, &out)
+	if len(out.Roles) != 1 || out.Roles[0] != "buyer" {
+		t.Fatalf("roles = %v, want [buyer]", out.Roles)
+	}
+	if rec := doJSON(t, a, "POST", "/seller/cars", token, map[string]any{
+		"name": "X", "price_per_day": 1,
+	}); rec.Code != http.StatusForbidden {
+		t.Fatalf("seller route: status = %d, want 403", rec.Code)
 	}
 }

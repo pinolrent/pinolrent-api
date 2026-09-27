@@ -6,7 +6,7 @@ import (
 )
 
 // isUniqueViolation is exercised against real driver errors: the unique
-// constraint on users.email and the CHECK on users.role produce different
+// constraint on users.email and the CHECK on user_roles.role produce different
 // result codes, so detection must tell them apart without reading error text.
 func TestIsUniqueViolation(t *testing.T) {
 	a := newTestAPI(t)
@@ -14,7 +14,7 @@ func TestIsUniqueViolation(t *testing.T) {
 
 	insert := func() error {
 		_, err := a.DB.ExecContext(ctx,
-			`INSERT INTO users (email, password_hash, role) VALUES ('dup@example.com', 'h', 'buyer')`)
+			`INSERT INTO users (email, password_hash) VALUES ('dup@example.com', 'h')`)
 		return err
 	}
 
@@ -30,7 +30,7 @@ func TestIsUniqueViolation(t *testing.T) {
 	// A CHECK violation (role not in buyer/seller) must not be detected as
 	// a unique violation.
 	_, err := a.DB.ExecContext(ctx,
-		`INSERT INTO users (email, password_hash, role) VALUES ('other@example.com', 'h', 'admin')`)
+		`INSERT INTO user_roles (user_id, role) VALUES (1, 'admin')`)
 	if err == nil {
 		t.Fatal("expected CHECK violation for role 'admin'")
 	}
