@@ -62,5 +62,5 @@ tidy: ## Tidies go.mod/go.sum
 demo: ## Self-contained end-to-end smoke (ephemeral server on :8132)
 	@./scripts/demo.sh
 
-clean: ## Removes bin/, tmp/, air.log and the dev database
-	rm -rf bin tmp air.log dev.db dev.db-shm dev.db-wal
+clean: ## Removes bin/, tmp/, air.log, the dev database and local uploads
+	rm -rf bin tmp air.log dev.db dev.db-shm dev.db-wal uploads
