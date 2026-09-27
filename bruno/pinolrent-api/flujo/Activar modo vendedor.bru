@@ -1,0 +1,26 @@
+meta {
+  name: Activar modo vendedor
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/auth/become-seller
+  body: json
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{buyerToken}}
+}
+
+body:json {
+  {
+    "phone": "+56987654321"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.roles: isDefined
+}

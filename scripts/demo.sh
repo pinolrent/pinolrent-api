@@ -110,15 +110,15 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/auth/register" \
   -d '{"email":"buyer@example.com","password":"secret123"}')
 check "registro comprador -> 201" "201" "$code"
 
-code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/auth/register/seller" \
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/auth/register" \
   -H 'Content-Type: application/json' \
   -d '{"email":"seller@example.com","password":"secret123","phone":"+56912345678"}')
 check "registro vendedor -> 201" "201" "$code"
 
-code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/auth/register/seller" \
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/auth/register" \
   -H 'Content-Type: application/json' \
-  -d '{"email":"sin-telefono@example.com","password":"secret123"}')
-check "vendedor sin telefono -> 400" "400" "$code"
+  -d '{"email":"sin-telefono@example.com","password":"secret123","phone":"no-es-numero"}')
+check "registro con telefono invalido -> 400" "400" "$code"
 
 buyer=$(curl -s -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
   -d '{"email":"buyer@example.com","password":"secret123"}' | jq -r .token)
@@ -276,8 +276,16 @@ check "borrar dos veces -> 404" "404" "$code"
 
 echo "== /auth/me =="
 me=$(curl -s "$BASE/auth/me" -H "Authorization: Bearer $seller")
-check "auth/me rol seller" "seller" "$(printf '%s' "$me" | jq -r .role)"
+check "auth/me roles seller" "buyer,seller" "$(printf '%s' "$me" | jq -r '.roles | join(",")')"
 check "auth/me email" "seller@example.com" "$(printf '%s' "$me" | jq -r .email)"
+
+echo "== become-seller =="
+upgraded=$(curl -s -X POST "$BASE/auth/become-seller" -H "Authorization: Bearer $buyer" \
+  -H 'Content-Type: application/json' -d '{"phone":"+56987654321"}')
+check "become-seller -> buyer,seller" "buyer,seller" "$(printf '%s' "$upgraded" | jq -r '.roles | join(",")')"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/auth/become-seller" -H "Authorization: Bearer $buyer" \
+  -H 'Content-Type: application/json' -d '{"phone":"mal"}')
+check "become-seller telefono invalido -> 400" "400" "$code"
 
 echo "== reglas de hardening =="
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/seller/cars" -H "Authorization: Bearer $seller" \
