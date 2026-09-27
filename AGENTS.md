@@ -134,6 +134,9 @@ Assertions use `res.status` / `res.body.*` (the `$res` variant throws `Reference
 ## Deployment notes
 
 - `JWT_SECRET` must be set in prod (min 32 bytes, generate with `openssl rand -base64 32`).
+- Version: releases are tagged `vX.Y.Z`; `make build` and the Docker image derive the
+  reported version from `git describe` (override with the `VERSION` build-arg; without
+  `.git` in the build context it reports `dev`).
 - Set `ENV=prod` and `CORS_ALLOWED_ORIGINS` to your frontend origin(s).
 - Behind a proxy that is not on loopback (containers, any PaaS) set
   `TRUSTED_PROXY_CIDRS` to the proxy network, or every client shares one rate-limit bucket and the

@@ -27,13 +27,15 @@ Ver [Configuración](configuracion.md) para cómo se recorre la cadena de `X-For
 | `TRUSTED_PROXY_CIDRS` | red del proxy inverso (ver arriba) |
 | `PORT` | `8080` |
 
-El contenedor debe montar `/data` como volumen persistente: ahí viven la base (`pinolrent.db` con sus `-wal`/`-shm`) y `uploads/`. El healthcheck apunta a `GET /health` (puerto 8080). Para que `/health` informe la versión desplegada, inyectá una build variable `VERSION` con el tag o el sha del commit; si no, responde `dev`.
+El contenedor debe montar `/data` como volumen persistente: ahí viven la base (`pinolrent.db` con sus `-wal`/`-shm`) y `uploads/`. El healthcheck apunta a `GET /health` (puerto 8080). La versión que informa la imagen la calcula sola con `git describe` sobre el clone (tag + sha); se puede sobrescribir con el build-arg `VERSION`, y responde `dev` solo si el build no tiene `.git`.
 
 ## Deploy y rollback
 
-1. Push a `main` y reconstruir la imagen. Las migraciones se aplican solas al arrancar y son aditivas.
-2. Verificar: `curl -fsS https://api.<dominio>/health` → `{"status":"ok","version":"<tag>"}`.
-3. Si algo sale mal, volver a la imagen anterior. Mientras las migraciones sigan siendo aditivas, un binario viejo funciona contra el esquema nuevo.
+1. Push a `main`: la plataforma de despliegue, con el auto-deploy (webhook) conectado al repo, reconstruye la imagen y reemplaza el contenedor. Las migraciones se aplican solas al arrancar y son aditivas.
+2. Verificar: `curl -fsS https://api.<dominio>/health` → `{"status":"ok","version":"v0.1.0-N-g<sha>"}` — la versión debe corresponder al commit recién pusheado; si dice `dev`, el build no tuvo acceso a `.git`.
+3. Si algo sale mal, redeploy del commit anterior desde la plataforma y repetir la verificación. Mientras las migraciones sigan siendo aditivas, un binario viejo funciona contra el esquema nuevo.
+
+Los releases se tagean con `vX.Y.Z` (`git tag -a vX.Y.Z -m "..."`). Entre tags, la versión reportada combina el último tag con el sha: `v0.1.0-3-g2627c64`.
 
 ## Backups
 
