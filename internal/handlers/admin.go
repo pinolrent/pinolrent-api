@@ -652,7 +652,9 @@ func (a *API) AdminListReservations(w http.ResponseWriter, r *http.Request) {
 	clauses := []string{"1=1"}
 	args := []any{}
 	if s := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("status"))); s != "" {
-		if s != "pending" && s != "confirmed" && s != "cancelled" && s != "paid" {
+		// The reservations CHECK only allows these three. A reservation is
+		// paid when its payment row is approved, not through its own status.
+		if s != "pending" && s != "confirmed" && s != "cancelled" {
 			writeError(w, http.StatusBadRequest, "invalid status")
 			return
 		}
@@ -849,7 +851,7 @@ func (a *API) AdminStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var pendingRes, confirmedRes, cancelledRes, paidRes int64
+	var pendingRes, confirmedRes, cancelledRes int64
 	if err := a.DB.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM reservations WHERE status='pending'`).Scan(&pendingRes); err != nil {
 		serverError(w, err)
 		return
@@ -859,10 +861,6 @@ func (a *API) AdminStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := a.DB.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM reservations WHERE status='cancelled'`).Scan(&cancelledRes); err != nil {
-		serverError(w, err)
-		return
-	}
-	if err := a.DB.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM reservations WHERE status='paid'`).Scan(&paidRes); err != nil {
 		serverError(w, err)
 		return
 	}
@@ -905,7 +903,6 @@ func (a *API) AdminStats(w http.ResponseWriter, r *http.Request) {
 			"pending":   pendingRes,
 			"confirmed": confirmedRes,
 			"cancelled": cancelledRes,
-			"paid":      paidRes,
 		},
 		"payments": map[string]any{
 			"pending":        pendingPay,

@@ -520,6 +520,14 @@ func TestAdminListsReservationsAndPayments(t *testing.T) {
 	if rec := doJSON(t, a, "GET", "/admin/payments?status=refunded", admin, nil); rec.Code != http.StatusBadRequest {
 		t.Fatalf("bogus status: %d, want 400", rec.Code)
 	}
+	// 'paid' is a payment status, not a reservation one. Accepting it as a
+	// reservation filter would advertise a value the schema cannot store.
+	if rec := doJSON(t, a, "GET", "/admin/reservations?status=pending", admin, nil); rec.Code != http.StatusOK {
+		t.Fatalf("reservations status filter: %d", rec.Code)
+	}
+	if rec := doJSON(t, a, "GET", "/admin/reservations?status=paid", admin, nil); rec.Code != http.StatusBadRequest {
+		t.Fatalf("reservations status=paid: %d, want 400", rec.Code)
+	}
 }
 
 // TestAdminStatsCountsPlatform feeds the endpoint a known dataset and checks
@@ -538,6 +546,22 @@ func TestAdminStatsCountsPlatform(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("reserve: %d body %s", rec.Code, rec.Body.String())
 	}
+	var res struct {
+		ID int64 `json:"id"`
+	}
+	decodeJSON(t, rec, &res)
+
+	// An approved payment, so approved_total has a row to sum. The date
+	// arithmetic runs through julianday and comes back as a float, which the
+	// handler has to hand over as an integer.
+	rec = doJSON(t, a, "POST", fmt.Sprintf("/reservations/%d/payment", res.ID), buyer, map[string]any{"method": "pos"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("pay: %d body %s", rec.Code, rec.Body.String())
+	}
+	if _, err := a.DB.ExecContext(context.Background(), `UPDATE payments SET status = 'approved'`); err != nil {
+		t.Fatalf("approve payment: %v", err)
+	}
+
 	if rec := doJSON(t, a, "PATCH", fmt.Sprintf("/admin/users/%d", buyerID), admin,
 		map[string]any{"suspended": true}); rec.Code != http.StatusOK {
 		t.Fatalf("suspend buyer: %d", rec.Code)
@@ -558,9 +582,13 @@ func TestAdminStatsCountsPlatform(t *testing.T) {
 			Active int64 `json:"active"`
 		} `json:"cars"`
 		Reservations struct {
-			Pending int64 `json:"pending"`
+			Pending   int64  `json:"pending"`
+			Confirmed int64  `json:"confirmed"`
+			Cancelled int64  `json:"cancelled"`
+			Paid      *int64 `json:"paid"`
 		} `json:"reservations"`
 		Payments struct {
+			Approved      int64 `json:"approved"`
 			ApprovedTotal int64 `json:"approved_total"`
 		} `json:"payments"`
 	}
@@ -584,9 +612,19 @@ func TestAdminStatsCountsPlatform(t *testing.T) {
 	if out.Reservations.Pending != 1 {
 		t.Fatalf("reservations.pending = %d, want 1", out.Reservations.Pending)
 	}
-	// No approved payment in this dataset, so the sum is zero.
-	if out.Payments.ApprovedTotal != 0 {
-		t.Fatalf("payments.approved_total = %d, want 0", out.Payments.ApprovedTotal)
+	// The reservations CHECK has no 'paid' status: a reservation is paid when
+	// its payment is approved. Reporting a count that can only ever be zero
+	// would be a metric that lies, so the key is absent instead.
+	if out.Reservations.Paid != nil {
+		t.Fatalf("reservations.paid should not be reported, got %d", *out.Reservations.Paid)
+	}
+	if out.Payments.Approved != 1 {
+		t.Fatalf("payments.approved = %d, want 1", out.Payments.Approved)
+	}
+	// Two days at 45000, summed as an integer even though julianday yields
+	// a float.
+	if out.Payments.ApprovedTotal != 90000 {
+		t.Fatalf("payments.approved_total = %d, want 90000", out.Payments.ApprovedTotal)
 	}
 }
 

@@ -229,7 +229,7 @@ cannot delete`.
 Lista todas las reservas, con `buyer_email` y `car_name` resueltos para no
 tener que encadenar llamadas.
 
-**Query:** `status` (`pending`, `confirmed`, `cancelled`, `paid`), `user_id`,
+**Query:** `status` (`pending`, `confirmed`, `cancelled`), `user_id`,
 `car_id`, `limit`, `offset`.
 
 ```json
@@ -277,10 +277,14 @@ Métricas de la plataforma, en una sola llamada. Solo lectura, sin paginación.
 {
   "users": {"total": 12, "sellers": 4, "admins": 1, "suspended": 1},
   "cars": {"active": 9},
-  "reservations": {"pending": 3, "confirmed": 5, "cancelled": 2, "paid": 4},
+  "reservations": {"pending": 3, "confirmed": 5, "cancelled": 2},
   "payments": {"pending": 1, "approved": 4, "rejected": 1, "approved_total": 540000}
 }
 ```
+
+Una reserva no tiene estado `paid`: el CHECK de la tabla solo admite
+`pending`, `confirmed` y `cancelled`. Que una reserva esté pagada se deduce de
+que su pago esté `approved`, y eso es lo que cuenta `payments.approved`.
 
 `approved_total` suma `price_per_day` × días de cada reserva con pago
 aprobado. Ojo: las reservas guardan fechas, no precio, así que la cifra usa el
