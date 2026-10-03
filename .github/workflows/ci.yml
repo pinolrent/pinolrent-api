@@ -170,6 +170,11 @@ jobs:
           done
           [ "$health_ok" = "1" ] || { echo 'server did not become healthy'; exit 1; }
 
+      - name: Create admin account
+        run: |
+          go build -o /tmp/pinolrent-admin ./cmd/admin
+          DATABASE_URL=/tmp/bruno.db /tmp/pinolrent-admin -email admin@example.com -password secret123
+
       - name: Run Bruno collection
         working-directory: bruno/pinolrent-api
         run: npx --yes @usebruno/cli@4.1.0 run -r --env-var baseUrl=http://localhost:8132

@@ -1,0 +1,20 @@
+meta {
+  name: Aprobar reserva
+  type: http
+  seq: 22
+}
+
+patch {
+  url: {{baseUrl}}/admin/reservations/{{reservationId}}/approve
+  body: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.status: eq confirmed
+  res.body.payment.status: eq approved
+}

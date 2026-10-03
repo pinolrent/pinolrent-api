@@ -1,11 +1,11 @@
 meta {
-  name: Registrar pago rechazo
+  name: Registrar pago admin
   type: http
-  seq: 34
+  seq: 25
 }
 
 post {
-  url: {{baseUrl}}/reservations/{{rejectionReservationId}}/payment
+  url: {{baseUrl}}/reservations/{{adminReservationId}}/payment
   body: json
 }
 

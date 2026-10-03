@@ -1,11 +1,11 @@
 meta {
-  name: Confirmar reserva
+  name: Reconfirmar reserva admin
   type: http
-  seq: 20
+  seq: 28
 }
 
 patch {
-  url: {{baseUrl}}/seller/reservations/{{reservationId}}/confirm
+  url: {{baseUrl}}/seller/reservations/{{adminReservationId}}/confirm
   body: none
 }
 
@@ -16,5 +16,4 @@ headers {
 assert {
   res.status: eq 200
   res.body.status: eq awaiting_admin
-  res.body.payment.status: eq pending
 }

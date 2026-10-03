@@ -1,7 +1,7 @@
 meta {
-  name: Re-login vendedor
+  name: Login admin
   type: http
-  seq: 39
+  seq: 21
 }
 
 post {
@@ -15,8 +15,8 @@ headers {
 
 body:json {
   {
-    "email": "{{sellerEmail}}",
-    "password": "{{sellerPassword}}"
+    "email": "{{adminEmail}}",
+    "password": "{{adminPassword}}"
   }
 }
 
@@ -28,9 +28,6 @@ assert {
 script:post-response {
   const body = res.getBody();
   if (body.token) {
-    bru.setVar("sellerToken", body.token);
-  }
-  if (body.refresh_token) {
-    bru.setVar("sellerRefresh", body.refresh_token);
+    bru.setVar("adminToken", body.token);
   }
 }

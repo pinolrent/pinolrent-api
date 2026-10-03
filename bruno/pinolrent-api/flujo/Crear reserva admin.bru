@@ -1,7 +1,7 @@
 meta {
-  name: Crear reserva rechazo
+  name: Crear reserva admin
   type: http
-  seq: 33
+  seq: 24
 }
 
 post {
@@ -20,15 +20,15 @@ script:pre-request {
     d.setDate(d.getDate() + offsetDays);
     return d.toISOString().slice(0, 10);
   };
-  bru.setVar("rejectStartDate", fmt(20));
-  bru.setVar("rejectEndDate", fmt(22));
+  bru.setVar("adminStartDate", fmt(30));
+  bru.setVar("adminEndDate", fmt(32));
 }
 
 body:json {
   {
     "car_id": {{carId}},
-    "start_date": "{{rejectStartDate}}",
-    "end_date": "{{rejectEndDate}}"
+    "start_date": "{{adminStartDate}}",
+    "end_date": "{{adminEndDate}}"
   }
 }
 
@@ -40,6 +40,6 @@ assert {
 script:post-response {
   const body = res.getBody();
   if (body.id) {
-    bru.setVar("rejectionReservationId", body.id);
+    bru.setVar("adminReservationId", body.id);
   }
 }

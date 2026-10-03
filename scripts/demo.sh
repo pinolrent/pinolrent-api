@@ -11,6 +11,7 @@ BASE="http://localhost:$PORT"
 DB="$(mktemp /tmp/pinolrent-demo.XXXXXX.db)"
 LOG="$(mktemp /tmp/pinolrent-demo.XXXXXX.log)"
 BIN="$(mktemp /tmp/pinolrent-demo.XXXXXX.bin)"
+ADMIN_BIN="$(mktemp /tmp/pinolrent-demo-admin.XXXXXX.bin)"
 PID=""
 
 # Same min length the server enforces, so the smoke starts without
@@ -67,7 +68,7 @@ cleanup() {
     done
     kill -KILL "$PID" 2>/dev/null || true
   fi
-  rm -f "$DB" "$DB-shm" "$DB-wal" "$LOG" "$BIN"
+  rm -f "$DB" "$DB-shm" "$DB-wal" "$LOG" "$BIN" "$ADMIN_BIN"
   rm -rf "${UPLOAD_TMP:-}"
 }
 trap cleanup EXIT INT TERM
@@ -76,6 +77,9 @@ echo "== build =="
 VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo dev)"
 if ! go build -ldflags "-X main.version=$VERSION" -o "$BIN" ./cmd/api; then
   echo "build FAIL"; exit 1
+fi
+if ! go build -o "$ADMIN_BIN" ./cmd/admin; then
+  echo "admin build FAIL"; exit 1
 fi
 
 echo "== fail-fast sin JWT_SECRET =="
@@ -89,6 +93,15 @@ env -u JWT_SECRET DATABASE_URL="$DB" PORT=9999 "$BIN" >/dev/null 2>&1
 rc=$?
 set -e
 check "aborta sin JWT_SECRET" "1" "$rc"
+
+echo "== admin =="
+# Creates the admin account directly in the throwaway database, before the
+# server opens it. This is how an operator provisions admins in production too.
+set +e
+DATABASE_URL="$DB" "$ADMIN_BIN" -email admin@example.com -password secret123 >/dev/null
+rc=$?
+set -e
+check "crear cuenta admin" "0" "$rc"
 
 echo "== start =="
 UPLOAD_TMP="$(mktemp -d /tmp/pinolrent-uploads.XXXXXX)"
@@ -124,8 +137,11 @@ buyer=$(curl -s -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
   -d '{"email":"buyer@example.com","password":"secret123"}' | jq -r .token)
 seller=$(curl -s -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
   -d '{"email":"seller@example.com","password":"secret123"}' | jq -r .token)
+admin=$(curl -s -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
+  -d '{"email":"admin@example.com","password":"secret123"}' | jq -r .token)
 [ -n "$buyer" ] && [ "$buyer" != "null" ]; cond "token comprador" $?
 [ -n "$seller" ] && [ "$seller" != "null" ]; cond "token vendedor" $?
+[ -n "$admin" ] && [ "$admin" != "null" ]; cond "token admin" $?
 
 echo "== seller =="
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/seller/cars" \
@@ -184,9 +200,20 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/reservations/$res/p
   -d '{"method":"pos","proof_url":"https://example.com/recibo.jpg"}')
 check "registrar pago -> 201" "201" "$code"
 
-code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/seller/reservations/$res/confirm" \
-  -H "Authorization: Bearer $seller")
-check "confirmar -> 200" "200" "$code"
+accepted=$(curl -s -X PATCH "$BASE/seller/reservations/$res/confirm" -H "Authorization: Bearer $seller")
+check "vendedor acepta -> awaiting_admin" "awaiting_admin" "$(printf '%s' "$accepted" | jq -r .status)"
+check "pago sigue pending" "pending" "$(printf '%s' "$accepted" | jq -r .payment.status)"
+
+code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/admin/reservations/$res/approve" \
+  -H "Authorization: Bearer $buyer")
+check "comprador no aprueba -> 403" "403" "$code"
+
+approved=$(curl -s -X PATCH "$BASE/admin/reservations/$res/approve" -H "Authorization: Bearer $admin")
+check "admin aprueba -> confirmed" "confirmed" "$(printf '%s' "$approved" | jq -r .status)"
+check "pago aprobado" "approved" "$(printf '%s' "$approved" | jq -r .payment.status)"
+
+n=$(curl -s "$BASE/admin/reservations?status=confirmed" -H "Authorization: Bearer $admin" | jq 'length')
+check "historial admin (confirmed=1)" "1" "$n"
 
 echo "== cancelación =="
 res2=$(curl -s -X POST "$BASE/reservations" -H "Authorization: Bearer $buyer" \
@@ -215,6 +242,29 @@ check "rechazar -> cancelled" "cancelled" "$(printf '%s' "$rej" | jq -r .status)
 check "pago rechazado" "rejected" "$(printf '%s' "$rej" | jq -r .payment.status)"
 n=$(curl -s "$BASE/cars?start_date=2027-02-11&end_date=2027-02-11" | jq --argjson id "$car" '[.[] | select(.id == $id)] | length')
 check "fechas liberadas tras rechazo" "1" "$n"
+
+echo "== corrección tras rechazo del admin =="
+res4=$(curl -s -X POST "$BASE/reservations" -H "Authorization: Bearer $buyer" \
+  -H 'Content-Type: application/json' \
+  -d "{\"car_id\":$car,\"start_date\":\"2027-03-10\",\"end_date\":\"2027-03-12\"}" | jq -r .id)
+check "reserva para admin" "numero" "$([ "$res4" != "null" ] && echo numero)"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/reservations/$res4/payment" \
+  -H "Authorization: Bearer $buyer" -H 'Content-Type: application/json' -d '{"method":"cash"}')
+check "pago admin -> 201" "201" "$code"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/seller/reservations/$res4/confirm" \
+  -H "Authorization: Bearer $seller")
+check "vendedor acepta admin -> 200" "200" "$code"
+rej=$(curl -s -X PATCH "$BASE/admin/reservations/$res4/reject" -H "Authorization: Bearer $admin" \
+  -H 'Content-Type: application/json' -d '{"admin_note":"comprobante ilegible"}')
+check "admin rechaza -> pending" "pending" "$(printf '%s' "$rej" | jq -r .status)"
+check "motivo guardado" "comprobante ilegible" "$(printf '%s' "$rej" | jq -r .admin_note)"
+check "pago sigue pending tras rechazo" "pending" "$(printf '%s' "$rej" | jq -r .payment.status)"
+status=$(curl -s -X PATCH "$BASE/seller/reservations/$res4/confirm" -H "Authorization: Bearer $seller" | jq -r .status)
+check "vendedor reconfirma -> awaiting_admin" "awaiting_admin" "$status"
+note=$(curl -s "$BASE/reservations/$res4" -H "Authorization: Bearer $buyer" | jq -r '.admin_note // ""')
+check "motivo limpiado" "" "$note"
+approved=$(curl -s -X PATCH "$BASE/admin/reservations/$res4/approve" -H "Authorization: Bearer $admin")
+check "admin aprueba tras corrección -> confirmed" "confirmed" "$(printf '%s' "$approved" | jq -r .status)"
 
 echo "== límite de días =="
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/reservations" -H "Authorization: Bearer $buyer" \

@@ -1,0 +1,28 @@
+meta {
+  name: Rechazar reserva admin
+  type: http
+  seq: 27
+}
+
+patch {
+  url: {{baseUrl}}/admin/reservations/{{adminReservationId}}/reject
+  body: json
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{adminToken}}
+}
+
+body:json {
+  {
+    "admin_note": "comprobante ilegible"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.status: eq pending
+  res.body.admin_note: isDefined
+  res.body.payment.status: eq pending
+}

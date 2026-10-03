@@ -1,0 +1,17 @@
+meta {
+  name: Historial admin
+  type: http
+  seq: 23
+}
+
+get {
+  url: {{baseUrl}}/admin/reservations?status=confirmed
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+assert {
+  res.status: eq 200
+}

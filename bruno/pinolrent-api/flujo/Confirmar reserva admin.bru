@@ -1,11 +1,11 @@
 meta {
-  name: Confirmar reserva
+  name: Confirmar reserva admin
   type: http
-  seq: 20
+  seq: 26
 }
 
 patch {
-  url: {{baseUrl}}/seller/reservations/{{reservationId}}/confirm
+  url: {{baseUrl}}/seller/reservations/{{adminReservationId}}/confirm
   body: none
 }
 
