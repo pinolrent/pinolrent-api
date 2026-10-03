@@ -271,3 +271,115 @@ func (a *API) AdminPatchUser(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, out)
 }
+
+// AdminPatchUserRoles grants or revokes the seller role. The admin role itself
+// is never touched through this endpoint: it is only granted by the allow-list
+// at startup and at registration, so there is no public path to escalate to
+// admin.
+func (a *API) AdminPatchUserRoles(w http.ResponseWriter, r *http.Request) {
+	actor, _ := auth.CurrentUser(r.Context())
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+
+	var in struct {
+		Seller *bool `json:"seller"`
+	}
+	if err := decodeBody(w, r, &in); err != nil {
+		writeBodyErr(w, err)
+		return
+	}
+	if in.Seller == nil {
+		writeError(w, http.StatusBadRequest, "seller is required")
+		return
+	}
+
+	var changed bool
+	err = withImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
+		ctx := r.Context()
+		var email string
+		if err := conn.QueryRowContext(ctx,
+			`SELECT email FROM users WHERE id = ?`, id).Scan(&email); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				writeError(w, http.StatusNotFound, "user not found")
+				return errTxHandled
+			}
+			serverError(w, err)
+			return errTxHandled
+		}
+		if *in.Seller {
+			res, err := conn.ExecContext(ctx,
+				`INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, 'seller')`, id)
+			if err != nil {
+				serverError(w, err)
+				return errTxHandled
+			}
+			rows, err := res.RowsAffected()
+			if err != nil {
+				serverError(w, err)
+				return errTxHandled
+			}
+			if rows > 0 {
+				if err := a.auditAction(ctx, conn, actor.ID, auditActionUserRoleGrantSeller, targetUsers, id, ""); err != nil {
+					serverError(w, err)
+					return errTxHandled
+				}
+				changed = true
+			}
+		} else {
+			res, err := conn.ExecContext(ctx,
+				`DELETE FROM user_roles WHERE user_id = ? AND role = 'seller'`, id)
+			if err != nil {
+				serverError(w, err)
+				return errTxHandled
+			}
+			rows, err := res.RowsAffected()
+			if err != nil {
+				serverError(w, err)
+				return errTxHandled
+			}
+			if rows > 0 {
+				if err := a.auditAction(ctx, conn, actor.ID, auditActionUserRoleRevokeSeller, targetUsers, id, ""); err != nil {
+					serverError(w, err)
+					return errTxHandled
+				}
+				changed = true
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	_ = changed
+
+	var email string
+	var phone string
+	var suspended sql.NullInt64
+	var rolesStr sql.NullString
+	if err := a.DB.QueryRowContext(r.Context(),
+		`SELECT u.email, u.phone, u.suspended_at, GROUP_CONCAT(ur.role)
+		 FROM users u LEFT JOIN user_roles ur ON ur.user_id = u.id
+		 WHERE u.id = ?
+		 GROUP BY u.id, u.email, u.phone, u.suspended_at`, id).Scan(&email, &phone, &suspended, &rolesStr); err != nil {
+		serverError(w, err)
+		return
+	}
+	var roles []string
+	if rolesStr.Valid && rolesStr.String != "" {
+		roles = strings.Split(rolesStr.String, ",")
+	}
+	out := map[string]any{
+		"id":    id,
+		"email": email,
+		"phone": phone,
+		"roles": roles,
+	}
+	if suspended.Valid {
+		out["suspended_at"] = suspended.Int64
+	}
+	writeJSON(w, http.StatusOK, out)
+}
