@@ -1,72 +1,72 @@
 # Pinol Rent API
 
-API para **renta de autos entre particulares**. Unos usuarios publican sus autos (vendedores), otros los reservan y pagan (compradores). Hecha en **Go** con **SQLite**.
+API for **peer-to-peer car rental**. Some users publish their cars (sellers), others book and pay for them (buyers). Built in **Go** with **SQLite**.
 
-## Arranque rápido
+## Quick start
 
 ```sh
 export JWT_SECRET="$(openssl rand -base64 32)"
 go run ./cmd/api
 ```
 
-Para desarrollo (usa valores por defecto y no necesitas `.env`):
+For development (it uses default values and you do not need a `.env`):
 
 ```sh
-make tools   # solo la primera vez (instala air, govulncheck, golangci-lint en ~/go/bin — agrégalo a tu PATH)
-make dev     # levanta el server con defaults de dev (JWT_SECRET auto, sin fallar)
-make run     # levanta sin defaults (falla sin JWT_SECRET, como en prod)
-make watch   # levanta con recarga automática al editar (requiere make tools)
+make tools   # only the first time (installs air, govulncheck, golangci-lint into ~/go/bin — add it to your PATH)
+make dev     # starts the server with dev defaults (JWT_SECRET auto-filled, never fails)
+make run     # starts without defaults (fails without JWT_SECRET, like prod)
+make watch   # starts with hot reload on edit (requires make tools)
 ```
 
 ## Endpoints
 
-| Método | Ruta | ¿Necesita login? | Para qué sirve |
-|--------|------|-----------------|----------------|
-| GET | `/health` | no | Ver si el server y la base están bien |
-| POST | `/auth/register` | no | Crear cuenta (con teléfono: también vendedora) |
-| POST | `/auth/become-seller` | sí | Activar modo vendedor en tu cuenta |
-| POST | `/auth/login` | no | Entrar y obtener access (15 min) + refresh (7 días) |
-| POST | `/auth/refresh` | no | Renovar el par con un refresh de un solo uso |
-| GET | `/auth/me` | sí | Ver tu propio perfil |
-| PATCH | `/auth/me` | sí | Corregir tu teléfono de contacto |
-| PATCH | `/auth/password` | sí | Cambiar tu contraseña (cierra todas tus sesiones) |
-| POST | `/auth/logout` | sí | Cerrar sesión (invalida tu token actual) |
-| GET | `/cars` | no | Ver autos disponibles (puedes filtrar por fechas o vendedor) |
-| GET | `/cars/{id}` | no | Ver el detalle de un auto |
-| GET | `/cars/{id}/contact` | sí | Link de WhatsApp del vendedor (para coordinar) |
-| GET · POST | `/seller/cars` | vendedor | Ver tus autos y agregar uno nuevo |
-| PATCH | `/seller/cars/{id}` | vendedor | Editar nombre, precio o foto; activar/desactivar |
-| DELETE | `/seller/cars/{id}` | vendedor | Eliminar un auto que nunca tuvo reservas |
-| POST | `/reservations` | sí | Reservar un auto |
-| GET | `/reservations` · `/reservations/{id}` | sí | Ver tus reservas |
-| PATCH | `/reservations/{id}/cancel` | sí | Cancelar una reserva tuya (solo si aún no pagaste) |
-| POST | `/reservations/{id}/payment` | sí | Pagar una reserva (`pos` o `cash`) |
-| GET | `/seller/reservations` | vendedor | Ver reservas de tus autos |
-| PATCH | `/seller/reservations/{id}/confirm` | vendedor | Confirmar una reserva y aprobar su pago |
-| PATCH | `/seller/reservations/{id}/reject` | vendedor | Rechazar el pago, cancelar la reserva y liberar fechas |
-| POST | `/uploads` | sí | Subir una imagen (jpg/png/webp, 5 MB) y obtener su URL local; las jpg/png se re-codifican sin metadatos |
-| GET | `/uploads/{nombre}` | no | Ver una imagen subida |
+| Method | Path | Needs login? | What it does |
+|--------|------|--------------|--------------|
+| GET | `/health` | no | See whether the server and the database are fine |
+| POST | `/auth/register` | no | Create an account (with a phone: also a seller) |
+| POST | `/auth/become-seller` | yes | Enable seller mode on your account |
+| POST | `/auth/login` | no | Log in and get access (15 min) + refresh (7 days) |
+| POST | `/auth/refresh` | no | Renew the pair with a single-use refresh token |
+| GET | `/auth/me` | yes | See your own profile |
+| PATCH | `/auth/me` | yes | Fix your contact phone |
+| PATCH | `/auth/password` | yes | Change your password (closes all your sessions) |
+| POST | `/auth/logout` | yes | Log out (invalidates your current token) |
+| GET | `/cars` | no | See available cars (you can filter by dates or seller) |
+| GET | `/cars/{id}` | no | See the detail of a car |
+| GET | `/cars/{id}/contact` | yes | Seller's WhatsApp link (to coordinate) |
+| GET · POST | `/seller/cars` | seller | See your cars and add a new one |
+| PATCH | `/seller/cars/{id}` | seller | Edit name, price or photo; activate/deactivate |
+| DELETE | `/seller/cars/{id}` | seller | Delete a car that never had reservations |
+| POST | `/reservations` | yes | Book a car |
+| GET | `/reservations` · `/reservations/{id}` | yes | See your reservations |
+| PATCH | `/reservations/{id}/cancel` | yes | Cancel one of your reservations (only if you have not paid yet) |
+| POST | `/reservations/{id}/payment` | yes | Pay for a reservation (`pos` or `cash`) |
+| GET | `/seller/reservations` | seller | See the reservations of your cars |
+| PATCH | `/seller/reservations/{id}/confirm` | seller | Confirm a reservation and approve its payment |
+| PATCH | `/seller/reservations/{id}/reject` | seller | Reject the payment, cancel the reservation and release the dates |
+| POST | `/uploads` | yes | Upload an image (jpg/png/webp, 5 MB) and get its local URL; jpg/png are re-encoded without metadata |
+| GET | `/uploads/{name}` | no | See an uploaded image |
 
-Si intentas ver o tocar algo que no es tuyo, la API responde `404` como si no existiera.
+If you try to read or touch something that is not yours, the API answers `404` as if it did not exist.
 
 ## Roles
 
-- **Comprador:** reserva autos, paga y ve sus reservas.
-- **Vendedor:** publica sus autos y confirma las reservas de sus autos. Cada vendedor solo ve lo suyo. Se registra con teléfono obligatorio: es el número por el que lo contactan los compradores (WhatsApp).
+- **Buyer:** books cars, pays and sees its reservations.
+- **Seller:** publishes its cars and confirms the reservations of its cars. Each seller only sees its own. It registers with a mandatory phone: that is the number buyers use to reach it (WhatsApp).
 
-## Documentación
+## Documentation
 
-- **[Referencia de la API](docs/api/00-general.md)** — cómo se usa la API, autenticación y detalle de cada endpoint.
-- **[Configuración](docs/configuracion.md)** — variables de entorno y arranque.
-- **[Arquitectura](docs/arquitectura.md)** — esquema, estados de reserva y reglas del negocio.
-- **[Despliegue](docs/despliegue.md)** — restricciones de operación, backups y restauración.
+- **[API reference](docs/api/00-general.md)** — how to use the API, authentication and the detail of every endpoint.
+- **[Configuration](docs/configuration.md)** — environment variables and startup.
+- **[Architecture](docs/architecture.md)** — schema, reservation states and business rules.
+- **[Deployment](docs/deployment.md)** — operating constraints, backups and restoration.
 
-## Stack y reglas básicas
+## Stack and basic rules
 
-- **Go 1.26.6**, `net/http` sin framework, **SQLite** (`modernc.org/sqlite`) + migraciones `goose`.
-- Auth con **JWT HS256** (access 15 min + refresh 7 días con rotación) y **bcrypt** para contraseñas.
-- `price_per_day` va en **centavos** (ej. 45000 = $450). Fechas como `YYYY-MM-DD`.
-- Cada request con body no puede pasar de **1 MB**. JSON con campos desconocidos da error.
-- Login y registro limitados a **30 intentos por minuto por IP**; escritura (`POST`, `PATCH` y `DELETE` fuera de `/auth/`) a **120 por minuto** (ráfaga 60). CORS abierto por defecto (se puede cerrar con `CORS_ALLOWED_ORIGINS`; con `ENV=prod` no permite `*`).
-- Listas paginadas con `limit`/`offset` (por defecto 50, máximo 200, `offset` máx. 10000). Reservas de máximo **30 días**.
-- `GET /health` responde la versión del binario (`make build` la inyecta).
+- **Go 1.26.6**, `net/http` without a framework, **SQLite** (`modernc.org/sqlite`) + `goose` migrations.
+- Auth with **JWT HS256** (access 15 min + refresh 7 days with rotation) and **bcrypt** for passwords.
+- `price_per_day` is in **cents** (e.g. 45000 = $450). Dates as `YYYY-MM-DD`.
+- Every request with a body cannot exceed **1 MB**. JSON with unknown fields is an error.
+- Login and registration limited to **30 attempts per minute per IP**; writes (`POST`, `PATCH` and `DELETE` outside `/auth/`) to **120 per minute** (burst 60). CORS open by default (can be closed with `CORS_ALLOWED_ORIGINS`; with `ENV=prod` it does not allow `*`).
+- Listings paginated with `limit`/`offset` (default 50, max 200, `offset` max 10000). Reservations of at most **30 days**.
+- `GET /health` reports the version of the binary (`make build` injects it).
