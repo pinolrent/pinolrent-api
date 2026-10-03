@@ -73,6 +73,8 @@ func (a *API) AdminListUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// #nosec G202 -- clauses are built here from fixed fragments with placeholders;
+	// every value from the query string is bound as a parameter.
 	rows, err := a.DB.QueryContext(r.Context(),
 		`SELECT u.id, u.email, u.phone, u.suspended_at, GROUP_CONCAT(ur.role) as roles
 		 FROM users u
@@ -203,7 +205,6 @@ func (a *API) AdminPatchUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var changed bool
 	err = withImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
 		ctx := r.Context()
 		var current sql.NullInt64
@@ -227,7 +228,6 @@ func (a *API) AdminPatchUser(w http.ResponseWriter, r *http.Request) {
 					serverError(w, err)
 					return errTxHandled
 				}
-				changed = true
 			}
 		} else {
 			if current.Valid {
@@ -240,7 +240,6 @@ func (a *API) AdminPatchUser(w http.ResponseWriter, r *http.Request) {
 					serverError(w, err)
 					return errTxHandled
 				}
-				changed = true
 			}
 		}
 		return nil
@@ -249,10 +248,7 @@ func (a *API) AdminPatchUser(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	if !changed {
-		// Idempotent: setting the same state is a no-op; return 200 to be safe.
-		// Re-fetch current for completeness.
-	}
+
 	// Return current state.
 	var email, phone string
 	var suspended sql.NullInt64
@@ -296,12 +292,11 @@ func (a *API) AdminPatchUserRoles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var changed bool
 	err = withImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
 		ctx := r.Context()
-		var email string
+		var exists int
 		if err := conn.QueryRowContext(ctx,
-			`SELECT email FROM users WHERE id = ?`, id).Scan(&email); err != nil {
+			`SELECT 1 FROM users WHERE id = ?`, id).Scan(&exists); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				writeError(w, http.StatusNotFound, "user not found")
 				return errTxHandled
@@ -326,7 +321,6 @@ func (a *API) AdminPatchUserRoles(w http.ResponseWriter, r *http.Request) {
 					serverError(w, err)
 					return errTxHandled
 				}
-				changed = true
 			}
 		} else {
 			res, err := conn.ExecContext(ctx,
@@ -345,7 +339,6 @@ func (a *API) AdminPatchUserRoles(w http.ResponseWriter, r *http.Request) {
 					serverError(w, err)
 					return errTxHandled
 				}
-				changed = true
 			}
 		}
 		return nil
@@ -354,7 +347,6 @@ func (a *API) AdminPatchUserRoles(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	_ = changed
 
 	var email string
 	var phone string
@@ -424,12 +416,15 @@ func (a *API) AdminListCars(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var total int64
+	// #nosec G202 -- clauses are built here from fixed fragments with placeholders;
+	// every value from the query string is bound as a parameter.
 	if err := a.DB.QueryRowContext(r.Context(),
 		`SELECT COUNT(*) FROM cars c WHERE `+strings.Join(clauses, " AND "), args...).Scan(&total); err != nil {
 		serverError(w, err)
 		return
 	}
 
+	// #nosec G202 -- same as the count above.
 	rows, err := a.DB.QueryContext(r.Context(),
 		`SELECT `+carColumnsQualified+`, u.email
 		 FROM cars c
@@ -638,6 +633,14 @@ func (a *API) AdminDeleteCar(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+const adminReservationSelect = `
+SELECT r.id, r.user_id, r.car_id, r.start_date, r.end_date, r.status,
+       u.email, c.name
+FROM reservations r
+LEFT JOIN users u ON u.id = r.user_id
+LEFT JOIN cars c ON c.id = r.car_id
+`
+
 // AdminListReservations returns all reservations on the platform.
 func (a *API) AdminListReservations(w http.ResponseWriter, r *http.Request) {
 	limit, offset, errMsg := paginate(r)
@@ -684,8 +687,6 @@ func (a *API) AdminListReservations(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := a.DB.QueryContext(r.Context(),
 		adminReservationSelect+`
-		 LEFT JOIN users u ON u.id = r.user_id
-		 LEFT JOIN cars c ON c.id = r.car_id
 		 WHERE `+strings.Join(clauses, " AND ")+`
 		 ORDER BY r.id ASC
 		 LIMIT ? OFFSET ?`, append(args, limit, offset)...)
@@ -722,14 +723,6 @@ func (a *API) AdminListReservations(w http.ResponseWriter, r *http.Request) {
 		"offset": offset,
 	})
 }
-
-const adminReservationSelect = `
-SELECT r.id, r.user_id, r.car_id, r.start_date, r.end_date, r.status,
-       u.email, c.name
-FROM reservations r
-LEFT JOIN users u ON u.id = r.user_id
-LEFT JOIN cars c ON c.id = r.car_id
-`
 
 type adminReservationOut struct {
 	ID         int64  `json:"id"`
@@ -777,6 +770,8 @@ func (a *API) AdminListPayments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// #nosec G202 -- clauses are built here from fixed fragments with placeholders;
+	// every value from the query string is bound as a parameter.
 	rows, err := a.DB.QueryContext(r.Context(),
 		`SELECT p.id, p.reservation_id, p.method, p.status, p.proof_url, r.user_id, r.car_id, u.email
 		 FROM payments p
@@ -952,6 +947,8 @@ func (a *API) AdminListAudit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// #nosec G202 -- clauses are built here from fixed fragments with placeholders;
+	// every value from the query string is bound as a parameter.
 	rows, err := a.DB.QueryContext(r.Context(),
 		`SELECT a.id, a.actor_id, a.action, a.target_type, a.target_id, a.detail, a.created_at, u.email
 		 FROM admin_audit_log a
