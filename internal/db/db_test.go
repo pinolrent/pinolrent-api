@@ -52,6 +52,7 @@ func TestIndexesExist(t *testing.T) {
 		"idx_cars_owner":             false,
 		"idx_reservations_user":      false,
 		"idx_reservations_car_dates": false,
+		"idx_reservations_status":    false,
 	}
 	for _, table := range []string{"cars", "reservations"} {
 		rows, err := d.QueryContext(context.Background(),
@@ -243,20 +244,20 @@ func TestRoleConstraint(t *testing.T) {
 		t.Fatalf("last id: %v", err)
 	}
 
-	for _, role := range []string{"buyer", "seller"} {
+	for _, role := range []string{"buyer", "seller", "admin"} {
 		if _, err := d.ExecContext(ctx,
 			`INSERT INTO user_roles (user_id, role) VALUES (?, ?)`, uid, role); err != nil {
 			t.Fatalf("insert %s: %v", role, err)
 		}
-		// buyer+seller must coexist on one account.
+		// buyer, seller and admin must coexist on one account.
 		if _, err := d.ExecContext(ctx, `DELETE FROM user_roles WHERE user_id = ? AND role = ?`, uid, role); err != nil {
 			t.Fatalf("delete %s: %v", role, err)
 		}
 	}
 
 	if _, err := d.ExecContext(ctx,
-		`INSERT INTO user_roles (user_id, role) VALUES (?, 'admin')`, uid); err == nil {
-		t.Fatal("expected role constraint to reject 'admin'")
+		`INSERT INTO user_roles (user_id, role) VALUES (?, 'root')`, uid); err == nil {
+		t.Fatal("expected role constraint to reject 'root'")
 	}
 }
 
@@ -413,5 +414,31 @@ func TestReservationDateCheck(t *testing.T) {
 	}
 	if _, err := d.ExecContext(ctx, `INSERT INTO reservations (user_id, car_id, start_date, end_date) VALUES (1,1,'2026-10-05','2026-10-01')`); err == nil {
 		t.Fatal("expected CHECK to reject end < start")
+	}
+}
+
+func TestReservationStatusConstraint(t *testing.T) {
+	d, err := Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { _ = d.Close() })
+	ctx := context.Background()
+	if _, err := d.ExecContext(ctx, `INSERT INTO users (email, password_hash) VALUES ('u@example.com','h')`); err != nil {
+		t.Fatalf("insert user: %v", err)
+	}
+	if _, err := d.ExecContext(ctx, `INSERT INTO users (email, password_hash) VALUES ('s@example.com','h')`); err != nil {
+		t.Fatalf("insert seller: %v", err)
+	}
+	if _, err := d.ExecContext(ctx, `INSERT INTO cars (owner_id, name, price_per_day) VALUES (2,'Car',100)`); err != nil {
+		t.Fatalf("insert car: %v", err)
+	}
+	if _, err := d.ExecContext(ctx,
+		`INSERT INTO reservations (user_id, car_id, start_date, end_date, status) VALUES (1,1,'2026-10-01','2026-10-05','awaiting_admin')`); err != nil {
+		t.Fatalf("awaiting_admin should be allowed: %v", err)
+	}
+	if _, err := d.ExecContext(ctx,
+		`INSERT INTO reservations (user_id, car_id, start_date, end_date, status) VALUES (1,1,'2026-11-01','2026-11-05','bogus')`); err == nil {
+		t.Fatal("expected CHECK to reject unknown status")
 	}
 }

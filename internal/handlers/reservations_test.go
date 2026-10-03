@@ -229,16 +229,16 @@ func TestCancelReservationRules(t *testing.T) {
 		t.Fatalf("cancel paid: status = %d, want 409 (body %s)", rec.Code, rec.Body.String())
 	}
 
-	// a confirmed reservation cannot be cancelled
-	confirmed := createReservation(t, a, tokenA, map[string]any{
+	// a reservation accepted by the seller cannot be cancelled
+	accepted := createReservation(t, a, tokenA, map[string]any{
 		"car_id": car.ID, "start_date": futureDate(22), "end_date": futureDate(23),
 	})
-	doJSON(t, a, "POST", "/reservations/"+itoa(confirmed.ID)+"/payment", tokenA, map[string]any{"method": "cash"})
-	if rec := doJSON(t, a, "PATCH", "/seller/reservations/"+itoa(confirmed.ID)+"/confirm", seller, nil); rec.Code != http.StatusOK {
+	doJSON(t, a, "POST", "/reservations/"+itoa(accepted.ID)+"/payment", tokenA, map[string]any{"method": "cash"})
+	if rec := doJSON(t, a, "PATCH", "/seller/reservations/"+itoa(accepted.ID)+"/confirm", seller, nil); rec.Code != http.StatusOK {
 		t.Fatalf("confirm: status = %d body %s", rec.Code, rec.Body.String())
 	}
-	if rec := doJSON(t, a, "PATCH", "/reservations/"+itoa(confirmed.ID)+"/cancel", tokenA, nil); rec.Code != http.StatusConflict {
-		t.Fatalf("cancel confirmed: status = %d, want 409 (body %s)", rec.Code, rec.Body.String())
+	if rec := doJSON(t, a, "PATCH", "/reservations/"+itoa(accepted.ID)+"/cancel", tokenA, nil); rec.Code != http.StatusConflict {
+		t.Fatalf("cancel accepted: status = %d, want 409 (body %s)", rec.Code, rec.Body.String())
 	}
 }
 

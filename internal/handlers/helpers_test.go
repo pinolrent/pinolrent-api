@@ -94,6 +94,19 @@ func newSeller(t *testing.T, a *API) string {
 	return registerSeller(t, a, fmt.Sprintf("seller-%d@example.com", sellerSeq.Load()), "secret123")
 }
 
+// newAdmin registers an account and grants it the admin role directly in the
+// database. Roles are re-read from the database on every request, so the token
+// issued at login already acts as an admin.
+func newAdmin(t *testing.T, a *API) string {
+	t.Helper()
+	token := registerBuyer(t, a, "admin@example.com", "secret123")
+	if _, err := a.DB.ExecContext(context.Background(),
+		`INSERT INTO user_roles (user_id, role) SELECT id, 'admin' FROM users WHERE email = 'admin@example.com'`); err != nil {
+		t.Fatalf("promote admin: %v", err)
+	}
+	return token
+}
+
 var sellerSeq atomic.Int64
 
 func login(t *testing.T, a *API, email, password string) string {

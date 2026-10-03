@@ -139,21 +139,21 @@ func TestConfirmReservation(t *testing.T) {
 	}
 	var view reservationView
 	decodeJSON(t, rec, &view)
-	if view.Status != "confirmed" || view.Payment == nil || view.Payment.Status != "approved" {
-		t.Fatalf("unexpected confirmed view: %+v", view)
+	if view.Status != "awaiting_admin" || view.Payment == nil || view.Payment.Status != "pending" {
+		t.Fatalf("unexpected accepted view: %+v", view)
 	}
 
-	// now confirmed -> 409
+	// now awaiting the admin -> 409
 	if rec := doJSON(t, a, "PATCH", "/seller/reservations/"+itoa(v.ID)+"/confirm", seller, nil); rec.Code != http.StatusConflict {
 		t.Fatalf("re-confirm: status = %d, want 409", rec.Code)
 	}
 
-	// confirmed reservation blocks overlapping booking via cars endpoint
+	// an accepted reservation blocks overlapping booking via cars endpoint
 	rec = doJSON(t, a, "GET", "/cars?start_date="+futureDate(11)+"&end_date="+futureDate(11), "", nil)
 	var cars []models.Car
 	decodeJSON(t, rec, &cars)
 	if len(cars) != 0 {
-		t.Fatalf("confirmed car still available: %+v", cars)
+		t.Fatalf("accepted car still available: %+v", cars)
 	}
 }
 

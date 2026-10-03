@@ -27,12 +27,12 @@ func TestIsUniqueViolation(t *testing.T) {
 		t.Fatalf("expected UNIQUE violation, got: %v", err)
 	}
 
-	// A CHECK violation (role not in buyer/seller) must not be detected as
-	// a unique violation.
+	// A CHECK violation (role outside buyer/seller/admin) must not be
+	// detected as a unique violation.
 	_, err := a.DB.ExecContext(ctx,
-		`INSERT INTO user_roles (user_id, role) VALUES (1, 'admin')`)
+		`INSERT INTO user_roles (user_id, role) VALUES (1, 'root')`)
 	if err == nil {
-		t.Fatal("expected CHECK violation for role 'admin'")
+		t.Fatal("expected CHECK violation for role 'root'")
 	}
 	if isUniqueViolation(err) {
 		t.Fatalf("CHECK violation must not be a unique violation, got: %v", err)
