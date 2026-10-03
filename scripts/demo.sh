@@ -99,7 +99,7 @@ check "aborta sin JWT_SECRET" "1" "$rc"
 echo "== start =="
 UPLOAD_TMP="$(mktemp -d /tmp/pinolrent-uploads.XXXXXX)"
 ( cd "$RUNDIR" && exec env DATABASE_URL="$DB" JWT_SECRET="$SMOKE_JWT_SECRET" PORT="$PORT" \
-  UPLOAD_DIR="$UPLOAD_TMP" "$BIN" ) > "$LOG" 2>&1 &
+  UPLOAD_DIR="$UPLOAD_TMP" ADMIN_EMAILS=admin@example.com "$BIN" ) > "$LOG" 2>&1 &
 PID=$!
 if ! wait_for_health 5; then
   echo "server no levantó en 5s:"; cat "$LOG"; exit 1
@@ -325,6 +325,81 @@ check "login contraseña vieja -> 401" "401" "$code"
 seller=$(curl -s -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
   -d '{"email":"seller@example.com","password":"nuevaClave456"}' | jq -r .token)
 [ -n "$seller" ] && [ "$seller" != "null" ]; cond "login contraseña nueva" $?
+
+echo "== admin =="
+# The admin role only exists when ADMIN_EMAILS names the account, so the
+# smoke boots the server with the allow-list set to prove the whole path:
+# registration grants the role, and /admin is reachable with that token.
+adminEmail="admin@example.com"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/auth/register" \
+  -H 'Content-Type: application/json' \
+  -d "{\"email\":\"$adminEmail\",\"password\":\"secret123\"}")
+check "registrar admin -> 201" "201" "$code"
+
+adminToken=$(curl -s -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
+  -d "{\"email\":\"$adminEmail\",\"password\":\"secret123\"}" | jq -r .token)
+[ -n "$adminToken" ] && [ "$adminToken" != "null" ]; cond "login admin" $?
+
+roles=$(curl -s "$BASE/auth/me" -H "Authorization: Bearer $adminToken" | jq -r '.roles | join(",")')
+check "roles del admin" "admin,buyer" "$roles"
+
+# A plain buyer must not reach any admin route.
+code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/admin/users" -H "Authorization: Bearer $buyer")
+check "admin con token de comprador -> 403" "403" "$code"
+code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/admin/users")
+check "admin sin token -> 401" "401" "$code"
+
+code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/admin/users" -H "Authorization: Bearer $adminToken")
+check "admin con token de admin -> 200" "200" "$code"
+
+# Suspension cuts the buyer's still-valid token and lifting it restores access
+# without a new login.
+buyerID=$(curl -s "$BASE/auth/me" -H "Authorization: Bearer $buyer" | jq -r .id)
+code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/admin/users/$buyerID" \
+  -H "Authorization: Bearer $adminToken" -H 'Content-Type: application/json' \
+  -d '{"suspended":true}')
+check "suspender comprador -> 200" "200" "$code"
+code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/auth/me" -H "Authorization: Bearer $buyer")
+check "comprador suspendido -> 403" "403" "$code"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/admin/users/$buyerID" \
+  -H "Authorization: Bearer $adminToken" -H 'Content-Type: application/json' \
+  -d '{"suspended":false}')
+check "reactivar comprador -> 200" "200" "$code"
+code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/auth/me" -H "Authorization: Bearer $buyer")
+check "comprador reactivado -> 200" "200" "$code"
+
+# An administrator cannot lock themselves out.
+adminID=$(curl -s "$BASE/auth/me" -H "Authorization: Bearer $adminToken" | jq -r .id)
+code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/admin/users/$adminID" \
+  -H "Authorization: Bearer $adminToken" -H 'Content-Type: application/json' \
+  -d '{"suspended":true}')
+check "admin no se suspende a si mismo -> 400" "400" "$code"
+
+# The allow-list is the only source of the role, so the API must refuse it.
+# Revoke first: the flow above already turned the buyer into a seller, and a
+# grant that changes nothing is deliberately left out of the audit log.
+code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/admin/users/$buyerID/roles" \
+  -H "Authorization: Bearer $adminToken" -H 'Content-Type: application/json' \
+  -d '{"seller":false}')
+check "revocar vendedor -> 200" "200" "$code"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/admin/users/$buyerID/roles" \
+  -H "Authorization: Bearer $adminToken" -H 'Content-Type: application/json' \
+  -d '{"seller":true}')
+check "otorgar vendedor -> 200" "200" "$code"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/admin/users/$buyerID/roles" \
+  -H "Authorization: Bearer $adminToken" -H 'Content-Type: application/json' \
+  -d '{"admin":true}')
+check "otorgar admin por API -> 400" "400" "$code"
+
+# Read-only surfaces and the audit trail.
+for path in admin/cars admin/reservations admin/payments admin/stats; do
+  code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/$path" -H "Authorization: Bearer $adminToken")
+  check "GET /$path -> 200" "200" "$code"
+done
+# The suspension pair above always writes two rows. Compared inside a
+# substitution so a regression reports FAIL instead of tripping `set -e`.
+audits=$(curl -s "$BASE/admin/audit" -H "Authorization: Bearer $adminToken" | jq -r '.total')
+check "auditoria con 4+ entradas" "si" "$([ "${audits:-0}" -ge 4 ] && echo si || echo no)"
 
 echo "== rate limit /auth/* =="
 blocked=0
