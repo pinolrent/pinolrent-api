@@ -1,0 +1,26 @@
+meta {
+  name: Admin list cars
+  type: http
+  seq: 42
+}
+
+get {
+  url: {{baseUrl}}/admin/cars
+  body: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.items: isDefined
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (body.items && body.items.length > 0) {
+    bru.setVar("adminCarId", body.items[0].id);
+  }
+}

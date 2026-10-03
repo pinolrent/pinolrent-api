@@ -1,0 +1,14 @@
+meta {
+  name: Inactive car detail
+  type: http
+  seq: 13
+}
+
+get {
+  url: {{baseUrl}}/cars/{{carId}}
+  body: none
+}
+
+assert {
+  res.status: eq 404
+}

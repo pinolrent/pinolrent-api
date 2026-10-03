@@ -1,0 +1,37 @@
+meta {
+  name: Login seller
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/auth/login
+  body: json
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "email": "{{sellerEmail}}",
+    "password": "{{sellerPassword}}"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.token: isDefined
+  res.body.refresh_token: isDefined
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (body.token) {
+    bru.setVar("sellerToken", body.token);
+  }
+  if (body.refresh_token) {
+    bru.setVar("sellerRefresh", body.refresh_token);
+  }
+}

@@ -1,0 +1,26 @@
+meta {
+  name: Activate car
+  type: http
+  seq: 14
+}
+
+patch {
+  url: {{baseUrl}}/seller/cars/{{carId}}
+  body: json
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{sellerToken}}
+}
+
+body:json {
+  {
+    "active": true
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.active: eq true
+}

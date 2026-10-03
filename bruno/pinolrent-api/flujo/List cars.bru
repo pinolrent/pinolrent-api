@@ -1,0 +1,14 @@
+meta {
+  name: List cars
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/cars
+  body: none
+}
+
+assert {
+  res.status: eq 200
+}

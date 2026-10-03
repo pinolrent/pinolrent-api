@@ -1,0 +1,20 @@
+meta {
+  name: Reject reservation
+  type: http
+  seq: 27
+}
+
+patch {
+  url: {{baseUrl}}/seller/reservations/{{rejectionReservationId}}/reject
+  body: none
+}
+
+headers {
+  Authorization: Bearer {{sellerToken}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.status: eq cancelled
+  res.body.payment.status: eq rejected
+}

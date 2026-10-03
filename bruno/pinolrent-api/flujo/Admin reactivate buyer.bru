@@ -1,0 +1,25 @@
+meta {
+  name: Admin reactivate buyer
+  type: http
+  seq: 49
+}
+
+patch {
+  url: {{baseUrl}}/admin/users/{{buyerUserId}}
+  body: json
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{adminToken}}
+}
+
+body:json {
+  {
+    "suspended": false
+  }
+}
+
+assert {
+  res.status: eq 200
+}

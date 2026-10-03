@@ -1,0 +1,26 @@
+meta {
+  name: Buyer profile
+  type: http
+  seq: 40
+}
+
+get {
+  url: {{baseUrl}}/auth/me
+  body: none
+}
+
+headers {
+  Authorization: Bearer {{buyerToken}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.roles: isDefined
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (body.id) {
+    bru.setVar("buyerUserId", body.id);
+  }
+}

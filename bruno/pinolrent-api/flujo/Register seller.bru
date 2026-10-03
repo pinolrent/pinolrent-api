@@ -1,0 +1,26 @@
+meta {
+  name: Register seller
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/auth/register
+  body: json
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "email": "{{sellerEmail}}",
+    "password": "{{sellerPassword}}",
+    "phone": "{{sellerPhone}}"
+  }
+}
+
+assert {
+  res.status: eq 201
+}

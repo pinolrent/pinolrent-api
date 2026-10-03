@@ -1,0 +1,26 @@
+meta {
+  name: Record payment
+  type: http
+  seq: 19
+}
+
+post {
+  url: {{baseUrl}}/reservations/{{reservationId}}/payment
+  body: json
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{buyerToken}}
+}
+
+body:json {
+  {
+    "method": "pos",
+    "proof_url": "https://example.com/recibo.jpg"
+  }
+}
+
+assert {
+  res.status: eq 201
+}

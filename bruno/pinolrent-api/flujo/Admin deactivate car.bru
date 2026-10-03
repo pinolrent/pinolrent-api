@@ -1,0 +1,26 @@
+meta {
+  name: Admin deactivate car
+  type: http
+  seq: 43
+}
+
+patch {
+  url: {{baseUrl}}/admin/cars/{{adminCarId}}
+  body: json
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{adminToken}}
+}
+
+body:json {
+  {
+    "active": false
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.status: eq ok
+}

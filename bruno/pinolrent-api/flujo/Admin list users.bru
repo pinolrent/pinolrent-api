@@ -1,0 +1,20 @@
+meta {
+  name: Admin list users
+  type: http
+  seq: 37
+}
+
+get {
+  url: {{baseUrl}}/admin/users
+  body: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.items: isDefined
+  res.body.total: isDefined
+}

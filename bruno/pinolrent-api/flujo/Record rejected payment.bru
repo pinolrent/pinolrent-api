@@ -1,0 +1,25 @@
+meta {
+  name: Record rejected payment
+  type: http
+  seq: 26
+}
+
+post {
+  url: {{baseUrl}}/reservations/{{rejectionReservationId}}/payment
+  body: json
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{buyerToken}}
+}
+
+body:json {
+  {
+    "method": "cash"
+  }
+}
+
+assert {
+  res.status: eq 201
+}

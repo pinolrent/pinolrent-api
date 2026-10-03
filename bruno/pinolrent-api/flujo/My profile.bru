@@ -1,0 +1,19 @@
+meta {
+  name: My profile
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/auth/me
+  body: none
+}
+
+headers {
+  Authorization: Bearer {{buyerToken}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.roles: isDefined
+}

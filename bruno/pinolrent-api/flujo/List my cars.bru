@@ -1,0 +1,18 @@
+meta {
+  name: List my cars
+  type: http
+  seq: 15
+}
+
+get {
+  url: {{baseUrl}}/seller/cars
+  body: none
+}
+
+headers {
+  Authorization: Bearer {{sellerToken}}
+}
+
+assert {
+  res.status: eq 200
+}

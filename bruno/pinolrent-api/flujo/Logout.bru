@@ -1,0 +1,18 @@
+meta {
+  name: Logout
+  type: http
+  seq: 33
+}
+
+post {
+  url: {{baseUrl}}/auth/logout
+  body: none
+}
+
+headers {
+  Authorization: Bearer {{buyerToken}}
+}
+
+assert {
+  res.status: eq 200
+}
