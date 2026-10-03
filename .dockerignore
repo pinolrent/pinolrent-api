@@ -1,9 +1,9 @@
-# Contexto de build: solo lo que hace falta para compilar y lo que no debe
-# terminar dentro de la imagen. En un build remoto el contexto es el clon del
-# repo, pero un `docker build` local usa el directorio completo: sin estos
-# ignores un dev.db viejo o un .env con secretos quedarían horneados en la
-# imagen. `.git` queda fuera de la lista a propósito: la etapa build corre
-# `git describe` para versionar el binario y la imagen final no lo copia.
+# Build context: only what is needed to compile, and only what must not end up
+# inside the image. In a remote build the context is the repo clone, but a
+# local `docker build` uses the whole directory: without these ignores a stale
+# dev.db or a .env with secrets would be baked into the image. `.git` is
+# deliberately left out of the list: the build stage runs `git describe` to
+# version the binary and the final image does not copy it.
 .git
 .github
 .codegraph
