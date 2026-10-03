@@ -920,3 +920,84 @@ func (a *API) AdminStats(w http.ResponseWriter, r *http.Request) {
 		},
 	})
 }
+
+// AdminListAudit returns the audit log for administrator actions.
+func (a *API) AdminListAudit(w http.ResponseWriter, r *http.Request) {
+	limit, offset, errMsg := paginate(r)
+	if errMsg != "" {
+		writeError(w, http.StatusBadRequest, errMsg)
+		return
+	}
+
+	clauses := []string{"1=1"}
+	args := []any{}
+	if s := r.URL.Query().Get("actor_id"); s != "" {
+		aid, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid actor_id")
+			return
+		}
+		clauses = append(clauses, "a.actor_id = ?")
+		args = append(args, aid)
+	}
+	if s := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("action"))); s != "" {
+		clauses = append(clauses, "lower(a.action) = ?")
+		args = append(args, s)
+	}
+
+	var total int64
+	if err := a.DB.QueryRowContext(r.Context(),
+		`SELECT COUNT(*) FROM admin_audit_log a WHERE `+strings.Join(clauses, " AND "), args...).Scan(&total); err != nil {
+		serverError(w, err)
+		return
+	}
+
+	rows, err := a.DB.QueryContext(r.Context(),
+		`SELECT a.id, a.actor_id, a.action, a.target_type, a.target_id, a.detail, a.created_at, u.email
+		 FROM admin_audit_log a
+		 LEFT JOIN users u ON u.id = a.actor_id
+		 WHERE `+strings.Join(clauses, " AND ")+`
+		 ORDER BY a.id DESC
+		 LIMIT ? OFFSET ?`, append(args, limit, offset)...)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	defer func() { _ = rows.Close() }()
+
+	type outAudit struct {
+		ID         int64  `json:"id"`
+		ActorID    int64  `json:"actor_id"`
+		ActorEmail string `json:"actor_email,omitempty"`
+		Action     string `json:"action"`
+		TargetType string `json:"target_type"`
+		TargetID   int64  `json:"target_id"`
+		Detail     string `json:"detail,omitempty"`
+		CreatedAt  string `json:"created_at"`
+	}
+	out := make([]outAudit, 0, limit)
+	for rows.Next() {
+		var id, actorID, targetID int64
+		var action, ttype, detail, created string
+		var actorEmail sql.NullString
+		if err := rows.Scan(&id, &actorID, &action, &ttype, &targetID, &detail, &created, &actorEmail); err != nil {
+			serverError(w, err)
+			return
+		}
+		oa := outAudit{ID: id, ActorID: actorID, Action: action, TargetType: ttype, TargetID: targetID, Detail: detail, CreatedAt: created}
+		if actorEmail.Valid {
+			oa.ActorEmail = actorEmail.String
+		}
+		out = append(out, oa)
+	}
+	if err := rows.Err(); err != nil {
+		serverError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"items":  out,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
+	})
+}
