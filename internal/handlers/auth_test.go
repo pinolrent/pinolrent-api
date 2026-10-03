@@ -278,6 +278,95 @@ func TestRegisterNormalizesPhone(t *testing.T) {
 	}
 }
 
+// TestRegisterGrantsAdminFromAllowList covers the half of the admin
+// provisioning that does not need a restart: an account whose address is on
+// ADMIN_EMAILS registers already holding the role, so a deployment can add an
+// administrator without bouncing the server.
+func TestRegisterGrantsAdminFromAllowList(t *testing.T) {
+	a := newTestAPI(t)
+	a.AdminEmails = map[string]bool{"boss@example.com": true}
+
+	rec := doJSON(t, a, "POST", "/auth/register", "", map[string]any{
+		"email": "boss@example.com", "password": "secret123",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("register: status = %d (body %s)", rec.Code, rec.Body.String())
+	}
+	token := login(t, a, "boss@example.com", "secret123")
+
+	rec = doJSON(t, a, "GET", "/auth/me", token, nil)
+	var me struct {
+		Roles []string `json:"roles"`
+	}
+	decodeJSON(t, rec, &me)
+	if len(me.Roles) != 2 || me.Roles[0] != "admin" || me.Roles[1] != "buyer" {
+		t.Fatalf("roles = %v, want [admin buyer]", me.Roles)
+	}
+
+	// The role is usable right away, without a restart.
+	if rec := doJSON(t, a, "GET", "/admin/users", token, nil); rec.Code != http.StatusOK {
+		t.Fatalf("admin route: status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
+	}
+	// And it is additive: still a buyer.
+	if rec := doJSON(t, a, "GET", "/reservations", token, nil); rec.Code != http.StatusOK {
+		t.Fatalf("buyer route: status = %d, want 200", rec.Code)
+	}
+}
+
+// TestRegisterWithoutAllowListHasNoAdmin is the other side of the coin: with
+// no ADMIN_EMAILS configured nobody becomes an administrator, which is what
+// makes the empty default safe.
+func TestRegisterWithoutAllowListHasNoAdmin(t *testing.T) {
+	a := newTestAPI(t)
+	token := registerBuyer(t, a, "boss@example.com", "secret123")
+
+	rec := doJSON(t, a, "GET", "/admin/users", token, nil)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("admin route without allow-list: status = %d, want 403", rec.Code)
+	}
+}
+
+// TestRegisterAllowListCombinesWithSellerRole pins that an administrator
+// registered with a phone ends up with all three memberships, in the
+// alphabetical order UserRoles reports.
+func TestRegisterAllowListCombinesWithSellerRole(t *testing.T) {
+	a := newTestAPI(t)
+	a.AdminEmails = map[string]bool{"boss@example.com": true}
+
+	rec := doJSON(t, a, "POST", "/auth/register", "", map[string]any{
+		"email": "boss@example.com", "password": "secret123", "phone": "+56912345678",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("register: status = %d (body %s)", rec.Code, rec.Body.String())
+	}
+	token := login(t, a, "boss@example.com", "secret123")
+
+	rec = doJSON(t, a, "GET", "/auth/me", token, nil)
+	var me struct {
+		Roles []string `json:"roles"`
+	}
+	decodeJSON(t, rec, &me)
+	want := []string{"admin", "buyer", "seller"}
+	if len(me.Roles) != len(want) {
+		t.Fatalf("roles = %v, want %v", me.Roles, want)
+	}
+	for i, role := range want {
+		if me.Roles[i] != role {
+			t.Fatalf("roles = %v, want %v", me.Roles, want)
+		}
+	}
+
+	// Both surfaces work with the same token.
+	if rec := doJSON(t, a, "GET", "/admin/users", token, nil); rec.Code != http.StatusOK {
+		t.Fatalf("admin route: %d", rec.Code)
+	}
+	if rec := doJSON(t, a, "POST", "/seller/cars", token, map[string]any{
+		"name": "X", "price_per_day": 1,
+	}); rec.Code != http.StatusCreated {
+		t.Fatalf("seller route: %d body %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestRegisterRolesByPhone(t *testing.T) {
 	a := newTestAPI(t)
 
