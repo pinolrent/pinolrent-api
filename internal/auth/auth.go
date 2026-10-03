@@ -254,10 +254,10 @@ func (a *Auth) UserRoles(ctx context.Context, userID int64) ([]string, error) {
 // Roles come from user_roles ordered alphabetically.
 func (a *Auth) userByID(ctx context.Context, id int64) (models.User, error) {
 	var u models.User
-	var validAfter sql.NullInt64
+	var validAfter, suspended sql.NullInt64
 	err := a.db.QueryRowContext(ctx,
-		`SELECT id, email, password_hash, phone, token_valid_after FROM users WHERE id = ?`, id).
-		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Phone, &validAfter)
+		`SELECT id, email, password_hash, phone, token_valid_after, suspended_at FROM users WHERE id = ?`, id).
+		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Phone, &validAfter, &suspended)
 	if err != nil {
 		return u, err
 	}
@@ -268,6 +268,9 @@ func (a *Auth) userByID(ctx context.Context, id int64) (models.User, error) {
 	u.Roles = roles
 	if validAfter.Valid {
 		u.TokenValidAfter = validAfter.Int64
+	}
+	if suspended.Valid {
+		u.SuspendedAt = suspended.Int64
 	}
 	return u, nil
 }
@@ -394,6 +397,14 @@ func (a *Auth) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 		}
 		if tokenSuperseded(&u, claims) {
 			writeError(w, http.StatusUnauthorized, "invalid or expired token")
+			return
+		}
+		// A suspended account is refused on every authenticated route, token
+		// valid or not. Unlike token_valid_after this is read fresh from the
+		// user row on each request, so suspending takes effect on the next
+		// call and lifting it restores access without logging in again.
+		if u.SuspendedAt > 0 {
+			writeError(w, http.StatusForbidden, "account suspended")
 			return
 		}
 

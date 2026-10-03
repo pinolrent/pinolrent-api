@@ -2,11 +2,13 @@
 package models
 
 // User is an account that can authenticate as a buyer and optionally as a
-// seller. Roles holds the memberships (always buyer, sometimes also seller).
-// Phone is the seller's WhatsApp contact, stored in E.164 and empty when not
-// provided. TokenValidAfter is the Unix instant after which only newly issued
-// tokens are valid (0 = all tokens valid); password changes and refresh
-// replays stamp it to revoke every session at once. It is never serialized.
+// seller. Roles holds the memberships (always buyer, sometimes also seller or
+// admin). Phone is the seller's WhatsApp contact, stored in E.164 and empty
+// when not provided. TokenValidAfter is the Unix instant after which only newly
+// issued tokens are valid (0 = all tokens valid); password changes and refresh
+// replays stamp it to revoke every session at once. SuspendedAt is the Unix
+// instant an administrator locked the account, or 0 while it is in good
+// standing. Neither is ever serialized.
 type User struct {
 	ID              int64    `json:"id"`
 	Email           string   `json:"email"`
@@ -14,6 +16,7 @@ type User struct {
 	Phone           string   `json:"phone,omitempty"`
 	Roles           []string `json:"roles"`
 	TokenValidAfter int64    `json:"-"`
+	SuspendedAt     int64    `json:"-"`
 }
 
 // HasRole reports whether the user holds the given role.
