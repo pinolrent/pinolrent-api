@@ -11,6 +11,12 @@ BASE="http://localhost:$PORT"
 DB="$(mktemp /tmp/pinolrent-demo.XXXXXX.db)"
 LOG="$(mktemp /tmp/pinolrent-demo.XXXXXX.log)"
 BIN="$(mktemp /tmp/pinolrent-demo.XXXXXX.bin)"
+# Empty working directory for the server process. The server loads a .env
+# from its own cwd, so running it from the repo root would let a developer's
+# local .env decide the configuration: the fail-fast probe below would find a
+# JWT_SECRET there, start successfully and hang the script forever. From an
+# empty directory the only configuration is what this script passes.
+RUNDIR="$(mktemp -d /tmp/pinolrent-run.XXXXXX)"
 PID=""
 
 # Same min length the server enforces, so the smoke starts without
@@ -68,7 +74,7 @@ cleanup() {
     kill -KILL "$PID" 2>/dev/null || true
   fi
   rm -f "$DB" "$DB-shm" "$DB-wal" "$LOG" "$BIN"
-  rm -rf "${UPLOAD_TMP:-}"
+  rm -rf "${UPLOAD_TMP:-}" "$RUNDIR"
 }
 trap cleanup EXIT INT TERM
 
@@ -85,15 +91,15 @@ echo "== fail-fast sin JWT_SECRET =="
 # the non-zero exit code here; checking the message text is brittle
 # because slog's output destination depends on configuration.
 set +e
-env -u JWT_SECRET DATABASE_URL="$DB" PORT=9999 "$BIN" >/dev/null 2>&1
+( cd "$RUNDIR" && exec env -u JWT_SECRET DATABASE_URL="$DB" PORT=9999 "$BIN" ) >/dev/null 2>&1
 rc=$?
 set -e
 check "aborta sin JWT_SECRET" "1" "$rc"
 
 echo "== start =="
 UPLOAD_TMP="$(mktemp -d /tmp/pinolrent-uploads.XXXXXX)"
-DATABASE_URL="$DB" JWT_SECRET="$SMOKE_JWT_SECRET" PORT="$PORT" UPLOAD_DIR="$UPLOAD_TMP" \
-  "$BIN" > "$LOG" 2>&1 &
+( cd "$RUNDIR" && exec env DATABASE_URL="$DB" JWT_SECRET="$SMOKE_JWT_SECRET" PORT="$PORT" \
+  UPLOAD_DIR="$UPLOAD_TMP" "$BIN" ) > "$LOG" 2>&1 &
 PID=$!
 if ! wait_for_health 5; then
   echo "server no levantó en 5s:"; cat "$LOG"; exit 1
