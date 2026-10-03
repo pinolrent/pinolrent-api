@@ -33,7 +33,7 @@ check() {
     printf '  ok   %s (%s)\n' "$desc" "$got"
   else
     failures=$((failures + 1))
-    printf '  FAIL %s esperado=%s obtenido=%s\n' "$desc" "$expected" "$got"
+    printf '  FAIL %s expected=%s got=%s\n' "$desc" "$expected" "$got"
   fi
 }
 
@@ -84,7 +84,7 @@ if ! go build -ldflags "-X main.version=$VERSION" -o "$BIN" ./cmd/api; then
   echo "build FAIL"; exit 1
 fi
 
-echo "== fail-fast sin JWT_SECRET =="
+echo "== fail-fast without JWT_SECRET =="
 # Unset JWT_SECRET to verify the server refuses to start. env -u ensures
 # the variable is not inherited from the caller's environment. The
 # server logs its config error to stdout (via slog), so we just check
@@ -94,7 +94,7 @@ set +e
 ( cd "$RUNDIR" && exec env -u JWT_SECRET DATABASE_URL="$DB" PORT=9999 "$BIN" ) >/dev/null 2>&1
 rc=$?
 set -e
-check "aborta sin JWT_SECRET" "1" "$rc"
+check "aborts without JWT_SECRET" "1" "$rc"
 
 echo "== start =="
 UPLOAD_TMP="$(mktemp -d /tmp/pinolrent-uploads.XXXXXX)"
@@ -102,42 +102,42 @@ UPLOAD_TMP="$(mktemp -d /tmp/pinolrent-uploads.XXXXXX)"
   UPLOAD_DIR="$UPLOAD_TMP" ADMIN_EMAILS=admin@example.com "$BIN" ) > "$LOG" 2>&1 &
 PID=$!
 if ! wait_for_health 5; then
-  echo "server no levantó en 5s:"; cat "$LOG"; exit 1
+  echo "server did not start in 5s:"; cat "$LOG"; exit 1
 fi
-check "health responde 200" "200" "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/health")"
+check "health answers 200" "200" "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/health")"
 
-echo "== health con version =="
+echo "== health with version =="
 health_version=$(curl -s "$BASE/health" | jq -r '.version // empty')
-[ -n "$health_version" ]; cond "health incluye version ($health_version)" $?
+[ -n "$health_version" ]; cond "health includes version ($health_version)" $?
 
 echo "== auth =="
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/auth/register" \
   -H 'Content-Type: application/json' \
   -d '{"email":"buyer@example.com","password":"secret123"}')
-check "registro comprador -> 201" "201" "$code"
+check "register buyer -> 201" "201" "$code"
 
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/auth/register" \
   -H 'Content-Type: application/json' \
   -d '{"email":"seller@example.com","password":"secret123","phone":"+56912345678"}')
-check "registro vendedor -> 201" "201" "$code"
+check "register seller -> 201" "201" "$code"
 
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/auth/register" \
   -H 'Content-Type: application/json' \
-  -d '{"email":"sin-telefono@example.com","password":"secret123","phone":"no-es-numero"}')
-check "registro con telefono invalido -> 400" "400" "$code"
+  -d '{"email":"no-phone@example.com","password":"secret123","phone":"not-a-number"}')
+check "register with invalid phone -> 400" "400" "$code"
 
 buyer=$(curl -s -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
   -d '{"email":"buyer@example.com","password":"secret123"}' | jq -r .token)
 seller=$(curl -s -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
   -d '{"email":"seller@example.com","password":"secret123"}' | jq -r .token)
-[ -n "$buyer" ] && [ "$buyer" != "null" ]; cond "token comprador" $?
-[ -n "$seller" ] && [ "$seller" != "null" ]; cond "token vendedor" $?
+[ -n "$buyer" ] && [ "$buyer" != "null" ]; cond "buyer token" $?
+[ -n "$seller" ] && [ "$seller" != "null" ]; cond "seller token" $?
 
-echo "== seller =="
+echo "== seller cars =="
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/seller/cars" \
   -H "Authorization: Bearer $buyer" -H 'Content-Type: application/json' \
   -d '{"name":"X","price_per_day":1}')
-check "comprador no crea autos -> 403" "403" "$code"
+check "buyer cannot create cars -> 403" "403" "$code"
 
 echo "== uploads =="
 # The upload must be a complete, decodable PNG: the server re-encodes jpg/png
@@ -145,34 +145,34 @@ echo "== uploads =="
 png_fixture="bruno/pinolrent-api/fixtures/fit.png"
 upload_json=$(curl -s -X POST "$BASE/uploads" -H "Authorization: Bearer $seller" -F "file=@$png_fixture;type=image/png")
 upload_url=$(printf '%s' "$upload_json" | jq -r .url)
-[ -n "$upload_url" ] && [ "$upload_url" != "null" ]; cond "subir imagen -> url ($upload_url)" $?
+[ -n "$upload_url" ] && [ "$upload_url" != "null" ]; cond "upload image -> url ($upload_url)" $?
 code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE$upload_url")
-check "descargar imagen -> 200" "200" "$code"
+check "download image -> 200" "200" "$code"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/uploads" -H "Authorization: Bearer $seller" -F "file=@$0;type=text/x-shellscript")
-check "subir no-imagen -> 415" "415" "$code"
+check "upload non-image -> 415" "415" "$code"
 # A bare PNG header: it sniffs as a png but declares no pixels to decode.
 bad_png="$(mktemp /tmp/pinolrent-badpng.XXXXXX.png)"
 printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde' > "$bad_png"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/uploads" -H "Authorization: Bearer $seller" -F "file=@$bad_png;type=image/png")
-check "png sin pixeles -> 400" "400" "$code"
+check "png without pixels -> 400" "400" "$code"
 rm -f "$bad_png"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/uploads")
-check "subir sin token -> 401" "401" "$code"
+check "upload without token -> 401" "401" "$code"
 
 car_json=$(curl -s -X POST "$BASE/seller/cars" -H "Authorization: Bearer $seller" \
  -H 'Content-Type: application/json' \
  -d "{\"name\":\"Honda Fit\",\"price_per_day\":25000,\"photo_url\":\"$upload_url\"}")
 car=$(printf '%s' "$car_json" | jq -r .id)
 car_owner=$(printf '%s' "$car_json" | jq -r .owner_id)
-check "crear auto" "numero" "$([ "$car" != "null" ] && echo numero)"
+check "create car" "number" "$([ "$car" != "null" ] && echo number)"
 curl -s -X PATCH "$BASE/seller/cars/$car" -H "Authorization: Bearer $seller" \
   -H 'Content-Type: application/json' -d '{"active":true}' > /dev/null
 
-echo "== reservas =="
+echo "== reservations =="
 res=$(curl -s -X POST "$BASE/reservations" -H "Authorization: Bearer $buyer" \
   -H 'Content-Type: application/json' \
   -d "{\"car_id\":$car,\"start_date\":\"2027-01-10\",\"end_date\":\"2027-01-12\"}" | jq -r .id)
-check "crear reserva" "numero" "$([ "$res" != "null" ] && echo numero)"
+check "create reservation" "number" "$([ "$res" != "null" ] && echo number)"
 
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/reservations" -H "Authorization: Bearer $buyer" \
   -H 'Content-Type: application/json' \
@@ -182,103 +182,103 @@ check "overlap -> 409" "409" "$code"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/reservations" -H "Authorization: Bearer $buyer" \
   -H 'Content-Type: application/json' \
   -d "{\"car_id\":$car,\"start_date\":\"2020-01-01\",\"end_date\":\"2020-01-02\"}")
-check "fecha pasada -> 400" "400" "$code"
+check "past date -> 400" "400" "$code"
 
-echo "== pagos =="
+echo "== payments =="
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/reservations/$res/payment" \
   -H "Authorization: Bearer $buyer" -H 'Content-Type: application/json' \
-  -d '{"method":"pos","proof_url":"https://example.com/recibo.jpg"}')
-check "registrar pago -> 201" "201" "$code"
+  -d '{"method":"pos","proof_url":"https://example.com/receipt.jpg"}')
+check "record payment -> 201" "201" "$code"
 
 code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/seller/reservations/$res/confirm" \
   -H "Authorization: Bearer $seller")
-check "confirmar -> 200" "200" "$code"
+check "confirm -> 200" "200" "$code"
 
-echo "== cancelación =="
+echo "== cancellation =="
 res2=$(curl -s -X POST "$BASE/reservations" -H "Authorization: Bearer $buyer" \
   -H 'Content-Type: application/json' \
   -d "{\"car_id\":$car,\"start_date\":\"2027-02-01\",\"end_date\":\"2027-02-03\"}" | jq -r .id)
-check "reserva para cancelar" "numero" "$([ "$res2" != "null" ] && echo numero)"
+check "reservation to cancel" "number" "$([ "$res2" != "null" ] && echo number)"
 status=$(curl -s -X PATCH "$BASE/reservations/$res2/cancel" -H "Authorization: Bearer $buyer" | jq -r .status)
-check "cancelar -> cancelled" "cancelled" "$status"
+check "cancel -> cancelled" "cancelled" "$status"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/reservations/$res2/cancel" -H "Authorization: Bearer $buyer")
-check "re-cancelar -> 409" "409" "$code"
+check "re-cancel -> 409" "409" "$code"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/reservations" -H "Authorization: Bearer $buyer" \
   -H 'Content-Type: application/json' \
   -d "{\"car_id\":$car,\"start_date\":\"2027-02-01\",\"end_date\":\"2027-02-03\"}")
-check "re-reservar rango liberado -> 201" "201" "$code"
+check "re-book released range -> 201" "201" "$code"
 
-echo "== rechazo =="
+echo "== rejection =="
 res3=$(curl -s -X POST "$BASE/reservations" -H "Authorization: Bearer $buyer" \
   -H 'Content-Type: application/json' \
   -d "{\"car_id\":$car,\"start_date\":\"2027-02-10\",\"end_date\":\"2027-02-12\"}" | jq -r .id)
-check "reserva para rechazar" "numero" "$([ "$res3" != "null" ] && echo numero)"
+check "reservation to reject" "number" "$([ "$res3" != "null" ] && echo number)"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/reservations/$res3/payment" \
   -H "Authorization: Bearer $buyer" -H 'Content-Type: application/json' -d '{"method":"cash"}')
-check "pago para rechazar -> 201" "201" "$code"
+check "payment to reject -> 201" "201" "$code"
 rej=$(curl -s -X PATCH "$BASE/seller/reservations/$res3/reject" -H "Authorization: Bearer $seller")
-check "rechazar -> cancelled" "cancelled" "$(printf '%s' "$rej" | jq -r .status)"
-check "pago rechazado" "rejected" "$(printf '%s' "$rej" | jq -r .payment.status)"
+check "reject -> cancelled" "cancelled" "$(printf '%s' "$rej" | jq -r .status)"
+check "payment rejected" "rejected" "$(printf '%s' "$rej" | jq -r .payment.status)"
 n=$(curl -s "$BASE/cars?start_date=2027-02-11&end_date=2027-02-11" | jq --argjson id "$car" '[.[] | select(.id == $id)] | length')
-check "fechas liberadas tras rechazo" "1" "$n"
+check "dates released after rejection" "1" "$n"
 
-echo "== límite de días =="
+echo "== day limit =="
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/reservations" -H "Authorization: Bearer $buyer" \
   -H 'Content-Type: application/json' \
   -d "{\"car_id\":$car,\"start_date\":\"2027-03-01\",\"end_date\":\"2027-04-05\"}")
-check "rango > 30 días -> 400" "400" "$code"
+check "range > 30 days -> 400" "400" "$code"
 
-echo "== catálogo: dueño y paginación =="
+echo "== catalog: owner and pagination =="
 n=$(curl -s "$BASE/cars?owner_id=$car_owner" | jq 'length')
-check "filtro owner_id" "1" "$n"
+check "owner_id filter" "1" "$n"
 n=$(curl -s "$BASE/cars?owner_id=999999" | jq 'length')
-check "owner inexistente -> vacío" "0" "$n"
+check "nonexistent owner -> empty" "0" "$n"
 code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/cars?owner_id=abc")
-check "owner_id inválido -> 400" "400" "$code"
+check "invalid owner_id -> 400" "400" "$code"
 n=$(curl -s "$BASE/cars?limit=1" | jq 'length')
 check "limit=1" "1" "$n"
 code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/cars?limit=0")
-check "limit inválido -> 400" "400" "$code"
+check "invalid limit -> 400" "400" "$code"
 
-echo "== detalle de auto =="
+echo "== car detail =="
 res=$(curl -s "$BASE/cars/$car")
-check "detalle auto -> id" "$car" "$(printf '%s' "$res" | jq -r .id)"
+check "car detail -> id" "$car" "$(printf '%s' "$res" | jq -r .id)"
 code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/cars/999999")
-check "detalle inexistente -> 404" "404" "$code"
+check "nonexistent detail -> 404" "404" "$code"
 code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/cars/abc")
-check "detalle id inválido -> 400" "400" "$code"
+check "invalid detail id -> 400" "400" "$code"
 
-echo "== contacto del vendedor =="
+echo "== seller contact =="
 wa=$(curl -s "$BASE/cars/$car/contact" -H "Authorization: Bearer $buyer" | jq -r .whatsapp_url)
-echo "$wa" | grep -q '^https://wa.me/56912345678'; cond "contacto -> link wa.me normalizado" $?
+echo "$wa" | grep -q '^https://wa.me/56912345678'; cond "contact -> normalized wa.me link" $?
 code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/cars/$car/contact")
-check "contacto sin token -> 401" "401" "$code"
+check "contact without token -> 401" "401" "$code"
 code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/cars/999999/contact" -H "Authorization: Bearer $buyer")
-check "contacto de auto inexistente -> 404" "404" "$code"
+check "contact for nonexistent car -> 404" "404" "$code"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/seller/cars/$car" -H "Authorization: Bearer $seller" \
   -H 'Content-Type: application/json' -d '{"active":false}')
-check "desactivar con reservas futuras -> 409" "409" "$code"
+check "deactivate with future reservations -> 409" "409" "$code"
 car2_json=$(curl -s -X POST "$BASE/seller/cars" -H "Authorization: Bearer $seller" \
-  -H 'Content-Type: application/json' -d '{"name":"Auto Inactivo","price_per_day":10000}')
+  -H 'Content-Type: application/json' -d '{"name":"Inactive Car","price_per_day":10000}')
 car2=$(printf '%s' "$car2_json" | jq -r .id)
 curl -s -o /dev/null -X PATCH "$BASE/seller/cars/$car2" -H "Authorization: Bearer $seller" \
   -H 'Content-Type: application/json' -d '{"active":false}'
 code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/cars/$car2")
-check "detalle inactivo -> 404" "404" "$code"
+check "inactive detail -> 404" "404" "$code"
 
-echo "== edición y borrado de auto =="
+echo "== car edit and delete =="
 price=$(curl -s -X PATCH "$BASE/seller/cars/$car" -H "Authorization: Bearer $seller" \
   -H 'Content-Type: application/json' -d '{"name":"Honda Fit LX","price_per_day":30000}' | jq -r .price_per_day)
-check "editar auto -> precio" "30000" "$price"
+check "edit car -> price" "30000" "$price"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/seller/cars/$car" \
   -H "Authorization: Bearer $seller" -H 'Content-Type: application/json' -d '{}')
-check "editar sin campos -> 400" "400" "$code"
+check "edit without fields -> 400" "400" "$code"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "$BASE/seller/cars/$car" -H "Authorization: Bearer $seller")
-check "borrar auto con reservas -> 409" "409" "$code"
+check "delete car with reservations -> 409" "409" "$code"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "$BASE/seller/cars/$car2" -H "Authorization: Bearer $seller")
-check "borrar auto sin reservas -> 200" "200" "$code"
+check "delete car without reservations -> 200" "200" "$code"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "$BASE/seller/cars/$car2" -H "Authorization: Bearer $seller")
-check "borrar dos veces -> 404" "404" "$code"
+check "delete twice -> 404" "404" "$code"
 
 echo "== /auth/me =="
 me=$(curl -s "$BASE/auth/me" -H "Authorization: Bearer $seller")
@@ -290,17 +290,17 @@ upgraded=$(curl -s -X POST "$BASE/auth/become-seller" -H "Authorization: Bearer 
   -H 'Content-Type: application/json' -d '{"phone":"+56987654321"}')
 check "become-seller -> buyer,seller" "buyer,seller" "$(printf '%s' "$upgraded" | jq -r '.roles | join(",")')"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/auth/become-seller" -H "Authorization: Bearer $buyer" \
-  -H 'Content-Type: application/json' -d '{"phone":"mal"}')
-check "become-seller telefono invalido -> 400" "400" "$code"
+  -H 'Content-Type: application/json' -d '{"phone":"bad"}')
+check "become-seller invalid phone -> 400" "400" "$code"
 
-echo "== reglas de hardening =="
+echo "== hardening rules =="
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/seller/cars" -H "Authorization: Bearer $seller" \
   -H 'Content-Type: application/json' -d '{"name":"X","price_per_day":1,"photo_url":"mailto:a@b.c"}')
 check "photo_url mailto -> 400" "400" "$code"
 
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/seller/cars" -H "Authorization: Bearer $seller" \
   -H 'Content-Type: application/json' -d '{"name":"X","price_per_day":100000001}')
-check "precio > tope -> 400" "400" "$code"
+check "price over cap -> 400" "400" "$code"
 
 pad=$(head -c 1048600 /dev/zero | tr '\0' 'a')
 { printf '{"email":"'; printf '%s' "$pad"; printf '@a.io","password":"secret123"}'; } > /tmp/.pinolrent-big.json
@@ -309,22 +309,22 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/auth/register" \
 rm -f /tmp/.pinolrent-big.json
 check "body > 1MB -> 413" "413" "$code"
 
-echo "== cambio de contraseña =="
-# token_valid_after es de segundo: cruzar el borde garantiza que el token
-# viejo (emitido en el segundo anterior) quede estrictamente antes del sello.
+echo "== password change =="
+# token_valid_after has second precision: crossing the boundary guarantees the
+# old token (issued in the previous second) lands strictly before the stamp.
 sleep 1.1
 code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/auth/password" \
   -H "Authorization: Bearer $seller" -H 'Content-Type: application/json' \
-  -d '{"current_password":"secret123","new_password":"nuevaClave456"}')
-check "cambiar contraseña -> 200" "200" "$code"
+  -d '{"current_password":"secret123","new_password":"newSecret456"}')
+check "change password -> 200" "200" "$code"
 code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/auth/me" -H "Authorization: Bearer $seller")
-check "token viejo tras cambio -> 401" "401" "$code"
+check "old token after change -> 401" "401" "$code"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/auth/login" \
   -H 'Content-Type: application/json' -d '{"email":"seller@example.com","password":"secret123"}')
-check "login contraseña vieja -> 401" "401" "$code"
+check "login with old password -> 401" "401" "$code"
 seller=$(curl -s -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
-  -d '{"email":"seller@example.com","password":"nuevaClave456"}' | jq -r .token)
-[ -n "$seller" ] && [ "$seller" != "null" ]; cond "login contraseña nueva" $?
+  -d '{"email":"seller@example.com","password":"newSecret456"}' | jq -r .token)
+[ -n "$seller" ] && [ "$seller" != "null" ]; cond "login with new password" $?
 
 echo "== admin =="
 # The admin role only exists when ADMIN_EMAILS names the account, so the
@@ -334,23 +334,23 @@ adminEmail="admin@example.com"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/auth/register" \
   -H 'Content-Type: application/json' \
   -d "{\"email\":\"$adminEmail\",\"password\":\"secret123\"}")
-check "registrar admin -> 201" "201" "$code"
+check "register admin -> 201" "201" "$code"
 
 adminToken=$(curl -s -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
   -d "{\"email\":\"$adminEmail\",\"password\":\"secret123\"}" | jq -r .token)
 [ -n "$adminToken" ] && [ "$adminToken" != "null" ]; cond "login admin" $?
 
 roles=$(curl -s "$BASE/auth/me" -H "Authorization: Bearer $adminToken" | jq -r '.roles | join(",")')
-check "roles del admin" "admin,buyer" "$roles"
+check "admin roles" "admin,buyer" "$roles"
 
 # A plain buyer must not reach any admin route.
 code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/admin/users" -H "Authorization: Bearer $buyer")
-check "admin con token de comprador -> 403" "403" "$code"
+check "admin route with buyer token -> 403" "403" "$code"
 code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/admin/users")
-check "admin sin token -> 401" "401" "$code"
+check "admin route without token -> 401" "401" "$code"
 
 code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/admin/users" -H "Authorization: Bearer $adminToken")
-check "admin con token de admin -> 200" "200" "$code"
+check "admin route with admin token -> 200" "200" "$code"
 
 # Suspension cuts the buyer's still-valid token and lifting it restores access
 # without a new login.
@@ -358,22 +358,22 @@ buyerID=$(curl -s "$BASE/auth/me" -H "Authorization: Bearer $buyer" | jq -r .id)
 code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/admin/users/$buyerID" \
   -H "Authorization: Bearer $adminToken" -H 'Content-Type: application/json' \
   -d '{"suspended":true}')
-check "suspender comprador -> 200" "200" "$code"
+check "suspend buyer -> 200" "200" "$code"
 code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/auth/me" -H "Authorization: Bearer $buyer")
-check "comprador suspendido -> 403" "403" "$code"
+check "suspended buyer -> 403" "403" "$code"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/admin/users/$buyerID" \
   -H "Authorization: Bearer $adminToken" -H 'Content-Type: application/json' \
   -d '{"suspended":false}')
-check "reactivar comprador -> 200" "200" "$code"
+check "reactivate buyer -> 200" "200" "$code"
 code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/auth/me" -H "Authorization: Bearer $buyer")
-check "comprador reactivado -> 200" "200" "$code"
+check "reactivated buyer -> 200" "200" "$code"
 
 # An administrator cannot lock themselves out.
 adminID=$(curl -s "$BASE/auth/me" -H "Authorization: Bearer $adminToken" | jq -r .id)
 code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/admin/users/$adminID" \
   -H "Authorization: Bearer $adminToken" -H 'Content-Type: application/json' \
   -d '{"suspended":true}')
-check "admin no se suspende a si mismo -> 400" "400" "$code"
+check "admin cannot suspend itself -> 400" "400" "$code"
 
 # The allow-list is the only source of the role, so the API must refuse it.
 # Revoke first: the flow above already turned the buyer into a seller, and a
@@ -381,15 +381,15 @@ check "admin no se suspende a si mismo -> 400" "400" "$code"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/admin/users/$buyerID/roles" \
   -H "Authorization: Bearer $adminToken" -H 'Content-Type: application/json' \
   -d '{"seller":false}')
-check "revocar vendedor -> 200" "200" "$code"
+check "revoke seller -> 200" "200" "$code"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/admin/users/$buyerID/roles" \
   -H "Authorization: Bearer $adminToken" -H 'Content-Type: application/json' \
   -d '{"seller":true}')
-check "otorgar vendedor -> 200" "200" "$code"
+check "grant seller -> 200" "200" "$code"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/admin/users/$buyerID/roles" \
   -H "Authorization: Bearer $adminToken" -H 'Content-Type: application/json' \
   -d '{"admin":true}')
-check "otorgar admin por API -> 400" "400" "$code"
+check "grant admin via API -> 400" "400" "$code"
 
 # Read-only surfaces and the audit trail.
 for path in admin/cars admin/reservations admin/payments admin/stats; do
@@ -399,7 +399,7 @@ done
 # The suspension pair above always writes two rows. Compared inside a
 # substitution so a regression reports FAIL instead of tripping `set -e`.
 audits=$(curl -s "$BASE/admin/audit" -H "Authorization: Bearer $adminToken" | jq -r '.total')
-check "auditoria con 4+ entradas" "si" "$([ "${audits:-0}" -ge 4 ] && echo si || echo no)"
+check "audit with 4+ entries" "yes" "$([ "${audits:-0}" -ge 4 ] && echo yes || echo no)"
 
 echo "== rate limit /auth/* =="
 blocked=0
@@ -408,7 +408,7 @@ for _ in $(seq 1 35); do
     -H 'Content-Type: application/json' -d '{"email":"x@x.com","password":"y"}')
   [ "$c" = "429" ] && blocked=$((blocked + 1))
 done
-[ "$blocked" -gt 0 ]; cond "rate limit bloquea (429 x $blocked)" $?
+[ "$blocked" -gt 0 ]; cond "rate limit blocks (429 x $blocked)" $?
 
 echo "== graceful shutdown =="
 kill -TERM "$PID"
@@ -417,9 +417,9 @@ for _ in 1 2 3 4 5 6 7 8 9 10; do
   sleep 0.2
 done
 if kill -0 "$PID" 2>/dev/null; then
-  check "se detiene con SIGTERM" "si" "no"
+  check "stops on SIGTERM" "yes" "no"
 else
-  check "se detiene con SIGTERM" "si" "si"
+  check "stops on SIGTERM" "yes" "yes"
 fi
 PID=""
 
