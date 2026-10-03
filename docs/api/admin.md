@@ -1,63 +1,63 @@
 # Admin
 
-Endpoints de administración de la plataforma. Todos exigen un token de una
-cuenta con el rol `admin`.
+Platform administration endpoints. They all require a token from an account with
+the `admin` role.
 
-## Cómo se consigue el rol `admin`
+## How the `admin` role is obtained
 
-Por la variable de entorno `ADMIN_EMAILS`, y por nada más. Es una allow-list
-de correos y el servidor la sincroniza contra la base al arrancar:
+Through the `ADMIN_EMAILS` environment variable, and nothing else. It is an
+email allow-list and the server syncs it against the database on startup:
 
-- las cuentas listadas que no lo tienen, lo reciben;
-- las cuentas que lo tienen y no están en la lista, lo pierden;
-- una lista vacía revoca el rol a todas.
+- listed accounts that do not have the role get it;
+- accounts that have it and are not on the list lose it;
+- an empty list revokes the role from everyone.
 
-Una cuenta que se registra con un correo de la lista nace ya como `admin`, sin
-esperar un reinicio. **No existe endpoint para conceder ni para quitar el rol
-`admin`** — es deliberado: si lo hubiera, cualquiera con un token de
-administrador sería además el camino para mantenerse administrador por siempre,
-y la allow-list dejaría de ser la fuente de verdad.
+An account registering with an email from the list is born `admin`, without
+waiting for a restart. **There is no endpoint to grant or to remove the `admin`
+role** — that is deliberate: if there were, anyone with an admin token would
+also be a way to stay an admin forever, and the allow-list would stop being the
+source of truth.
 
-Ver [`docs/configuracion.md`](../configuracion.md) para el detalle.
+See [`docs/configuration.md`](../configuration.md) for the details.
 
-## Autorización
+## Authorization
 
-Cada endpoint responde:
+Every endpoint answers:
 
-| Situación | Código |
+| Situation | Status |
 |-----------|--------|
-| Sin `Authorization: Bearer` | `401` |
-| Token inválido o expirado | `401` |
-| Cuenta suspendida | `403` `account suspended` |
-| Token válido sin rol `admin` | `403` `insufficient permissions` |
+| No `Authorization: Bearer` | `401` |
+| Invalid or expired token | `401` |
+| Suspended account | `403` `account suspended` |
+| Valid token without the `admin` role | `403` `insufficient permissions` |
 
-Un administrador **no** es vendedor implícito: los endpoints `/seller/*` siguen
-exigiendo el rol `seller`. La administración va por `/admin/*`.
+An administrator is **not** an implicit seller: the `/seller/*` endpoints still
+require the `seller` role. Administration goes through `/admin/*`.
 
-Las lecturas (`GET`) no llevan rate limit; las que escriben (`PATCH`,
-`DELETE`) usan el bucket estándar por IP.
+Reads (`GET`) carry no rate limit; the ones that write (`PATCH`, `DELETE`) use
+the standard per-IP bucket.
 
 ---
 
 ## `GET /admin/users`
 
-Lista las cuentas de la plataforma. Admite filtros y paginación.
+Lists the accounts of the platform. Supports filters and pagination.
 
 **Query:**
 
-| Parámetro | Tipo | Reglas |
-|-----------|------|--------|
-| `q` | texto | busca en `email` (subcadena, sin distinguir mayúsculas) o en el id exacto |
-| `role` | texto | `buyer`, `seller` o `admin` |
-| `limit` | número | 1 a 200; default 50 |
-| `offset` | número | 0 a 10000; default 0 |
+| Parameter | Type | Rules |
+|-----------|------|-------|
+| `q` | text | searches `email` (substring, case-insensitive) or the exact id |
+| `role` | text | `buyer`, `seller` or `admin` |
+| `limit` | number | 1 to 200; default 50 |
+| `offset` | number | 0 to 10000; default 0 |
 
 ```json
 {
   "items": [
     {"id": 1, "email": "admin@example.com", "roles": ["admin", "buyer"], "phone": ""},
-    {"id": 2, "email": "vendedor@example.com", "phone": "+56912345678", "roles": ["buyer", "seller"]},
-    {"id": 3, "email": "suspendido@example.com", "roles": ["buyer"], "suspended_at": 1730000000}
+    {"id": 2, "email": "seller@example.com", "phone": "+56912345678", "roles": ["buyer", "seller"]},
+    {"id": 3, "email": "suspended@example.com", "roles": ["buyer"], "suspended_at": 1730000000}
   ],
   "total": 3,
   "limit": 50,
@@ -65,112 +65,112 @@ Lista las cuentas de la plataforma. Admite filtros y paginación.
 }
 ```
 
-`phone` viene vacío si la cuenta no tiene. `suspended_at` (Unix) solo aparece
-en cuentas suspendidas. `roles` viene siempre ordenado alfabéticamente.
+`phone` comes back empty if the account has none. `suspended_at` (Unix) only
+shows up on suspended accounts. `roles` always comes back alphabetically sorted.
 
-**Errores:**
+**Errors:**
 
-| Código | Mensaje | Cuándo |
-|--------|---------|--------|
-| `400` | `invalid limit` | `limit` no es número o está fuera de 1..200 |
-| `400` | `invalid offset` | `offset` es negativo o mayor a 10000 |
+| Status | Message | When |
+|--------|---------|------|
+| `400` | `invalid limit` | `limit` is not a number or falls outside 1..200 |
+| `400` | `invalid offset` | `offset` is negative or greater than 10000 |
 
 ---
 
 ## `GET /admin/users/{id}`
 
-Detalle de una cuenta: id, email, phone, roles y `suspended_at` si está
-suspendida. Misma forma que un elemento de la lista.
+Detail of an account: id, email, phone, roles and `suspended_at` when it is
+suspended. Same shape as an item of the listing.
 
-**Errores:**
+**Errors:**
 
-| Código | Mensaje | Cuándo |
-|--------|---------|--------|
-| `400` | `invalid user id` | `{id}` no es un entero |
-| `404` | `user not found` | No existe la cuenta |
+| Status | Message | When |
+|--------|---------|------|
+| `400` | `invalid user id` | `{id}` is not an integer |
+| `404` | `user not found` | The account does not exist |
 
 ---
 
 ## `PATCH /admin/users/{id}`
 
-Suspende o reactiva una cuenta. Una cuenta suspendida recibe `403 account
-suspended` en **todas** las rutas autenticadas, con un token que siga siendo
-válido. Al reactivarla recupera el acceso sin volver a loguearse.
+Suspends or reactivates an account. A suspended account gets `403 account
+suspended` on **every** authenticated route, with a token that is still valid.
+Reactivating it restores access without logging in again.
 
 **Body:**
 
-| Campo | Tipo | ¿Obligatorio? | Reglas |
-|-------|------|---------------|--------|
-| `suspended` | booleano | sí | `true` suspende, `false` reactiva |
+| Field | Type | Required? | Rules |
+|-------|------|-----------|-------|
+| `suspended` | boolean | yes | `true` suspends, `false` reactivates |
 
 ```json
 {"suspended": true}
 ```
 
-**Responde** `200` con el estado actualizado de la cuenta.
+**Answers** `200` with the updated state of the account.
 
-La operación es idempotente: suspender una cuenta ya suspendida devuelve `200`
-sin escribir nada ni en la base ni en la auditoría.
+The operation is idempotent: suspending an already suspended account returns
+`200` without writing anything, neither in the database nor in the audit trail.
 
-Un administrador **no puede suspenderse a sí mismo** (`400 cannot suspend
-yourself`): sería la forma de dejar la plataforma sin nadie que pueda revertir
-la suspensión.
+An administrator **cannot suspend itself** (`400 cannot suspend yourself`): it
+would be a way to leave the platform with nobody able to undo the suspension.
 
-**Errores:**
+**Errors:**
 
-| Código | Mensaje | Cuándo |
-|--------|---------|--------|
-| `400` | `invalid user id` | `{id}` no es un entero |
-| `400` | `cannot suspend yourself` | `{id}` es la cuenta que hace la llamada |
-| `400` | `suspended is required` | Falta `suspended` en el body |
-| `404` | `user not found` | No existe la cuenta |
+| Status | Message | When |
+|--------|---------|------|
+| `400` | `invalid user id` | `{id}` is not an integer |
+| `400` | `cannot suspend yourself` | `{id}` is the account making the call |
+| `400` | `suspended is required` | `suspended` is missing from the body |
+| `404` | `user not found` | The account does not exist |
 
 ---
 
 ## `PATCH /admin/users/{id}/roles`
 
-Otorga o revoca el rol `seller`. No toca el rol `admin` (ver arriba).
+Grants or revokes the `seller` role. It does not touch the `admin` role (see
+above).
 
 **Body:**
 
-| Campo | Tipo | ¿Obligatorio? | Reglas |
-|-------|------|---------------|--------|
-| `seller` | booleano | sí | `true` otorga vendedor, `false` lo revoca |
+| Field | Type | Required? | Rules |
+|-------|------|-----------|-------|
+| `seller` | boolean | yes | `true` grants seller, `false` revokes it |
 
 ```json
 {"seller": true}
 ```
 
-**Responde** `200` con los roles resultantes. Es idempotente: otorgar a quien
-ya es vendedor devuelve `200` sin escribir.
+**Answers** `200` with the resulting roles. It is idempotent: granting it to
+someone who is already a seller returns `200` without writing.
 
-Revocar el rol `seller` no borra los autos ni las reservas de la cuenta: solo
-le quita el acceso a `/seller/*`.
+Revoking the `seller` role does not delete the cars or the reservations of the
+account: it only takes away access to `/seller/*`.
 
-**Errores:**
+**Errors:**
 
-| Código | Mensaje | Cuándo |
-|--------|---------|--------|
-| `400` | `invalid user id` | `{id}` no es un entero |
-| `400` | `seller is required` | Falta `seller` en el body |
-| `404` | `user not found` | No existe la cuenta |
+| Status | Message | When |
+|--------|---------|------|
+| `400` | `invalid user id` | `{id}` is not an integer |
+| `400` | `seller is required` | `seller` is missing from the body |
+| `404` | `user not found` | The account does not exist |
 
 ---
 
 ## `GET /admin/cars`
 
-Lista todos los autos de la plataforma, **incluidos los inactivos**. No aplica
-el filtro de propietario ni el de disponibilidad por fechas de la vista
-pública: es una vista administrativa.
+Lists every car on the platform, **including the inactive ones**. It applies
+neither the owner filter nor the date availability filter of the public view: it
+is an administrative view.
 
-**Query:** `q` (nombre o id), `owner_id`, `active` (`true`/`false`), `limit`,
+**Query:** `q` (name or id), `owner_id`, `active` (`true`/`false`), `limit`,
 `offset`.
 
 ```json
 {
   "items": [
     {"id": 1, "owner_id": 2, "name": "Toyota Yaris", "price_per_day": 45000,
-     "active": true, "owner_email": "vendedor@example.com"}
+     "active": true, "owner_email": "seller@example.com"}
   ],
   "total": 1,
   "limit": 50,
@@ -178,56 +178,55 @@ pública: es una vista administrativa.
 }
 ```
 
-**Errores:** `400` con `invalid limit`, `invalid offset`, `invalid owner_id`
-o `invalid active`.
+**Errors:** `400` with `invalid limit`, `invalid offset`, `invalid owner_id`
+or `invalid active`.
 
 ---
 
 ## `PATCH /admin/cars/{id}`
 
-Edita cualquier auto, sin importar su propietario. Acepta los mismos campos
-que `PATCH /seller/cars/{id}` (`name`, `photo_url`, `price_per_day`, `active`),
-al menos uno.
+Edits any car, regardless of its owner. It accepts the same fields as
+`PATCH /seller/cars/{id}` (`name`, `photo_url`, `price_per_day`, `active`), at
+least one.
 
-La diferencia con la ruta del vendedor: **el administrador puede desactivar un
-auto que tiene reservas futuras**. El vendedor no puede (recibiría `409`),
-porque desactivarse a sí mismo le rompería los contratos abiertos; el
-administrador sí, porque deskusar un anuncio problemático es justamente el caso
-de uso.
+The difference with the seller route: **the administrator can deactivate a car
+that has future reservations**. The seller cannot (it would get `409`), because
+deactivating itself would break its open contracts; the administrator can,
+because taking down a problematic listing is exactly the use case.
 
-**Responde** `200 {"status":"ok"}`.
+**Answers** `200 {"status":"ok"}`.
 
-**Errores:**
+**Errors:**
 
-| Código | Mensaje | Cuándo |
-|--------|---------|--------|
-| `400` | `invalid car id` | `{id}` no es un entero |
-| `400` | `no fields to update` | Body vacío de campos conocidos |
-| `400` | *(mensaje de validación)* | Nombre, precio o foto inválidos |
-| `404` | `car not found` | No existe el auto |
+| Status | Message | When |
+|--------|---------|------|
+| `400` | `invalid car id` | `{id}` is not an integer |
+| `400` | `no fields to update` | Body empty of known fields |
+| `400` | *(validation message)* | Invalid name, price or photo |
+| `404` | `car not found` | The car does not exist |
 
 ---
 
 ## `DELETE /admin/cars/{id}`
 
-Borra cualquier auto sin historial de reservas, sin importar su propietario.
+Deletes any car without reservation history, regardless of its owner.
 
-Un auto que tiene reservas **no** se borra: responde `409`. Las filas de
-reservas referencian al auto, así que un borrado rompería el historial. Para
-sacarlo de la vista pública hay que desactivarlo (`PATCH` con `active: false`),
-que es lo que hace la ruta del vendedor también.
+A car that has reservations is **not** deleted: it answers `409`. The reservation
+rows reference the car, so a delete would break the history. To take it out of
+the public view you have to deactivate it (`PATCH` with `active: false`), which
+is what the seller route does too.
 
-**Responde** `200 {"status":"ok"}`.
+**Answers** `200 {"status":"ok"}`.
 
-**Errores:** `400 invalid car id`, `404 car not found`, `409 car has reservations,
+**Errors:** `400 invalid car id`, `404 car not found`, `409 car has reservations,
 cannot delete`.
 
 ---
 
 ## `GET /admin/reservations`
 
-Lista todas las reservas, con `buyer_email` y `car_name` resueltos para no
-tener que encadenar llamadas.
+Lists every reservation, with `buyer_email` and `car_name` resolved so there is
+no need to chain calls.
 
 **Query:** `status` (`pending`, `confirmed`, `cancelled`), `user_id`,
 `car_id`, `limit`, `offset`.
@@ -237,7 +236,7 @@ tener que encadenar llamadas.
   "items": [
     {"id": 1, "user_id": 3, "car_id": 1, "start_date": "2026-10-05",
      "end_date": "2026-10-07", "status": "confirmed",
-     "buyer_email": "comprador@example.com", "car_name": "Toyota Yaris"}
+     "buyer_email": "buyer@example.com", "car_name": "Toyota Yaris"}
   ],
   "total": 1,
   "limit": 50,
@@ -249,7 +248,7 @@ tener que encadenar llamadas.
 
 ## `GET /admin/payments`
 
-Lista todos los pagos, con el contexto de la reserva y del comprador.
+Lists every payment, with the reservation and buyer context.
 
 **Query:** `status` (`pending`, `approved`, `rejected`), `reservation_id`,
 `limit`, `offset`.
@@ -259,7 +258,7 @@ Lista todos los pagos, con el contexto de la reserva y del comprador.
   "items": [
     {"id": 1, "reservation_id": 1, "method": "pos", "status": "approved",
      "proof_url": "uploads/x.png", "user_id": 3, "car_id": 1,
-     "buyer_email": "comprador@example.com"}
+     "buyer_email": "buyer@example.com"}
   ],
   "total": 1,
   "limit": 50,
@@ -271,7 +270,7 @@ Lista todos los pagos, con el contexto de la reserva y del comprador.
 
 ## `GET /admin/stats`
 
-Métricas de la plataforma, en una sola llamada. Solo lectura, sin paginación.
+Platform metrics, in a single call. Read only, no pagination.
 
 ```json
 {
@@ -282,22 +281,22 @@ Métricas de la plataforma, en una sola llamada. Solo lectura, sin paginación.
 }
 ```
 
-Una reserva no tiene estado `paid`: el CHECK de la tabla solo admite
-`pending`, `confirmed` y `cancelled`. Que una reserva esté pagada se deduce de
-que su pago esté `approved`, y eso es lo que cuenta `payments.approved`.
+A reservation has no `paid` state: the CHECK on the table only admits `pending`,
+`confirmed` and `cancelled`. That a reservation is paid is inferred from its
+payment being `approved`, and that is what `payments.approved` counts.
 
-`approved_total` suma `price_per_day` × días de cada reserva con pago
-aprobado. Ojo: las reservas guardan fechas, no precio, así que la cifra usa el
-**precio actual** del auto, no el que estaba pactado al reservar. Es una
-aproximación para dimensionar la plataforma, no un libro de ingresos.
+`approved_total` adds up `price_per_day` × days of every reservation with an
+approved payment. Beware: reservations store dates, not price, so the figure
+uses the **current** price of the car, not the one agreed on when booking. It is
+an approximation to size the platform, not a revenue ledger.
 
 ---
 
 ## `GET /admin/audit`
 
-Historial de acciones administrativas. Cada fila dice quién hizo qué, sobre
-qué, y cuándo. Los índices son por `actor_id` y por `action`, y el orden es
-del más reciente al más antiguo.
+History of administrative actions. Each row says who did what, to whom, and
+when. The indexes are on `actor_id` and on `action`, and the order is from most
+recent to oldest.
 
 **Query:** `actor_id`, `action`, `limit`, `offset`.
 
@@ -314,25 +313,25 @@ del más reciente al más antiguo.
 }
 ```
 
-### Acciones auditadas
+### Audited actions
 
-| `action` | Origen | Qué registra |
-|----------|--------|--------------|
-| `user.suspend` | `PATCH /admin/users/{id}` | Cuenta suspendida |
-| `user.unsuspend` | `PATCH /admin/users/{id}` | Cuenta reactivada |
-| `user.role_grant_seller` | `PATCH /admin/users/{id}/roles` | Vendedor otorgado |
-| `user.role_revoke_seller` | `PATCH /admin/users/{id}/roles` | Vendedor revocado |
-| `car.update` | `PATCH /admin/cars/{id}` | Auto editado o desactivado |
-| `car.delete` | `DELETE /admin/cars/{id}` | Auto borrado |
+| `action` | Source | What it records |
+|----------|--------|-----------------|
+| `user.suspend` | `PATCH /admin/users/{id}` | Account suspended |
+| `user.unsuspend` | `PATCH /admin/users/{id}` | Account reactivated |
+| `user.role_grant_seller` | `PATCH /admin/users/{id}/roles` | Seller granted |
+| `user.role_revoke_seller` | `PATCH /admin/users/{id}/roles` | Seller revoked |
+| `car.update` | `PATCH /admin/cars/{id}` | Car edited or deactivated |
+| `car.delete` | `DELETE /admin/cars/{id}` | Car deleted |
 
-Cada escritura va **dentro de la misma transacción** que el cambio que la
-origina: o quedan las dos cosas, o no queda ninguna. Por eso una operación
-idempotente que no cambia nada tampoco agrega una fila al historial.
+Every write happens **inside the same transaction** as the change that caused
+it: either both land, or neither does. That is why an idempotent operation that
+changes nothing does not add a row to the history either.
 
-Las lecturas administrativas (`GET`) no se auditan: llenan el registro de ruido
-sin registrar ninguna decisión.
+Administrative reads (`GET`) are not audited: they fill the log with noise
+without recording any decision.
 
-El registro sobrevive a la cuenta que lo hizo: `actor_id` no tiene cascada de
-borrado. Si algún día se borrara el usuario, el `actor_id` quedaría apuntando
-a una cuenta inexistente y por eso la consulta lo resuelve con `LEFT JOIN`
-(`actor_email` puede venir vacío).
+The log outlives the account that wrote it: `actor_id` has no delete cascade. If
+a user were ever deleted, the `actor_id` would point at a non-existent account,
+which is why the query resolves it with a `LEFT JOIN` (`actor_email` can come
+back empty).

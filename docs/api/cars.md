@@ -1,22 +1,22 @@
-# Autos
+# Cars
 
 ## `GET /cars`
 
-Lista autos **activos** de todos los vendedores. Puedes filtrar por vendedor y por fechas (excluye los ya reservados en ese rango). No necesita login.
+Lists the **active** cars of every seller. You can filter by seller and by dates (excludes the ones already booked in that range). Requires no login.
 
-**Filtros** (todos opcionales, se pueden combinar):
+**Filters** (all optional, they can be combined):
 
-| Parámetro | Formato | Reglas |
-|-----------|---------|--------|
-| `start_date` | `YYYY-MM-DD` | debe ir con `end_date` |
+| Parameter | Format | Rules |
+|-----------|--------|-------|
+| `start_date` | `YYYY-MM-DD` | must come with `end_date` |
 | `end_date` | `YYYY-MM-DD` | `>= start_date` |
-| `owner_id` | número | solo autos de ese vendedor |
-| `limit` | número | `1..200`, por defecto `50` |
-| `offset` | número | `>= 0`, por defecto `0` |
+| `owner_id` | number | only the cars of that seller |
+| `limit` | number | `1..200`, default `50` |
+| `offset` | number | `>= 0`, default `0` |
 
-Solo muestra autos con `active=1` y sin reserva `pending`/`confirmed` que choque con `[start_date, end_date]`. Las `cancelled` no bloquean.
+It only shows cars with `active=1` and without a `pending`/`confirmed` reservation that collides with `[start_date, end_date]`. `cancelled` ones do not block.
 
-**Responde** `200`:
+**Answers** `200`:
 
 ```json
 [
@@ -25,164 +25,164 @@ Solo muestra autos con `active=1` y sin reserva `pending`/`confirmed` que choque
 ]
 ```
 
-Sin resultados → `[]`.
+No results → `[]`.
 
-**Errores:**
+**Errors:**
 
-| Código | Mensaje | Cuándo |
-|--------|---------|--------|
-| `400` | `start_date and end_date must be provided together` | Mandaste solo uno |
-| `400` | `invalid start_date, expected YYYY-MM-DD` | Formato mal |
-| `400` | `invalid end_date, expected YYYY-MM-DD` | Formato mal |
-| `400` | `end_date must be on or after start_date` | Rango al revés |
-| `400` | `invalid owner_id` | No es un número válido |
-| `400` | `invalid limit` / `invalid offset` | Paginación mal (`offset` máx. 10000) |
+| Status | Message | When |
+|--------|---------|------|
+| `400` | `start_date and end_date must be provided together` | You sent only one of them |
+| `400` | `invalid start_date, expected YYYY-MM-DD` | Bad format |
+| `400` | `invalid end_date, expected YYYY-MM-DD` | Bad format |
+| `400` | `end_date must be on or after start_date` | Range reversed |
+| `400` | `invalid owner_id` | Not a valid number |
+| `400` | `invalid limit` / `invalid offset` | Bad pagination (`offset` max 10000) |
 
 ---
 
 ## `GET /cars/{id}`
 
-Detalle de un auto **activo**. No necesita login.
+Detail of an **active** car. Requires no login.
 
-**Responde** `200`:
+**Answers** `200`:
 
 ```json
 {"id":1,"owner_id":4,"name":"Toyota Yaris","photo_url":"https://...","price_per_day":45000,"active":true}
 ```
 
-| Código | Mensaje | Cuándo |
-|--------|---------|--------|
-| `400` | `invalid car id` | `{id}` no es número |
-| `404` | `car not found` | No existe o está inactivo |
+| Status | Message | When |
+|--------|---------|------|
+| `400` | `invalid car id` | `{id}` is not a number |
+| `404` | `car not found` | It does not exist or it is inactive |
 
 ---
 
 ## `GET /cars/{id}/contact`
 
-Devuelve el link de WhatsApp del vendedor para coordinar. **Necesita login** — es el único lugar donde se expone un teléfono, a propósito: el catálogo público no se puede cosechar.
+Returns the seller's WhatsApp link to coordinate. **Requires login** — it is the only place a phone number is exposed, on purpose: the public catalog cannot be harvested.
 
 ```
 Authorization: Bearer <token>
 ```
 
-**Responde** `200`:
+**Answers** `200`:
 
 ```json
-{"whatsapp_url":"https://wa.me/56912345678?text=Hola%2C%20vi%20tu%20Toyota%20Yaris%20en%20PinolRent"}
+{"whatsapp_url":"https://wa.me/56912345678?text=Hi%2C%20I%20saw%20your%20Toyota%20Yaris%20on%20PinolRent"}
 ```
 
-El mensaje viene precargado con el nombre del auto, y el número va en formato internacional sin `+`, como pide `wa.me`.
+The message comes prefilled with the car name, and the number uses the international format without `+`, as `wa.me` requires.
 
-| Código | Mensaje | Cuándo |
-|--------|---------|--------|
-| `400` | `invalid car id` | `{id}` no es número |
-| `401` | ver [00-general](00-general.md) | Sin token |
-| `404` | `car not found` | No existe o está inactivo |
-| `409` | `seller has no contact phone` | El vendedor no tiene teléfono cargado |
+| Status | Message | When |
+|--------|---------|------|
+| `400` | `invalid car id` | `{id}` is not a number |
+| `401` | see [00-general](00-general.md) | No token |
+| `404` | `car not found` | It does not exist or it is inactive |
+| `409` | `seller has no contact phone` | The seller has no phone on file |
 
-> Cuenta para el cupo estricto de 30/min (el mismo de `/auth/*`), porque expone un dato personal.
+> It counts against the strict 30/min quota (the same one as `/auth/*`), because it exposes personal data.
 
 ---
 
 ## `GET /seller/cars`
 
-Tus autos como vendedor, más nuevos primero. Necesita membresía `seller`. Acepta `limit`/`offset`.
+Your cars as a seller, newest first. Requires `seller` membership. Accepts `limit`/`offset`.
 
 ```json
 [{"id":1,"owner_id":4,"name":"Toyota Yaris","price_per_day":45000,"active":true}]
 ```
 
-Sin autos → `[]`.
+No cars → `[]`.
 
 ---
 
 ## `POST /seller/cars`
 
-Agrega un auto tuyo. Necesita membresía `seller`.
+Adds one of your cars. Requires `seller` membership.
 
 **Body:**
 
-| Campo | Tipo | ¿Obligatorio? | Reglas |
-|-------|------|---------------|--------|
-| `name` | texto | sí | no vacío, hasta 200 caracteres |
-| `photo_url` | texto | no | si va, URL `http(s)` o ruta `/uploads/...` hasta 2048 (ver [uploads](uploads.md)) |
-| `price_per_day` | número | no | `0..100_000_000` centavos |
+| Field | Type | Required? | Rules |
+|-------|------|-----------|-------|
+| `name` | text | yes | not empty, up to 200 characters |
+| `photo_url` | text | no | when present, an `http(s)` URL or a `/uploads/...` path of up to 2048 (see [uploads](uploads.md)) |
+| `price_per_day` | number | no | `0..100_000_000` cents |
 
 ```json
 {"name":"Toyota Yaris","photo_url":"https://example.com/yaris.jpg","price_per_day":45000}
 ```
 
-**Responde** `201` (nace `active: true` con tu `owner_id`):
+**Answers** `201` (born `active: true` with your `owner_id`):
 
 ```json
 {"id":1,"owner_id":4,"name":"Toyota Yaris","photo_url":"https://example.com/yaris.jpg","price_per_day":45000,"active":true}
 ```
 
-| Código | Mensaje | Cuándo |
-|--------|---------|--------|
-| `400` | `name is required` | Vacío o falta |
-| `400` | `name is too long (max 200 characters)` | Más de 200 |
-| `400` | `price_per_day must be >= 0` | Negativo |
-| `400` | `price_per_day must be <= 100000000` | Se pasó del tope |
-| `400` | `photo_url is too long` | Más de 2048 |
-| `400` | `invalid photo_url` | URL mal formada, sin `http(s)` ni ruta `/uploads/...` válida |
-| `400` | `invalid JSON body` | JSON roto o campos desconocidos |
-| `413` | `request body too large` | Más de 1 MB |
-| `401` / `403` | ver [00-general](00-general.md) | Sin token o sin permiso |
+| Status | Message | When |
+|--------|---------|------|
+| `400` | `name is required` | Empty or missing |
+| `400` | `name is too long (max 200 characters)` | More than 200 |
+| `400` | `price_per_day must be >= 0` | Negative |
+| `400` | `price_per_day must be <= 100000000` | Over the cap |
+| `400` | `photo_url is too long` | More than 2048 |
+| `400` | `invalid photo_url` | Malformed URL, neither `http(s)` nor a valid `/uploads/...` path |
+| `400` | `invalid JSON body` | Broken JSON or unknown fields |
+| `413` | `request body too large` | More than 1 MB |
+| `401` / `403` | see [00-general](00-general.md) | No token or no permission |
 
 ---
 
 ## `PATCH /seller/cars/{id}`
 
-Edita uno de tus autos. Necesita membresía `seller`. Acepta **cualquier combinación** de estos campos (al menos uno):
+Edits one of your cars. Requires `seller` membership. Accepts **any combination** of these fields (at least one):
 
-| Campo | Tipo | Reglas |
-|-------|------|--------|
-| `name` | texto | no vacío, hasta 200 caracteres |
-| `photo_url` | texto | URL `http(s)` o ruta `/uploads/...` hasta 2048; vacío quita la foto |
-| `price_per_day` | número | `0..100_000_000` centavos. Aplica a **reservas futuras**: las ya hechas no cambian |
-| `active` | boolean | prende o apaga el auto (reglas abajo) |
+| Field | Type | Rules |
+|-------|------|-------|
+| `name` | text | not empty, up to 200 characters |
+| `photo_url` | text | `http(s)` URL or `/uploads/...` path of up to 2048; empty removes the photo |
+| `price_per_day` | number | `0..100_000_000` cents. Applies to **future reservations**: the existing ones do not change |
+| `active` | boolean | turns the car on or off (rules below) |
 
 ```json
 {"name":"Toyota Yaris LX","price_per_day":46000}
 ```
 
-**Responde** `200` con el auto actualizado:
+**Answers** `200` with the updated car:
 
 ```json
 {"id":1,"owner_id":4,"name":"Toyota Yaris LX","photo_url":"https://example.com/yaris.jpg","price_per_day":46000,"active":true}
 ```
 
-| Código | Mensaje | Cuándo |
-|--------|---------|--------|
-| `400` | `invalid car id` | `{id}` no es número |
-| `400` | `no fields to update` | Body sin ningún campo |
-| `400` | `name is required` / `name is too long` / `price_per_day ...` / `invalid photo_url` | Reglas de creación, mismos mensajes |
-| `409` | `car has future reservations, cannot deactivate` | Intentás apagar con reservas futuras |
-| `404` | `car not found` | No existe o no es tuyo |
-| `401` / `403` | ver [00-general](00-general.md) | Sin token o sin permiso |
+| Status | Message | When |
+|--------|---------|------|
+| `400` | `invalid car id` | `{id}` is not a number |
+| `400` | `no fields to update` | Body without any field |
+| `400` | `name is required` / `name is too long` / `price_per_day ...` / `invalid photo_url` | Creation rules, same messages |
+| `409` | `car has future reservations, cannot deactivate` | You tried to turn it off with future reservations |
+| `404` | `car not found` | It does not exist or it is not yours |
+| `401` / `403` | see [00-general](00-general.md) | No token or no permission |
 
-Editar nombre, precio o foto **no** está bloqueado por reservas existentes; el guard solo aplica a la transición a `active:false`.
+Editing the name, price or photo is **not** blocked by existing reservations; the guard only applies to the transition to `active:false`.
 
 ---
 
 ## `DELETE /seller/cars/{id}`
 
-Elimina un auto **que nunca tuvo reservas** (ningún estado). Necesita membresía `seller`. Con historial de reservas responde `409`, porque toda reserva referencia a su auto: en ese caso usá `PATCH` con `active:false` para sacarlo del catálogo. La foto del auto la limpia después el proceso de huérfanos.
+Deletes a car that **never had reservations** (in any state). Requires `seller` membership. With reservation history it answers `409`, because every reservation references its car: in that case use `PATCH` with `active:false` to take it out of the catalog. The orphan sweeper cleans up the car photo afterwards.
 
-**Responde** `200`:
+**Answers** `200`:
 
 ```json
 {"status":"ok"}
 ```
 
-| Código | Mensaje | Cuándo |
-|--------|---------|--------|
-| `400` | `invalid car id` | `{id}` no es número |
-| `404` | `car not found` | No existe o no es tuyo |
-| `409` | `car has reservations, cannot delete` | Tiene reservas (cualquier estado) |
-| `401` / `403` | ver [00-general](00-general.md) | Sin token o sin permiso |
+| Status | Message | When |
+|--------|---------|------|
+| `400` | `invalid car id` | `{id}` is not a number |
+| `404` | `car not found` | It does not exist or it is not yours |
+| `409` | `car has reservations, cannot delete` | It has reservations (in any state) |
+| `401` / `403` | see [00-general](00-general.md) | No token or no permission |
 
 ---
 
-> Apagar un auto no borra sus reservas viejas, solo deja de aparecer en `GET /cars` y no acepta reservas nuevas (`409 car is not active`). Si tiene reservas futuras (`pending`/`confirmed`) no deja desactivar (`409`). Si nunca tuvo reservas, `DELETE` lo elimina de raíz.
+> Turning a car off does not delete its old reservations, it only stops showing up in `GET /cars` and stops accepting new reservations (`409 car is not active`). If it has future reservations (`pending`/`confirmed`) it cannot be deactivated (`409`). If it never had reservations, `DELETE` removes it for good.

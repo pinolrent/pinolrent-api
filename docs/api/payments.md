@@ -1,23 +1,23 @@
-# Pagos
+# Payments
 
 ## `POST /reservations/{id}/payment`
 
-Registra el pago de tu reserva. Necesita login.
+Records the payment for your reservation. Requires login.
 
 **Body:**
 
-| Campo | Tipo | ¿Obligatorio? | Reglas |
-|-------|------|---------------|--------|
-| `method` | texto | sí | `pos` o `cash` |
-| `proof_url` | texto | no | si va, URL `http(s)` o ruta `/uploads/...` hasta 2048 (ver [uploads](uploads.md)) |
+| Field | Type | Required? | Rules |
+|-------|------|-----------|-------|
+| `method` | text | yes | `pos` or `cash` |
+| `proof_url` | text | no | when present, an `http(s)` URL or a `/uploads/...` path of up to 2048 (see [uploads](uploads.md)) |
 
 ```json
-{"method":"pos","proof_url":"https://example.com/boleta.pdf"}
+{"method":"pos","proof_url":"https://example.com/receipt.pdf"}
 ```
 
-Reglas: la reserva debe existir y ser tuya, no estar `cancelled` y no tener ya un pago (uno por reserva).
+Rules: the reservation must exist and be yours, must not be `cancelled` and must not already have a payment (one per reservation).
 
-**Responde** `201` (nace `pending`):
+**Answers** `201` (born `pending`):
 
 ```json
 {
@@ -25,33 +25,33 @@ Reglas: la reserva debe existir y ser tuya, no estar `cancelled` y no tener ya u
   "reservation_id":1,
   "method":"pos",
   "status":"pending",
-  "proof_url":"https://example.com/boleta.pdf"
+  "proof_url":"https://example.com/receipt.pdf"
 }
 ```
 
-**Errores:**
+**Errors:**
 
-| Código | Mensaje | Cuándo |
-|--------|---------|--------|
-| `400` | `invalid reservation id` | `{id}` no es número |
-| `400` | `method must be pos or cash` | Método desconocido |
-| `400` | `proof_url is too long` | Más de 2048 |
-| `400` | `invalid proof_url` | URL mal formada, sin `http(s)` ni ruta `/uploads/...` válida |
-| `404` | `reservation not found` | No existe o no es tuya |
-| `409` | `reservation is not pending` | Está cancelada o confirmada |
-| `409` | `payment already recorded` | Ya tiene pago |
-| `400` | `invalid JSON body` | JSON roto o campos desconocidos |
-| `413` | `request body too large` | Más de 1 MB |
+| Status | Message | When |
+|--------|---------|------|
+| `400` | `invalid reservation id` | `{id}` is not a number |
+| `400` | `method must be pos or cash` | Unknown method |
+| `400` | `proof_url is too long` | More than 2048 |
+| `400` | `invalid proof_url` | Malformed URL, neither `http(s)` nor a valid `/uploads/...` path |
+| `404` | `reservation not found` | It does not exist or it is not yours |
+| `409` | `reservation is not pending` | It is cancelled or confirmed |
+| `409` | `payment already recorded` | It already has a payment |
+| `400` | `invalid JSON body` | Broken JSON or unknown fields |
+| `413` | `request body too large` | More than 1 MB |
 
 ---
 
 ## `PATCH /seller/reservations/{id}/confirm`
 
-El vendedor aprueba el pago y confirma la reserva, todo junto en una transacción. Necesita membresía `seller` y que el auto sea tuyo. Sin body.
+The seller approves the payment and confirms the reservation, both in a single transaction. Requires `seller` membership and the car to be yours. No body.
 
-Pasa `payments.status` → `approved` y `reservations.status` → `confirmed`.
+It moves `payments.status` → `approved` and `reservations.status` → `confirmed`.
 
-**Responde** `200`:
+**Answers** `200`:
 
 ```json
 {
@@ -66,24 +66,24 @@ Pasa `payments.status` → `approved` y `reservations.status` → `confirmed`.
 }
 ```
 
-**Errores:**
+**Errors:**
 
-| Código | Mensaje | Cuándo |
-|--------|---------|--------|
-| `400` | `invalid reservation id` | `{id}` no es número |
-| `404` | `reservation not found` | No existe o el auto no es tuyo |
-| `409` | `reservation is not pending` | Ya confirmada o cancelada |
-| `409` | `no payment recorded for this reservation` | No hay pago que aprobar |
+| Status | Message | When |
+|--------|---------|------|
+| `400` | `invalid reservation id` | `{id}` is not a number |
+| `404` | `reservation not found` | It does not exist or the car is not yours |
+| `409` | `reservation is not pending` | Already confirmed or cancelled |
+| `409` | `no payment recorded for this reservation` | There is no payment to approve |
 
 ---
 
 ## `PATCH /seller/reservations/{id}/reject`
 
-Rechaza el pago registrado y **cancela la reserva** en la misma transacción, liberando las fechas. Es la salida para una transferencia trucha o que nunca llegó: sin este endpoint una reserva pagada solo podía avanzar a `confirmed`. Necesita membresía `seller` y que el auto sea tuyo. Sin body.
+Rejects the recorded payment and **cancels the reservation** in the same transaction, releasing the dates. It is the way out for a fraudulent or never-arrived transfer: without this endpoint a paid reservation could only move to `confirmed`. Requires `seller` membership and the car to be yours. No body.
 
-Pasa `payments.status` → `rejected` y `reservations.status` → `cancelled`. La fila de pago se conserva (auditoría), y como solo puede haber un pago por reserva, el comprador debe crear una nueva reserva si aún quiere reservar.
+It moves `payments.status` → `rejected` and `reservations.status` → `cancelled`. The payment row is kept (audit trail), and since there can only be one payment per reservation, the buyer must create a new reservation if they still want to book.
 
-**Responde** `200`:
+**Answers** `200`:
 
 ```json
 {
@@ -98,12 +98,12 @@ Pasa `payments.status` → `rejected` y `reservations.status` → `cancelled`. L
 }
 ```
 
-**Errores:**
+**Errors:**
 
-| Código | Mensaje | Cuándo |
-|--------|---------|--------|
-| `400` | `invalid reservation id` | `{id}` no es número |
-| `404` | `reservation not found` | No existe o el auto no es tuyo |
-| `409` | `reservation is not pending` | Ya confirmada o cancelada |
-| `409` | `no payment recorded for this reservation` | No hay pago que rechazar |
-| `409` | `payment is not pending` | El pago ya no está `pending` |
+| Status | Message | When |
+|--------|---------|------|
+| `400` | `invalid reservation id` | `{id}` is not a number |
+| `404` | `reservation not found` | It does not exist or the car is not yours |
+| `409` | `reservation is not pending` | Already confirmed or cancelled |
+| `409` | `no payment recorded for this reservation` | There is no payment to reject |
+| `409` | `payment is not pending` | The payment is no longer `pending` |

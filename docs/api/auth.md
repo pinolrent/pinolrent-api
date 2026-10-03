@@ -2,259 +2,259 @@
 
 ## `GET /health`
 
-Dice si el server y la base están bien. No necesita login.
+Tells whether the server and the database are fine. Requires no login.
 
-- Responde `200 {"status":"ok","version":"..."}` si todo ok.
-- Responde `503 {"status":"degraded","version":"..."}` si la base no responde.
-- `version` viene de compilar con `make build` (en dev es `"dev"`).
+- Answers `200 {"status":"ok","version":"..."}` if everything is ok.
+- Answers `503 {"status":"degraded","version":"..."}` if the database does not answer.
+- `version` comes from building with `make build` (in dev it is `"dev"`).
 
 ---
 
 ## `POST /auth/register`
 
-Crea una cuenta. Una sola cuenta por email: sin `phone` queda solo compradora (`["buyer"]`), con `phone` válido queda compradora y vendedora desde el inicio (`["buyer","seller"]`). Una cuenta compradora puede subir a vendedora después con `POST /auth/become-seller`. No necesita login.
+Creates an account. One account per email: without `phone` it is only a buyer (`["buyer"]`), with a valid `phone` it is a buyer and a seller from the start (`["buyer","seller"]`). A buyer account can upgrade to seller later with `POST /auth/become-seller`. Requires no login.
 
 **Body:**
 
-| Campo | Tipo | ¿Obligatorio? | Reglas |
-|-------|------|---------------|--------|
-| `email` | texto | sí | formato email (TLD de 2+ letras, sin `..` ni punto/guion en bordes), hasta 254 caracteres, se guarda en minúsculas |
-| `password` | texto | sí | 8 a 72 caracteres |
-| `phone` | texto | no | teléfono de contacto; si viene, se normaliza a E.164 (ver abajo) y la cuenta nace también vendedora |
+| Field | Type | Required? | Rules |
+|-------|------|-----------|-------|
+| `email` | text | yes | email format (TLD of 2+ letters, no `..` nor leading/trailing dot or hyphen), up to 254 characters, stored lowercase |
+| `password` | text | yes | 8 to 72 characters |
+| `phone` | text | no | contact phone; when present it is normalized to E.164 (see below) and the account is also born a seller |
 
 ```json
 {"email":"demo@example.com","password":"secret123","phone":"+56912345678"}
 ```
 
-**Responde** `201`:
+**Answers** `201`:
 
 ```json
 {"email":"demo@example.com"}
 ```
 
-**Errores:**
+**Errors:**
 
-| Código | Mensaje | Cuándo |
-|--------|---------|--------|
-| `400` | `invalid email` | Email mal formado |
-| `400` | `email is too long` | Más de 254 |
-| `400` | `password must be 8-72 characters` | Fuera de rango |
-| `400` | `invalid phone` | Teléfono mal formado |
-| `400` | `invalid JSON body` | JSON roto o campos que no existen |
-| `413` | `request body too large` | Más de 1 MB |
+| Status | Message | When |
+|--------|---------|------|
+| `400` | `invalid email` | Malformed email |
+| `400` | `email is too long` | More than 254 |
+| `400` | `password must be 8-72 characters` | Out of range |
+| `400` | `invalid phone` | Malformed phone |
+| `400` | `invalid JSON body` | Broken JSON or fields that do not exist |
+| `413` | `request body too large` | More than 1 MB |
 
-> Si el email ya existe, responde el mismo `201 {"email":"..."}` para no revelar qué emails están registrados.
+> If the email already exists, it answers the same `201 {"email":"..."}` to avoid revealing which emails are registered.
 
-**Formatos de `phone`:** se acepta formato chileno local (`912345678`, `9 1234 5678`), con código de país sin `+` (`56912345678`) o internacional completo (`+56912345678`, `+14155552671`). Se guardan siempre en E.164 (`+56912345678`), que es lo que necesitan los links de WhatsApp.
+**`phone` formats:** Chilean local formats are accepted (`912345678`, `9 1234 5678`), with a country code without `+` (`56912345678`) or fully international (`+56912345678`, `+14155552671`). They are always stored in E.164 (`+56912345678`), which is what the WhatsApp links need.
 
 ---
 
 ## `POST /auth/become-seller`
 
-Convierte tu cuenta compradora en compradora + vendedora. Necesita login. Es la vía de upgrade `["buyer"]` → `["buyer","seller"]`; es idempotente (si ya sos vendedor, devuelve tu perfil actual).
+Turns your buyer account into a buyer + seller. Requires login. It is the upgrade path `["buyer"]` → `["buyer","seller"]`; it is idempotent (if you are already a seller, it returns your current profile).
 
 **Body:**
 
-| Campo | Tipo | ¿Obligatorio? | Reglas |
-|-------|------|---------------|--------|
-| `phone` | texto | sí | teléfono de contacto E.164 (mismas reglas que en el registro) |
+| Field | Type | Required? | Rules |
+|-------|------|-----------|-------|
+| `phone` | text | yes | E.164 contact phone (same rules as on registration) |
 
 ```json
 {"phone":"+56912345678"}
 ```
 
-**Responde** `200` con tu perfil actualizado, igual que `GET /auth/me`.
+**Answers** `200` with your updated profile, same as `GET /auth/me`.
 
-| Código | Mensaje | Cuándo |
-|--------|---------|--------|
-| `400` | `phone is required for sellers` | Falta el teléfono o está mal formado |
-| `400` | `invalid JSON body` | JSON roto o campos desconocidos |
-| `401` | ver abajo | Sin token o token inválido |
+| Status | Message | When |
+|--------|---------|------|
+| `400` | `phone is required for sellers` | The phone is missing or malformed |
+| `400` | `invalid JSON body` | Broken JSON or unknown fields |
+| `401` | see below | No token or invalid token |
 
 ---
 
 ## `POST /auth/login`
 
-Verifica email y password y devuelve un token. No necesita login.
+Checks the email and password and returns a token. Requires no login.
 
 ```json
-{"email":"vendedor@example.com","password":"secret123"}
+{"email":"seller@example.com","password":"secret123"}
 ```
 
-**Responde** `200`:
+**Answers** `200`:
 
 ```json
 {"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...","refresh_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."}
 ```
 
-**Errores:**
+**Errors:**
 
-| Código | Mensaje | Cuándo |
-|--------|---------|--------|
-| `401` | `invalid credentials` | Email no existe o password mal (mismo mensaje siempre) |
-| `400` | `invalid JSON body` | JSON roto o campos desconocidos |
-| `413` | `request body too large` | Más de 1 MB |
+| Status | Message | When |
+|--------|---------|------|
+| `401` | `invalid credentials` | The email does not exist or the password is wrong (always the same message) |
+| `400` | `invalid JSON body` | Broken JSON or unknown fields |
+| `413` | `request body too large` | More than 1 MB |
 
-> El tiempo de respuesta es el mismo exista o no el email (hace un `bcrypt` dummy si no existe), así no se puede adivinar qué emails están registrados.
+> The response time is the same whether the email exists or not (it runs a dummy `bcrypt` when it does not), so you cannot guess which emails are registered.
 
 ---
 
 ## `POST /auth/refresh`
 
-Cambia un refresh token de un solo uso por un par nuevo (`token` + `refresh_token`). El presentado queda revocado: reusarlo devuelve `401` **y además invalida todos los demás tokens del usuario** — un reuso es señal de robo de token y el server no puede distinguir al ladrón de la víctima, así que cierra ambas sesiones (hay que volver a loguearse).
+Exchanges a single-use refresh token for a new pair (`token` + `refresh_token`). The submitted one is revoked: reusing it returns `401` **and also invalidates every other token of the user** — a reuse is a signal of token theft and the server cannot tell the thief from the victim, so it closes both sessions (you have to log in again).
 
 ```json
 {"refresh_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."}
 ```
 
-**Responde** `200`:
+**Answers** `200`:
 
 ```json
 {"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...","refresh_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."}
 ```
 
-| Código | Mensaje | Cuándo |
-|--------|---------|--------|
-| `401` | `invalid or expired token` | Refresh trucho, vencido o ya usado |
-| `400` | `refresh_token is required` | Falta el campo |
-| `400` | `invalid JSON body` | JSON roto o campos desconocidos |
+| Status | Message | When |
+|--------|---------|------|
+| `401` | `invalid or expired token` | Forged, expired or already used refresh token |
+| `400` | `refresh_token is required` | The field is missing |
+| `400` | `invalid JSON body` | Broken JSON or unknown fields |
 
 ---
 
 ## `POST /auth/logout`
 
-Invalida el token que mandaste en el header. Ese token deja de funcionar (responde `401` de ahí en más). Otros tokens del mismo usuario siguen valiendo — es por token, no por usuario.
+Invalidates the token you sent in the header. That token stops working (it answers `401` from then on). Other tokens of the same user keep working — it is per token, not per user.
 
-Necesita login. Sin body.
+Requires login. No body.
 
-**Responde** `200`:
+**Answers** `200`:
 
 ```json
 {"status":"ok"}
 ```
 
-**Errores:**
+**Errors:**
 
-| Código | Mensaje | Cuándo |
-|--------|---------|--------|
-| `401` | `missing bearer token` | Sin header |
-| `401` | `invalid or expired token` | Token trucho, vencido o ya revocado |
-| `400` | `token cannot be revoked` | Token sin `jti` (no pasa con tokens de esta versión) |
-| `500` | `server error` | Error de base al guardar |
+| Status | Message | When |
+|--------|---------|------|
+| `401` | `missing bearer token` | No header |
+| `401` | `invalid or expired token` | Forged, expired or already revoked token |
+| `400` | `token cannot be revoked` | Token without `jti` (cannot happen with tokens of this version) |
+| `500` | `server error` | Database error while saving |
 
-Las filas se borran solas cada 10 minutos cuando el token ya habría vencido.
+The rows delete themselves every 10 minutes once the token would have expired anyway.
 
 ---
 
 ## `GET /auth/me`
 
-Devuelve tu perfil. Necesita login.
+Returns your profile. Requires login.
 
 ```
 Authorization: Bearer <token>
 ```
 
-**Responde** `200`:
+**Answers** `200`:
 
 ```json
 {"id":3,"email":"demo@example.com","roles":["buyer"],"phone":"+56912345678"}
 ```
 
-`phone` viene vacío (`""`) si no cargaste uno; los vendedores siempre lo tienen. `roles` es `["buyer"]` o `["buyer","seller"]`, o `["admin","buyer"]` si la cuenta está en la allow-list `ADMIN_EMAILS`. Ver [`admin.md`](admin.md).
+`phone` comes back empty (`""`) if you did not set one; sellers always have it. `roles` is `["buyer"]` or `["buyer","seller"]`, or `["admin","buyer"]` if the account is on the `ADMIN_EMAILS` allow-list. See [`admin.md`](admin.md).
 
-| Código | Mensaje | Cuándo |
-|--------|---------|--------|
-| `401` | `missing bearer token` | Sin header |
-| `401` | `invalid or expired token` | Token trucho o vencido |
-| `401` | `user not found` | El usuario del token ya no existe |
+| Status | Message | When |
+|--------|---------|------|
+| `401` | `missing bearer token` | No header |
+| `401` | `invalid or expired token` | Forged or expired token |
+| `401` | `user not found` | The user behind the token no longer exists |
 
-> Está bajo `/auth/` así que cuenta para el límite de 30/min. Mejor cachear la respuesta en el cliente.
+> It lives under `/auth/`, so it counts against the 30/min limit. Better to cache the response on the client.
 
 ---
 
 ## `PATCH /auth/me`
 
-Actualiza tu teléfono. Necesita login. Es lo único editable: el email identifica la cuenta y los roles se otorgan al registrarse (con `phone`) o vía `POST /auth/become-seller`. Guardar `phone` acá nunca te vuelve vendedor.
+Updates your phone. Requires login. It is the only editable field: the email identifies the account and the roles are granted on registration (with `phone`) or through `POST /auth/become-seller`. Setting `phone` here never makes you a seller.
 
 **Body:**
 
-| Campo | Tipo | ¿Obligatorio? | Reglas |
-|-------|------|---------------|--------|
-| `phone` | texto | sí | mismas reglas que en el registro (se normaliza a E.164) |
+| Field | Type | Required? | Rules |
+|-------|------|-----------|-------|
+| `phone` | text | yes | same rules as on registration (normalized to E.164) |
 
 ```json
 {"phone":"9 8765 4321"}
 ```
 
-**Responde** `200` con el perfil actualizado, igual que `GET /auth/me`.
+**Answers** `200` with the updated profile, same as `GET /auth/me`.
 
-| Código | Mensaje | Cuándo |
-|--------|---------|--------|
-| `400` | `invalid phone` | Teléfono mal formado |
-| `400` | `phone is required for sellers` | Un vendedor intentó dejarlo vacío |
-| `400` | `invalid JSON body` | Mandaste `email` o `roles` (no son editables) |
-| `401` | ver arriba | Sin token o token inválido |
+| Status | Message | When |
+|--------|---------|------|
+| `400` | `invalid phone` | Malformed phone |
+| `400` | `phone is required for sellers` | A seller tried to leave it empty |
+| `400` | `invalid JSON body` | You sent `email` or `roles` (they are not editable) |
+| `401` | see above | No token or invalid token |
 
 ---
 
 ## `PATCH /auth/password`
 
-Cambia tu contraseña. Necesita login. **Revoca todas tus sesiones**, incluida la que hace este request: todos los tokens emitidos antes de este momento dejan de valer, así que después del cambio hay que volver a entrar con la contraseña nueva.
+Changes your password. Requires login. **Revokes all your sessions**, including the one making this request: every token issued before this moment stops being valid, so after the change you have to log in again with the new password.
 
 **Body:**
 
-| Campo | Tipo | ¿Obligatorio? | Reglas |
-|-------|------|---------------|--------|
-| `current_password` | texto | sí | tu contraseña actual |
-| `new_password` | texto | sí | 8 a 72 caracteres |
+| Field | Type | Required? | Rules |
+|-------|------|-----------|-------|
+| `current_password` | text | yes | your current password |
+| `new_password` | text | yes | 8 to 72 characters |
 
 ```json
-{"current_password":"secret123","new_password":"nuevaClave456"}
+{"current_password":"secret123","new_password":"newSecret456"}
 ```
 
-**Responde** `200`:
+**Answers** `200`:
 
 ```json
 {"status":"ok"}
 ```
 
-**Errores:**
+**Errors:**
 
-| Código | Mensaje | Cuándo |
-|--------|---------|--------|
-| `401` | `invalid credentials` | La contraseña actual no coincide |
-| `400` | `password must be 8-72 characters` | La nueva está fuera de rango |
-| `400` | `invalid JSON body` | JSON roto o campos desconocidos |
-| `413` | `request body too large` | Más de 1 MB |
-| `401` | ver la tabla de más arriba | Sin token o token revocado |
+| Status | Message | When |
+|--------|---------|------|
+| `401` | `invalid credentials` | The current password does not match |
+| `400` | `password must be 8-72 characters` | The new one is out of range |
+| `400` | `invalid JSON body` | Broken JSON or unknown fields |
+| `413` | `request body too large` | More than 1 MB |
+| `401` | see the table above | No token or revoked token |
 
 ---
 
-## Cómo es el token (JWT)
+## What the token looks like (JWT)
 
-Lo que devuelve `POST /auth/login` es un JWT firmado con **HS256**. El access dura **15 min** y el refresh **7 días** (un solo uso, con rotación):
+What `POST /auth/login` returns is a JWT signed with **HS256**. The access token lasts **15 min** and the refresh token **7 days** (single use, with rotation):
 
-| Claim | Qué es |
-|-------|--------|
-| `uid` | tu id |
-| `roles` | `["buyer"]` o `["buyer","seller"]` |
-| `sub` | tu id como texto |
+| Claim | What it is |
+|-------|------------|
+| `uid` | your id |
+| `roles` | `["buyer"]` or `["buyer","seller"]` |
+| `sub` | your id as text |
 | `iss` | `pinolrent-api` |
-| `aud` | `pinolrent-api` (access) o `pinolrent-api-refresh` (refresh) |
-| `jti` | id único del token (32 hex chars) |
-| `iat` | cuándo se emitió |
-| `exp` | cuándo vence |
+| `aud` | `pinolrent-api` (access) or `pinolrent-api-refresh` (refresh) |
+| `jti` | unique token id (32 hex chars) |
+| `iat` | when it was issued |
+| `exp` | when it expires |
 
-El `jti` es lo que permite invalidar un token con `/auth/logout`. El server lo guarda en `revoked_tokens` y lo revisa en cada request protegida.
+The `jti` is what makes it possible to invalidate a token with `/auth/logout`. The server stores it in `revoked_tokens` and checks it on every protected request.
 
-El server rechaza tokens con:
+The server rejects tokens with:
 
-- Algoritmo que no sea `HS256` (incluido `none`).
-- Falta de `exp`, `iss`, `aud` o `roles`.
-- Firma inválida, vencido o `jti` revocado.
+- An algorithm other than `HS256` (including `none`).
+- A missing `exp`, `iss`, `aud` or `roles`.
+- An invalid signature, expired, or a revoked `jti`.
 
-Los tokens emitidos antes de la migración a `roles` (con el claim singular `role`) se rechazan: hay que volver a loguearse.
+Tokens issued before the migration to `roles` (with the singular `role` claim) are rejected: you have to log in again.
 
 ---
 
-> `/auth/*` limitado a 30 por minuto por IP → `429`.
+> `/auth/*` is limited to 30 per minute per IP → `429`.
