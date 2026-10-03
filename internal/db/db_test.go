@@ -243,20 +243,90 @@ func TestRoleConstraint(t *testing.T) {
 		t.Fatalf("last id: %v", err)
 	}
 
-	for _, role := range []string{"buyer", "seller"} {
+	for _, role := range []string{"buyer", "seller", "admin"} {
 		if _, err := d.ExecContext(ctx,
 			`INSERT INTO user_roles (user_id, role) VALUES (?, ?)`, uid, role); err != nil {
 			t.Fatalf("insert %s: %v", role, err)
 		}
-		// buyer+seller must coexist on one account.
+		// buyer+seller+admin must coexist on one account.
 		if _, err := d.ExecContext(ctx, `DELETE FROM user_roles WHERE user_id = ? AND role = ?`, uid, role); err != nil {
 			t.Fatalf("delete %s: %v", role, err)
 		}
 	}
 
-	if _, err := d.ExecContext(ctx,
-		`INSERT INTO user_roles (user_id, role) VALUES (?, 'admin')`, uid); err == nil {
-		t.Fatal("expected role constraint to reject 'admin'")
+	for _, role := range []string{"moderator", "ADMIN", ""} {
+		if _, err := d.ExecContext(ctx,
+			`INSERT INTO user_roles (user_id, role) VALUES (?, ?)`, uid, role); err == nil {
+			t.Fatalf("expected role constraint to reject %q", role)
+		}
+	}
+}
+
+func TestAdminMigrationKeepsRoleRows(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "admin.db")
+	legacy, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatalf("open legacy: %v", err)
+	}
+	// A database at version 5: single-column users.role, no user_roles table yet.
+	const legacySchema = `
+CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'buyer' CHECK (role IN ('buyer','seller')), created_at TEXT NOT NULL DEFAULT (datetime('now')));
+INSERT INTO users (id, email, password_hash, role) VALUES (1, 'seller@example.com', 'h', 'seller'), (2, 'buyer@example.com', 'h', 'buyer');
+`
+	if _, err := legacy.ExecContext(ctx, legacySchema); err != nil {
+		t.Fatalf("legacy schema: %v", err)
+	}
+	if err := legacy.Close(); err != nil {
+		t.Fatalf("close legacy: %v", err)
+	}
+
+	d, err := Open(path)
+	if err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	t.Cleanup(func() { _ = d.Close() })
+
+	// Rebuilding user_roles for the wider CHECK must not lose memberships.
+	rows, err := d.QueryContext(ctx, `SELECT user_id, role FROM user_roles ORDER BY user_id, role`)
+	if err != nil {
+		t.Fatalf("read roles: %v", err)
+	}
+	var got []string
+	for rows.Next() {
+		var id int64
+		var role string
+		if err := rows.Scan(&id, &role); err != nil {
+			_ = rows.Close()
+			t.Fatalf("scan: %v", err)
+		}
+		got = append(got, role)
+	}
+	_ = rows.Close()
+	if err := rows.Err(); err != nil {
+		t.Fatalf("rows: %v", err)
+	}
+	want := []string{"buyer", "seller", "buyer"}
+	if len(got) != len(want) {
+		t.Fatalf("roles = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("roles = %v, want %v", got, want)
+		}
+	}
+
+	// The rebuild must leave the cascade intact: deleting a user takes its
+	// roles with it.
+	if _, err := d.ExecContext(ctx, `DELETE FROM users WHERE id = 2`); err != nil {
+		t.Fatalf("delete user: %v", err)
+	}
+	var n int
+	if err := d.QueryRowContext(ctx, `SELECT COUNT(*) FROM user_roles WHERE user_id = 2`).Scan(&n); err != nil {
+		t.Fatalf("count roles: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("roles left after user delete: %d, want 0", n)
 	}
 }
 
