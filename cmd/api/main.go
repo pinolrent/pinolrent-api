@@ -65,6 +65,23 @@ func main() {
 		os.Exit(1)
 	}
 
+	adminEmails, err := cfg.AdminEmailList()
+	if err != nil {
+		slog.Error("invalid config", "error", err)
+		os.Exit(1)
+	}
+	h.AdminEmails = make(map[string]bool, len(adminEmails))
+	for _, e := range adminEmails {
+		h.AdminEmails[e] = true
+	}
+	// Reconcile the admin role against the allow-list before serving: accounts
+	// that were granted it out of band pick it up, and accounts dropped from
+	// the list lose it.
+	if _, _, err := a.SyncAdminRoles(ctx, adminEmails); err != nil {
+		slog.Error("sync admin roles", "error", err)
+		os.Exit(1)
+	}
+
 	// #nosec G301 -- the upload directory must be readable by the static
 	// file server and any reverse proxy user; uploaded files stay 0600.
 	if err := os.MkdirAll(cfg.UploadDir, 0o755); err != nil {

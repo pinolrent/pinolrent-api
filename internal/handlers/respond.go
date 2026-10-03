@@ -62,11 +62,21 @@ type API struct {
 	UploadDir      string
 	UploadMaxTotal int64
 	TrustedProxies []*net.IPNet
+	// AdminEmails is the set of lower-cased addresses from ADMIN_EMAILS.
+	// Registration consults it so an administrator account created after the
+	// last startup already carries the role.
+	AdminEmails map[string]bool
 }
 
 // New returns an API bound to the given database pool and auth provider.
 func New(db *sql.DB, a *auth.Auth) *API {
 	return &API{DB: db, Auth: a}
+}
+
+// isAdminEmail reports whether the address is on the administrator
+// allow-list. Accounts store their email lower-cased, so the comparison is too.
+func (a *API) isAdminEmail(email string) bool {
+	return a.AdminEmails[strings.ToLower(strings.TrimSpace(email))]
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

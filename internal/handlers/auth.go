@@ -174,6 +174,13 @@ func (a *API) Register(w http.ResponseWriter, r *http.Request) {
 	if phone != "" {
 		roles = append(roles, "seller")
 	}
+	// An address on ADMIN_EMAILS registers as an administrator right away, so
+	// a new admin account does not need a restart to become usable. The role
+	// is additive: the account stays a working buyer, and only the allow-list
+	// ever grants it.
+	if a.isAdminEmail(in.Email) {
+		roles = append(roles, "admin")
+	}
 
 	// The response intentionally omits the user id: returning id=0 for a
 	// duplicate and the real id for a new account would let an attacker
