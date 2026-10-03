@@ -14,7 +14,7 @@ Lista autos **activos** de todos los vendedores. Puedes filtrar por vendedor y p
 | `limit` | número | `1..200`, por defecto `50` |
 | `offset` | número | `>= 0`, por defecto `0` |
 
-Solo muestra autos con `active=1` y sin reserva `pending`/`confirmed` que choque con `[start_date, end_date]`. Las `cancelled` no bloquean.
+Solo muestra autos con `active=1` y sin reserva `pending`, `awaiting_admin` o `confirmed` que choque con `[start_date, end_date]`. Las `cancelled` no bloquean.
 
 **Responde** `200`:
 
@@ -185,4 +185,4 @@ Elimina un auto **que nunca tuvo reservas** (ningún estado). Necesita membresí
 
 ---
 
-> Apagar un auto no borra sus reservas viejas, solo deja de aparecer en `GET /cars` y no acepta reservas nuevas (`409 car is not active`). Si tiene reservas futuras (`pending`/`confirmed`) no deja desactivar (`409`). Si nunca tuvo reservas, `DELETE` lo elimina de raíz.
+> Apagar un auto no borra sus reservas viejas, solo deja de aparecer en `GET /cars` y no acepta reservas nuevas (`409 car is not active`). Si tiene reservas futuras (`pending`, `awaiting_admin` o `confirmed`) no deja desactivar (`409`). Si nunca tuvo reservas, `DELETE` lo elimina de raíz.

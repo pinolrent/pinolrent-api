@@ -12,7 +12,7 @@ erDiagram
     }
     user_roles {
         int user_id PK_FK
-        text role PK "buyer | seller"
+        text role PK "buyer | seller | admin"
     }
     cars {
         int id PK
@@ -28,7 +28,8 @@ erDiagram
         int car_id FK
         text start_date "YYYY-MM-DD"
         text end_date "YYYY-MM-DD"
-        text status "pending | confirmed | cancelled"
+        text status "pending | awaiting_admin | confirmed | cancelled"
+        text admin_note "motivo de rechazo del admin, vacío si no"
     }
     payments {
         int id PK
@@ -53,7 +54,7 @@ erDiagram
 
 Lo importante del esquema (`internal/db/migrations/`):
 
-- `users.email` es único (sin distinguir mayúsculas/minúsculas). Los roles viven en `user_roles` (`buyer` y/o `seller`, migración 00008): toda cuenta es al menos compradora y puede sumar vendedora.
+- `users.email` es único (sin distinguir mayúsculas/minúsculas). Los roles viven en `user_roles` (`buyer`, `seller` y `admin`, migraciones 00008/00009): toda cuenta es al menos compradora y puede sumar vendedora; `admin` se otorga solo con el comando `cmd/admin`.
 - `users.phone` guarda E.164 (migración 00006, con `CHECK`), vacío si el usuario no cargó uno; es obligatorio para volverse vendedor (al registrarse con `phone` o vía `POST /auth/become-seller`).
 - `cars.owner_id` dice quién es el dueño del auto. `price_per_day` en centavos, `0..100_000_000` con `CHECK` en DB (migración 00005).
 - Las reservas tienen `CHECK(end_date >= start_date)` en DB.
@@ -76,20 +77,24 @@ Lo importante del esquema (`internal/db/migrations/`):
 stateDiagram-v2
     direction LR
     [*] --> pending: POST /reservations
-    pending --> confirmed: vendedor confirma (con pago)
+    pending --> awaiting_admin: vendedor acepta (con pago)
+    awaiting_admin --> confirmed: admin aprueba
+    awaiting_admin --> pending: admin rechaza (motivo en admin_note)
     pending --> cancelled: comprador cancela (sin pago)
+    pending --> cancelled: vendedor rechaza el pago
     confirmed --> [*]
     cancelled --> [*]
 
     state "pago" as p {
         [*] --> pendingPay: POST /reservations/{id}/payment
-        pendingPay --> approved: vendedor confirma
+        pendingPay --> approved: admin aprueba
         pendingPay --> rejected: vendedor rechaza
     }
 ```
 
-- Una reserva nace `pending`. El comprador puede cancelarla mientras siga `pending` y no tenga pago. El vendedor la confirma y pasa a `confirmed` (y el pago a `approved`).
-- Un pago nace `pending` y pasa a `approved` al confirmar, o a `rejected` si el vendedor lo rechaza: la reserva queda `cancelled` y las fechas se liberan. Como solo puede haber un pago por reserva, después del rechazo el comprador crea una nueva reserva.
+- Una reserva nace `pending`. El comprador puede cancelarla mientras siga `pending` y no tenga pago. El vendedor la acepta (pasa a `awaiting_admin`, el pago sigue `pending`) y el admin la aprueba (`confirmed` + pago `approved`) o la rechaza: vuelve a `pending` con un motivo para corregir, y el vendedor la acepta de nuevo.
+- Un pago nace `pending` y pasa a `approved` cuando el admin aprueba la reserva, o a `rejected` si el vendedor lo rechaza: la reserva queda `cancelled` y las fechas se liberan. Como solo puede haber un pago por reserva, después del rechazo el comprador crea una nueva reserva.
+- `awaiting_admin` bloquea las fechas igual que `pending`: solo `cancelled` las libera.
 
 ## Reglas del negocio
 
@@ -110,7 +115,7 @@ stateDiagram-v2
 
 **Todo o nada:**
 
-- Crear reserva, pagar, cancelar y confirmar se hacen dentro de una transacción. Si algo falla, no queda nada a medias.
+- Crear reserva, pagar, cancelar, aceptar y aprobar/rechazar se hacen dentro de una transacción. Si algo falla, no queda nada a medias.
 
 **Privacidad:**
 
@@ -124,4 +129,4 @@ stateDiagram-v2
 
 ## Qué no hace todavía (MVP)
 
-Pasarela de pago, WhatsApp, frontend, límite distribuido entre varios servers, y rechazar pagos.
+Pasarela de pago, WhatsApp, frontend y límite distribuido entre varios servers.

@@ -16,6 +16,7 @@ make tools   # solo la primera vez (instala air, govulncheck, golangci-lint en ~
 make dev     # levanta el server con defaults de dev (JWT_SECRET auto, sin fallar)
 make run     # levanta sin defaults (falla sin JWT_SECRET, como en prod)
 make watch   # levanta con recarga automática al editar (requiere make tools)
+make admin EMAIL=admin@example.com PASSWORD=secret123  # crea/promueve la cuenta admin (una vez)
 ```
 
 ## Endpoints
@@ -42,8 +43,11 @@ make watch   # levanta con recarga automática al editar (requiere make tools)
 | PATCH | `/reservations/{id}/cancel` | sí | Cancelar una reserva tuya (solo si aún no pagaste) |
 | POST | `/reservations/{id}/payment` | sí | Pagar una reserva (`pos` o `cash`) |
 | GET | `/seller/reservations` | vendedor | Ver reservas de tus autos |
-| PATCH | `/seller/reservations/{id}/confirm` | vendedor | Confirmar una reserva y aprobar su pago |
+| PATCH | `/seller/reservations/{id}/confirm` | vendedor | Aceptar una reserva y mandarla a aprobación del admin |
 | PATCH | `/seller/reservations/{id}/reject` | vendedor | Rechazar el pago, cancelar la reserva y liberar fechas |
+| GET | `/admin/reservations` | admin | Historial completo de reservas (todas, filtro `status` opcional) |
+| PATCH | `/admin/reservations/{id}/approve` | admin | Aprobar la solicitud: confirma la reserva y su pago |
+| PATCH | `/admin/reservations/{id}/reject` | admin | Rechazarla: vuelve a `pending` con un motivo para corregir |
 | POST | `/uploads` | sí | Subir una imagen (jpg/png/webp, 5 MB) y obtener su URL local; las jpg/png se re-codifican sin metadatos |
 | GET | `/uploads/{nombre}` | no | Ver una imagen subida |
 
@@ -52,7 +56,8 @@ Si intentas ver o tocar algo que no es tuyo, la API responde `404` como si no ex
 ## Roles
 
 - **Comprador:** reserva autos, paga y ve sus reservas.
-- **Vendedor:** publica sus autos y confirma las reservas de sus autos. Cada vendedor solo ve lo suyo. Se registra con teléfono obligatorio: es el número por el que lo contactan los compradores (WhatsApp).
+- **Vendedor:** publica sus autos y acepta las reservas de sus autos. Cada vendedor solo ve lo suyo. Se registra con teléfono obligatorio: es el número por el que lo contactan los compradores (WhatsApp).
+- **Administrador:** ve el historial completo de reservas y aprueba o rechaza las solicitudes que ya aceptó el vendedor. No se registra por API: se crea o promueve con `make admin EMAIL=... [PASSWORD=...]`.
 
 ## Documentación
 

@@ -47,9 +47,9 @@ Reglas: la reserva debe existir y ser tuya, no estar `cancelled` y no tener ya u
 
 ## `PATCH /seller/reservations/{id}/confirm`
 
-El vendedor aprueba el pago y confirma la reserva, todo junto en una transacción. Necesita membresía `seller` y que el auto sea tuyo. Sin body.
+El vendedor acepta la reserva: pasa a `awaiting_admin` y queda esperando la aprobación del [admin](admin.md), que es quien finalmente la confirma y aprueba el pago. Necesita membresía `seller` y que el auto sea tuyo. Sin body.
 
-Pasa `payments.status` → `approved` y `reservations.status` → `confirmed`.
+El pago registrado se mantiene en `pending`; cuando el admin aprueba, el pago pasa a `approved` y la reserva a `confirmed` en una sola transacción.
 
 **Responde** `200`:
 
@@ -60,9 +60,9 @@ Pasa `payments.status` → `approved` y `reservations.status` → `confirmed`.
   "car_id":1,
   "start_date":"2026-10-01",
   "end_date":"2026-10-05",
-  "status":"confirmed",
+  "status":"awaiting_admin",
   "car":{"id":1,"owner_id":4,"name":"Toyota Yaris","price_per_day":45000,"active":true},
-  "payment":{"id":1,"reservation_id":1,"method":"pos","status":"approved","proof_url":"https://..."}
+  "payment":{"id":1,"reservation_id":1,"method":"pos","status":"pending","proof_url":"https://..."}
 }
 ```
 
@@ -72,14 +72,15 @@ Pasa `payments.status` → `approved` y `reservations.status` → `confirmed`.
 |--------|---------|--------|
 | `400` | `invalid reservation id` | `{id}` no es número |
 | `404` | `reservation not found` | No existe o el auto no es tuyo |
-| `409` | `reservation is not pending` | Ya confirmada o cancelada |
-| `409` | `no payment recorded for this reservation` | No hay pago que aprobar |
+| `409` | `reservation is not pending` | Ya aceptada, confirmada o cancelada |
+| `409` | `no payment recorded for this reservation` | No hay pago que revisar |
+| `409` | `payment is not pending` | El pago ya no está `pending` |
 
 ---
 
 ## `PATCH /seller/reservations/{id}/reject`
 
-Rechaza el pago registrado y **cancela la reserva** en la misma transacción, liberando las fechas. Es la salida para una transferencia trucha o que nunca llegó: sin este endpoint una reserva pagada solo podía avanzar a `confirmed`. Necesita membresía `seller` y que el auto sea tuyo. Sin body.
+Rechaza el pago registrado y **cancela la reserva** en la misma transacción, liberando las fechas. Es la salida para una transferencia trucha o que nunca llegó: sin este endpoint una reserva pagada solo podía avanzar a la aprobación del admin. Necesita membresía `seller` y que el auto sea tuyo. Sin body. Solo aplica mientras la reserva esté `pending`: antes de que el vendedor la acepte o después de un rechazo del admin (una vez aceptada, la rechaza el admin).
 
 Pasa `payments.status` → `rejected` y `reservations.status` → `cancelled`. La fila de pago se conserva (auditoría), y como solo puede haber un pago por reserva, el comprador debe crear una nueva reserva si aún quiere reservar.
 

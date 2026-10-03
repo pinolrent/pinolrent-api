@@ -160,7 +160,7 @@ Authorization: Bearer <token>
 {"id":3,"email":"demo@example.com","roles":["buyer"],"phone":"+56912345678"}
 ```
 
-`phone` viene vacío (`""`) si no cargaste uno; los vendedores siempre lo tienen. `roles` es `["buyer"]` o `["buyer","seller"]`.
+`phone` viene vacío (`""`) si no cargaste uno; los vendedores siempre lo tienen. `roles` es `["buyer"]`, `["buyer","seller"]` o `["admin"]` (cuentas de administrador, creadas fuera de la API con `cmd/admin`).
 
 | Código | Mensaje | Cuándo |
 |--------|---------|--------|
@@ -237,7 +237,7 @@ Lo que devuelve `POST /auth/login` es un JWT firmado con **HS256**. El access du
 | Claim | Qué es |
 |-------|--------|
 | `uid` | tu id |
-| `roles` | `["buyer"]` o `["buyer","seller"]` |
+| `roles` | `["buyer"]`, `["buyer","seller"]` o `["admin"]` |
 | `sub` | tu id como texto |
 | `iss` | `pinolrent-api` |
 | `aud` | `pinolrent-api` (access) o `pinolrent-api-refresh` (refresh) |

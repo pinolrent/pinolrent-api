@@ -21,7 +21,8 @@ El token lo sacas de `POST /auth/login`: el access dura **15 min** y el refresh 
 Roles (una sola cuenta por email, con membresía a 1–2 roles):
 
 - **`buyer`** (comprador): reserva, paga y ve sus reservas. Toda cuenta nace al menos compradora.
-- **`seller`** (vendedor): publica sus autos y confirma reservas de sus autos. **Requiere teléfono**, porque es el número con el que lo contactan los compradores. Se obtiene registrando con `phone` o después con `POST /auth/become-seller`.
+- **`seller`** (vendedor): publica sus autos y acepta reservas de sus autos. **Requiere teléfono**, porque es el número con el que lo contactan los compradores. Se obtiene registrando con `phone` o después con `POST /auth/become-seller`.
+- **`admin`** (administrador): ve el historial completo de reservas y aprueba o rechaza las solicitudes aceptadas por el vendedor. No se obtiene por registro: se crea o promueve con el comando de operación (ver [admin](admin.md)).
 
 No existe cuenta "solo vendedora": un vendedor también reserva como comprador con el mismo token. El frontend deriva el switch Comprar | Vender de `GET /auth/me` → `roles`.
 
@@ -54,7 +55,7 @@ Siempre así:
 
 ## Paginación
 
-Las listas (`GET /cars`, `GET /seller/cars`, `GET /reservations`, `GET /seller/reservations`) aceptan:
+Las listas (`GET /cars`, `GET /seller/cars`, `GET /reservations`, `GET /seller/reservations`, `GET /admin/reservations`) aceptan:
 
 | Parámetro | Por defecto | Reglas |
 |-----------|-------------|--------|
@@ -91,6 +92,9 @@ Responden un **array simple**. Para saber si hay más, pedí `limit+1` y fijate 
 | GET | `/seller/reservations` | vendedor | [payments](payments.md) |
 | PATCH | `/seller/reservations/{id}/confirm` | vendedor | [payments](payments.md) |
 | PATCH | `/seller/reservations/{id}/reject` | vendedor | [payments](payments.md) |
+| GET | `/admin/reservations` | admin | [admin](admin.md) |
+| PATCH | `/admin/reservations/{id}/approve` | admin | [admin](admin.md) |
+| PATCH | `/admin/reservations/{id}/reject` | admin | [admin](admin.md) |
 | POST | `/uploads` | sí | [uploads](uploads.md) |
 | GET | `/uploads/{nombre}` | no | [uploads](uploads.md) |
 
@@ -127,7 +131,7 @@ Responden un **array simple**. Para saber si hay más, pedí `limit+1` y fijate 
 }
 ```
 
-`payment` no aparece hasta que se paga.
+`payment` no aparece hasta que se paga. `admin_note` aparece solo mientras la reserva quedó en `pending` esperando una corrección tras un rechazo del admin. Los estados posibles son `pending`, `awaiting_admin`, `confirmed` y `cancelled`.
 
 **Pago:**
 

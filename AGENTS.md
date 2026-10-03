@@ -28,6 +28,7 @@ make tools   # one-time: installs air, govulncheck, golangci-lint to $(go env GO
 make dev     # start server with dev defaults (JWT_SECRET auto-filled, no .env needed)
 make run     # start without defaults — fails without JWT_SECRET, like prod
 make watch   # hot-reload via air (requires make tools)
+make admin EMAIL=admin@example.com PASSWORD=secret123  # create/promote the admin account (one-time; Bruno needs it)
 ```
 
 Required env: `JWT_SECRET` (min 32 bytes). Optional: `PORT` (default 8080, must be 1-65535),
@@ -82,7 +83,7 @@ in sync.
 ## Testing
 
 - Tests live next to code as `*_test.go`, package `internal/auth`, `config`, `db`, `handlers`, `ratelimit`.
-- Helpers in `internal/handlers/helpers_test.go`: `newTestAPI`, `doJSON`, `newSeller`, `registerBuyer`, `futureDate`.
+- Helpers in `internal/handlers/helpers_test.go`: `newTestAPI`, `doJSON`, `newSeller`, `newAdmin`, `registerBuyer`, `futureDate`.
   Use `futureDate(n)` for reservation dates — never hardcode calendar dates (they go stale).
 - `internal/handlers/middleware_test.go` covers security headers, panic recovery, and edge cases.
 - `scripts/demo.sh` is the E2E smoke — exercises the full buyer/seller flow with `curl`+`jq`.
@@ -96,6 +97,7 @@ wrapper and its rate limiter (`limitNone`/`limitStrict`/`limitStandard`). `Route
 method list all derive from it, so a new endpoint is one table entry and nothing else. Tests enforce the
 invariants: no duplicate patterns, every `/auth/*` route uses the strict limiter, every mutating route uses
 the standard limiter, and every route that declares a limiter actually answers `429` when its burst is spent.
+`/admin/*` routes require the `admin` role, which is only granted by `cmd/admin` (there is no self-service path).
 
 `internal/handlers/router.go` attaches each limiter to its route (per route, never by path prefix: a pattern
 like `/reservations/{id}/payment` does not match a real request path) and assembles the production chain
@@ -120,8 +122,10 @@ Move the generated file to `internal/db/migrations/` and edit `Up`/`Down`.
 `bruno/pinolrent-api/` — all requests live in the single `flujo/` folder and run in `seq` order (tokens and IDs chain via variables).
 The Bruno CLI only honors `seq` within a folder and runs folders alphabetically, so a chained flow must not be split across folders.
 Assertions use `res.status` / `res.body.*` (the `$res` variant throws `ReferenceError` in the CLI).
-`collection.bru` defines `baseUrl` (default `http://localhost:8080`), `sellerToken`/`buyerToken`,
-`carId`/`reservationId`. Update the collection when adding or changing endpoints.
+`collection.bru` defines `baseUrl` (default `http://localhost:8080`), `sellerToken`/`buyerToken`/`adminToken`,
+`carId`/`reservationId`. Update the collection when adding or changing endpoints. The admin requests log in
+as `admin@example.com`, so a fresh database needs `make admin EMAIL=admin@example.com PASSWORD=secret123`
+once before running the collection.
 
 ## Commit and PR conventions
 

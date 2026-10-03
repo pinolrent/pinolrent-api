@@ -29,6 +29,16 @@ Ver [Configuración](configuracion.md) para cómo se recorre la cadena de `X-For
 
 El contenedor debe montar `/data` como volumen persistente: ahí viven la base (`pinolrent.db` con sus `-wal`/`-shm`) y `uploads/`. El healthcheck apunta a `GET /health` (puerto 8080). La versión que informa la imagen la calcula sola con `git describe` sobre el clone (tag + sha); se puede sobrescribir con el build-arg `VERSION`, y responde `dev` solo si el build no tiene `.git`.
 
+### Primer administrador
+
+El rol `admin` no se da de alta por API. Corré el comando contra la misma base (una vez):
+
+```sh
+DATABASE_URL=/data/pinolrent.db go run ./cmd/admin -email admin@tudominio.com -password '...'
+```
+
+Crea la cuenta si no existe (nace solo con rol `admin`) y, si ya existe, solo le garantiza el rol sin tocar la contraseña. Es idempotente.
+
 ## Deploy y rollback
 
 1. Push a `main`: la plataforma de despliegue, con el auto-deploy (webhook) conectado al repo, reconstruye la imagen y reemplaza el contenedor. Las migraciones se aplican solas al arrancar y son aditivas.

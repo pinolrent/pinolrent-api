@@ -2,6 +2,8 @@
 
 Todas necesitan `Authorization: Bearer <token>`.
 
+Una reserva nace `pending`. El vendedor la acepta y pasa a `awaiting_admin`, esperando la aprobación del [admin](admin.md) (que la confirma o la devuelve a `pending` con un motivo en `admin_note`). También puede terminar `cancelled`: cancelada por el comprador antes de pagar, o rechazada por el vendedor.
+
 ## `POST /reservations`
 
 Reserva un auto. Necesita login.
