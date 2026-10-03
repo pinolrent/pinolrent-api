@@ -4,6 +4,7 @@ package config
 import (
 	"fmt"
 	"net"
+	"net/mail"
 	"net/url"
 	"strconv"
 	"strings"
@@ -24,6 +25,10 @@ type Config struct {
 	// limit forever.
 	UploadMaxTotalMB  int    `env:"UPLOAD_MAX_TOTAL_MB" envDefault:"1024"`
 	TrustedProxyCIDRs string `env:"TRUSTED_PROXY_CIDRS"`
+	// AdminEmails is the allow-list of accounts that hold the admin role.
+	// Empty (the default) means the deployment has no administrator, which
+	// is a valid state: every route still works, only /admin is unreachable.
+	AdminEmails string `env:"ADMIN_EMAILS"`
 }
 
 // Load reads the configuration from the environment, applying defaults for
@@ -64,6 +69,9 @@ func (c Config) Validate() error {
 	if _, err := c.TrustedProxies(); err != nil {
 		return err
 	}
+	if _, err := c.AdminEmailList(); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -86,6 +94,59 @@ func (c Config) TrustedProxies() ([]*net.IPNet, error) {
 	}
 	return nets, nil
 }
+
+// AdminEmailList parses the comma-separated allow-list of administrator
+// accounts. Entries are lower-cased so the lookup matches the email the
+// account registered with, and blanks are dropped so a trailing comma is not
+// an error. A malformed entry fails the whole list: a typo in an
+// administrator address must not silently leave the deployment unadministered.
+func (c Config) AdminEmailList() ([]string, error) {
+	var emails []string
+	for _, entry := range strings.Split(c.AdminEmails, ",") {
+		entry = strings.ToLower(strings.TrimSpace(entry))
+		if entry == "" {
+			continue
+		}
+		addr, err := mail.ParseAddress(entry)
+		if err != nil || addr.Name != "" || addr.Address != entry ||
+			len(entry) > maxEmailLen || !hasDottedDomain(entry) {
+			return nil, fmt.Errorf("invalid ADMIN_EMAILS entry %q: want a plain address like admin@example.com", entry)
+		}
+		emails = append(emails, entry)
+	}
+	return emails, nil
+}
+
+// hasDottedDomain requires a dot-separated domain with an alphabetic TLD of
+// at least two characters. net/mail happily parses "admin@localhost", but
+// registration rejects it, so such an entry could never match an account and
+// the deployment would end up with no administrator and no error to explain
+// it.
+func hasDottedDomain(email string) bool {
+	_, domain, ok := strings.Cut(email, "@")
+	if !ok {
+		return false
+	}
+	_, tld, ok := strings.Cut(domain, ".")
+	if !ok {
+		return false
+	}
+	if len(tld) < 2 {
+		return false
+	}
+	for i := 0; i < len(tld); i++ {
+		c := tld[i]
+		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') {
+			return false
+		}
+	}
+	return true
+}
+
+// maxEmailLen bounds an administrator address at the same width the
+// registration handler accepts, so an allow-listed account can always be
+// registered afterwards.
+const maxEmailLen = 254
 
 // CORSOrigins parses the comma-separated allow-list for cross-origin requests.
 // Each entry must be "*" (any origin) or a full origin like

@@ -192,3 +192,69 @@ func TestCORSOrigins(t *testing.T) {
 		})
 	}
 }
+
+func TestAdminEmailList(t *testing.T) {
+	cases := []struct {
+		name    string
+		in      string
+		want    []string
+		wantErr bool
+	}{
+		{"empty", "", []string{}, false},
+		{"single", "admin@example.com", []string{"admin@example.com"}, false},
+		{"several", "admin@example.com, ops@example.cl", []string{"admin@example.com", "ops@example.cl"}, false},
+		{"lower-cased and padded", " Admin@Example.COM , ops@example.cl ", []string{"admin@example.com", "ops@example.cl"}, false},
+		{"trailing comma", "admin@example.com,", []string{"admin@example.com"}, false},
+		{"display name", "Admin <admin@example.com>", nil, true},
+		{"no at", "not-an-email", nil, true},
+		{"no domain dot", "admin@localhost", nil, true},
+		{"numeric tld", "admin@example.1", nil, true},
+		{"too long", strings.Repeat("a", 250) + "@example.com", nil, true},
+		{"one bad entry fails the list", "admin@example.com, nope", nil, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := Config{AdminEmails: tc.in}
+			got, err := cfg.AdminEmailList()
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got %v", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(got) != len(tc.want) {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Fatalf("got %v, want %v", got, tc.want)
+				}
+			}
+		})
+	}
+}
+
+func TestValidateRejectsBadAdminEmails(t *testing.T) {
+	cfg := Config{
+		Port:        "8080",
+		DatabaseURL: "x.db",
+		JWTSecret:   testJWTSecret,
+		UploadDir:   "uploads",
+		AdminEmails: "not-an-email",
+	}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected Validate to reject a malformed ADMIN_EMAILS entry")
+	}
+	if !strings.Contains(err.Error(), "ADMIN_EMAILS") {
+		t.Fatalf("error %q should mention ADMIN_EMAILS", err.Error())
+	}
+
+	cfg.AdminEmails = "admin@example.com"
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("valid ADMIN_EMAILS rejected: %v", err)
+	}
+}
