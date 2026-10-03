@@ -1,0 +1,26 @@
+meta {
+  name: Admin busca vendedor
+  type: http
+  seq: 39
+}
+
+get {
+  url: {{baseUrl}}/admin/users?q=seller&role=seller
+  body: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.items: isDefined
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (body.items && body.items.length > 0) {
+    bru.setVar("sellerUserId", body.items[0].id);
+  }
+}

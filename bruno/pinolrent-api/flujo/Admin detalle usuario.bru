@@ -1,0 +1,19 @@
+meta {
+  name: Admin detalle usuario
+  type: http
+  seq: 38
+}
+
+get {
+  url: {{baseUrl}}/admin/users/{{sellerUserId}}
+  body: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.roles: isDefined
+}

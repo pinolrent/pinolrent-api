@@ -1,0 +1,25 @@
+meta {
+  name: Perfil admin
+  type: http
+  seq: 35
+}
+
+get {
+  url: {{baseUrl}}/auth/me
+  body: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+assert {
+  res.status: eq 200
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (body.roles && body.roles.includes("admin")) {
+    bru.setVar("adminUserId", body.id);
+  }
+}

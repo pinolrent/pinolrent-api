@@ -1,0 +1,26 @@
+meta {
+  name: Admin suspende comprador
+  type: http
+  seq: 41
+}
+
+patch {
+  url: {{baseUrl}}/admin/users/{{buyerUserId}}
+  body: json
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{adminToken}}
+}
+
+body:json {
+  {
+    "suspended": true
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.suspended_at: isDefined
+}

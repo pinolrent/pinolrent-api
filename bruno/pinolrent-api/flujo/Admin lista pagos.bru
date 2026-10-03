@@ -1,0 +1,19 @@
+meta {
+  name: Admin lista pagos
+  type: http
+  seq: 45
+}
+
+get {
+  url: {{baseUrl}}/admin/payments
+  body: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.items: isDefined
+}

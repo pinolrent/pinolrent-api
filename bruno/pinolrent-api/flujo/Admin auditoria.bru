@@ -1,0 +1,21 @@
+meta {
+  name: Admin auditoria
+  type: http
+  seq: 47
+}
+
+get {
+  url: {{baseUrl}}/admin/audit
+  body: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.items: isDefined
+  res.body.items[0].action: isDefined
+  res.body.items[0].actor_email: isDefined
+}
