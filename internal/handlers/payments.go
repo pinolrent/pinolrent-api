@@ -117,9 +117,10 @@ func (a *API) RecordPayment(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ConfirmReservation approves the reservation payment and marks the
-// reservation as confirmed, atomically. Only the seller that owns the car can
-// confirm its reservations.
+// ConfirmReservation is the seller's acceptance: the reservation moves from
+// pending to awaiting_admin and the payment stays pending for the admin's
+// final approval. Only the seller that owns the car can accept its
+// reservations.
 func (a *API) ConfirmReservation(w http.ResponseWriter, r *http.Request) {
 	u, _ := auth.CurrentUser(r.Context())
 
@@ -129,7 +130,7 @@ func (a *API) ConfirmReservation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	confirmed := false
+	accepted := false
 	err = withImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
 		ctx := r.Context()
 
@@ -156,7 +157,7 @@ func (a *API) ConfirmReservation(w http.ResponseWriter, r *http.Request) {
 		}
 
 		var pStatus string
-		if err := conn.QueryRowContext(ctx, `SELECT method, status FROM payments WHERE reservation_id = ?`, id).Scan(new(string), &pStatus); err != nil {
+		if err := conn.QueryRowContext(ctx, `SELECT status FROM payments WHERE reservation_id = ?`, id).Scan(&pStatus); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				writeError(w, http.StatusConflict, "no payment recorded for this reservation")
 				return errTxHandled
@@ -169,27 +170,21 @@ func (a *API) ConfirmReservation(w http.ResponseWriter, r *http.Request) {
 			return errTxHandled
 		}
 
-		res, err := conn.ExecContext(ctx, `UPDATE payments SET status = 'approved' WHERE reservation_id = ? AND status = 'pending'`, id)
-		if err != nil {
+		// Accepting also clears the note of a previous admin rejection: the
+		// reason only describes the rejection that was just corrected.
+		if _, err := conn.ExecContext(ctx,
+			`UPDATE reservations SET status = 'awaiting_admin', admin_note = '' WHERE id = ?`, id); err != nil {
 			serverError(w, err)
 			return errTxHandled
 		}
-		if n, _ := res.RowsAffected(); n == 0 {
-			writeError(w, http.StatusConflict, "no payment recorded for this reservation")
-			return errTxHandled
-		}
-		if _, err := conn.ExecContext(ctx, `UPDATE reservations SET status = 'confirmed' WHERE id = ?`, id); err != nil {
-			serverError(w, err)
-			return errTxHandled
-		}
-		confirmed = true
+		accepted = true
 		return nil
 	})
 	if err != nil {
 		serverError(w, err)
 		return
 	}
-	if !confirmed {
+	if !accepted {
 		return
 	}
 

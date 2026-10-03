@@ -26,7 +26,7 @@ type reservationView struct {
 // itself, its car, and an optional payment from the LEFT JOIN. The car block is
 // built from carColumnsQualified so adding a car column cannot desync the JOIN.
 const reservationSelect = `
-SELECT r.id, r.user_id, r.car_id, r.start_date, r.end_date, r.status,
+SELECT r.id, r.user_id, r.car_id, r.start_date, r.end_date, r.status, r.admin_note,
 	` + carColumnsQualified + `,
 	p.id, p.reservation_id, p.method, p.status, p.proof_url
 FROM reservations r
@@ -42,7 +42,7 @@ func scanReservation(row rowScanner, v *reservationView) error {
 	var pMethod, pStatus, pProof sql.NullString
 
 	err := row.Scan(
-		&v.ID, &v.UserID, &v.CarID, &v.StartDate, &v.EndDate, &v.Status,
+		&v.ID, &v.UserID, &v.CarID, &v.StartDate, &v.EndDate, &v.Status, &v.AdminNote,
 		&c.ID, &c.OwnerID, &c.Name, &c.PhotoURL, &c.PricePerDay, &active,
 		&pID, &pResID, &pMethod, &pStatus, &pProof,
 	)

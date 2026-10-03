@@ -44,6 +44,9 @@ type Reservation struct {
 	StartDate string `json:"start_date"`
 	EndDate   string `json:"end_date"`
 	Status    string `json:"status"`
+	// AdminNote is the admin's rejection reason while the reservation is
+	// back to pending for correction; cleared when the seller accepts again.
+	AdminNote string `json:"admin_note,omitempty"`
 }
 
 // Payment is the record of payment for a reservation.

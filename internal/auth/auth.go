@@ -69,10 +69,16 @@ func (c *Claims) ExpiresAtUnix() int64 {
 	return c.ExpiresAt.Unix()
 }
 
-// HashPassword returns the bcrypt hash of pw.
-func (a *Auth) HashPassword(pw string) (string, error) {
+// HashPassword returns the bcrypt hash of pw. It is the single place the
+// hashing cost is configured, so the API and the admin tool stay in sync.
+func HashPassword(pw string) (string, error) {
 	b, err := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.DefaultCost)
 	return string(b), err
+}
+
+// HashPassword returns the bcrypt hash of pw.
+func (a *Auth) HashPassword(pw string) (string, error) {
+	return HashPassword(pw)
 }
 
 // CheckPassword reports whether pw matches the given bcrypt hash.

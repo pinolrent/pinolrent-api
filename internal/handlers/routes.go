@@ -58,6 +58,9 @@ func (a *API) routes() []route {
 		{http.MethodGet, "/seller/reservations", a.Auth.RequireRole("seller", a.ListSellerReservations), limitNone},
 		{http.MethodPatch, "/seller/reservations/{id}/confirm", a.Auth.RequireRole("seller", a.ConfirmReservation), limitStandard},
 		{http.MethodPatch, "/seller/reservations/{id}/reject", a.Auth.RequireRole("seller", a.RejectReservation), limitStandard},
+		{http.MethodGet, "/admin/reservations", a.Auth.RequireRole("admin", a.ListAdminReservations), limitNone},
+		{http.MethodPatch, "/admin/reservations/{id}/approve", a.Auth.RequireRole("admin", a.ApproveReservation), limitStandard},
+		{http.MethodPatch, "/admin/reservations/{id}/reject", a.Auth.RequireRole("admin", a.AdminRejectReservation), limitStandard},
 	}
 }
 

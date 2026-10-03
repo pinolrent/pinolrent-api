@@ -1,4 +1,4 @@
-.PHONY: help tools run dev watch build test test-race cover vuln vet lint fmt tidy demo clean
+.PHONY: help tools run dev watch admin build test test-race cover vuln vet lint fmt tidy demo clean
 
 .DEFAULT_GOAL := help
 
@@ -20,6 +20,9 @@ tools: ## Installs dev tools: air, govulncheck and golangci-lint
 
 run: ## Runs the server without dev defaults (needs JWT_SECRET, like prod)
 	go run ./cmd/api
+
+admin: ## Creates or promotes the admin account (EMAIL=... PASSWORD=... when new)
+	go run ./cmd/admin -email "$(EMAIL)" -password "$(PASSWORD)"
 
 dev: ## One-shot dev server with defaults (no .env needed)
 	@./scripts/dev.sh
