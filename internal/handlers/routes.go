@@ -58,6 +58,17 @@ func (a *API) routes() []route {
 		{http.MethodGet, "/seller/reservations", a.Auth.RequireRole("seller", a.ListSellerReservations), limitNone},
 		{http.MethodPatch, "/seller/reservations/{id}/confirm", a.Auth.RequireRole("seller", a.ConfirmReservation), limitStandard},
 		{http.MethodPatch, "/seller/reservations/{id}/reject", a.Auth.RequireRole("seller", a.RejectReservation), limitStandard},
+		{http.MethodGet, "/admin/users", a.Auth.RequireRole("admin", a.AdminListUsers), limitNone},
+		{http.MethodGet, "/admin/users/{id}", a.Auth.RequireRole("admin", a.AdminGetUser), limitNone},
+		{http.MethodPatch, "/admin/users/{id}", a.Auth.RequireRole("admin", a.AdminPatchUser), limitStandard},
+		{http.MethodPatch, "/admin/users/{id}/roles", a.Auth.RequireRole("admin", a.AdminPatchUserRoles), limitStandard},
+		{http.MethodGet, "/admin/cars", a.Auth.RequireRole("admin", a.AdminListCars), limitNone},
+		{http.MethodPatch, "/admin/cars/{id}", a.Auth.RequireRole("admin", a.AdminPatchCar), limitStandard},
+		{http.MethodDelete, "/admin/cars/{id}", a.Auth.RequireRole("admin", a.AdminDeleteCar), limitStandard},
+		{http.MethodGet, "/admin/reservations", a.Auth.RequireRole("admin", a.AdminListReservations), limitNone},
+		{http.MethodGet, "/admin/payments", a.Auth.RequireRole("admin", a.AdminListPayments), limitNone},
+		{http.MethodGet, "/admin/stats", a.Auth.RequireRole("admin", a.AdminStats), limitNone},
+		{http.MethodGet, "/admin/audit", a.Auth.RequireRole("admin", a.AdminListAudit), limitNone},
 	}
 }
 
