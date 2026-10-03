@@ -12,6 +12,7 @@
 | `UPLOAD_DIR` | `uploads` | no | Directorio donde se guardan las imágenes de `POST /uploads`. Se crea al arrancar; no vacío |
 | `UPLOAD_MAX_TOTAL_MB` | `1024` | no | Cap total de `UPLOAD_DIR` en MB; `0` = sin límite. Al superarse, `POST /uploads` responde `507` |
 | `TRUSTED_PROXY_CIDRS` | — (vacío) | no | Redes de las que se cree `X-Forwarded-For`/`X-Real-IP`, separadas por coma (ej. `172.18.0.0/16`). Vacío = solo se confía en un proxy en loopback |
+| `ADMIN_EMAILS` | — (vacío) | no | Allow-list de cuentas con rol `admin`, separada por coma (ej. `admin@pinolrent.cl`). Vacío = la instalación no tiene administrador. Una entrada malformada impide arrancar |
 
 El orden de prioridad es: **variables del shell > `.env` > valores por defecto**. Si una variable está vacía se ignora.
 
@@ -66,14 +67,27 @@ export TRUSTED_PROXY_CIDRS=172.18.0.0/16
 
 Cuando el peer es confiable, la cadena de `X-Forwarded-For` se recorre **de derecha a izquierda** y se toma el primer valor que no sea a su vez un proxy confiable. Así, si un cliente manda un header inventado, no puede elegirse el propio bucket: la dirección que agregó nuestro proxy queda al final de la cadena. El rango exacto sale de la red del proxy (por ejemplo `docker network inspect proxy --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}'`).
 
+## Rol admin
+
+La única forma de tener un administrador es `ADMIN_EMAILS`. Es una allow-list de correos y es la **única** fuente del rol `admin`: no existe endpoint que lo conceda ni que lo quite.
+
+Al arrancar, el servidor sincroniza el rol contra la lista —otorga `admin` a las cuentas listadas que aún no lo tienen y se lo revoca a todas las demás— dentro de una transacción. Si la lista queda vacía, se revoca todo. Por eso **basta con quitar un correo de la variable y reiniciar para que esa cuenta pierda el acceso**, sin tocar la base a mano.
+
+Una cuenta nueva con un correo de la lista recibe el rol `admin` en el mismo `POST /auth/register`, sin necesidad de reiniciar. El rol es aditivo: la cuenta sigue siendo compradora (y vendedora si tiene `phone`).
+
+Un administrador no puede suspenderse a sí mismo (`PATCH /admin/users/{id}` responde `400`), para no dejar la plataforma sin nadie que pueda revertir la suspensión.
+
+Las acciones de moderación (suspender, otorgar o revocar vendedor, editar o borrar un auto) se escriben en `admin_audit_log` dentro de la misma transacción que el cambio, y se consultan con `GET /admin/audit`.
+
+Las cuentas se crean con `POST /auth/register` (sin `phone` = solo compradora, con `phone` = compradora + vendedora) y una compradora puede subir a vendedora con `POST /auth/become-seller`.
+
 Qué pasa al arrancar:
 
 1. Lee `.env` si existe (lo que ya está en el shell manda). Si está mal formado, se apaga.
 2. Valida `JWT_SECRET` — si falta o es corto, se apaga. Valida `PORT` y `CORS_ALLOWED_ORIGINS`/`ENV`.
 3. Abre SQLite con WAL y aplica las migraciones que falten (quedan registradas en `goose_db_version`, nunca borran datos). Si es `:memory:` usa una sola conexión, si no hasta 8 (con `MaxIdleTime` 5 min / `MaxLifetime` 30 min). Si la base está ocupada, reintenta con backoff.
-4. Levanta el HTTP y espera `SIGINT`/`SIGTERM` para apagarse limpio (hasta 10 s).
-
-No hay usuario admin: las cuentas se crean con `POST /auth/register` (sin `phone` = solo compradora, con `phone` = compradora + vendedora) y una compradora puede subir a vendedora con `POST /auth/become-seller`.
+4. Sincroniza el rol `admin` contra `ADMIN_EMAILS` (si viene vacía, revoca todos los administradores).
+5. Levanta el HTTP y espera `SIGINT`/`SIGTERM` para apagarse limpio (hasta 10 s).
 
 ## Desarrollo
 
