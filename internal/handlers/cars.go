@@ -214,7 +214,7 @@ func (a *API) GetCarContact(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{
-		"whatsapp_url": waLink(phone, "Hola, vi tu "+name+" en PinolRent"),
+		"whatsapp_url": waLink(phone, "Hi, I saw your "+name+" on PinolRent"),
 	})
 }
 
