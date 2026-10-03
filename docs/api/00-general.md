@@ -18,10 +18,11 @@ Authorization: Bearer <token>
 
 El token lo sacas de `POST /auth/login`: el access dura **15 min** y el refresh **7 días** (se renueva con `POST /auth/refresh`).
 
-Roles (una sola cuenta por email, con membresía a 1–2 roles):
+Roles (una sola cuenta por email, con membresía a 1–3 roles):
 
 - **`buyer`** (comprador): reserva, paga y ve sus reservas. Toda cuenta nace al menos compradora.
 - **`seller`** (vendedor): publica sus autos y confirma reservas de sus autos. **Requiere teléfono**, porque es el número con el que lo contactan los compradores. Se obtiene registrando con `phone` o después con `POST /auth/become-seller`.
+- **`admin`** (administración): gestiona cuentas, autos, reservas y pagos de toda la plataforma. Solo se obtiene por la allow-list `ADMIN_EMAILS`; no hay endpoint que lo conceda. Ver [`admin.md`](admin.md).
 
 No existe cuenta "solo vendedora": un vendedor también reserva como comprador con el mismo token. El frontend deriva el switch Comprar | Vender de `GET /auth/me` → `roles`.
 
@@ -33,6 +34,7 @@ Si algo falla con el login:
 | `401` | `invalid or expired token` | Token trucho, vencido o revocado |
 | `401` | `user not found` | El usuario del token ya no existe |
 | `403` | `insufficient permissions` | Token válido pero sin permiso para esa ruta |
+| `403` | `account suspended` | La cuenta está suspendida por un administrador |
 
 ## Cómo responde errores
 
@@ -62,6 +64,8 @@ Las listas (`GET /cars`, `GET /seller/cars`, `GET /reservations`, `GET /seller/r
 | `offset` | `0` | `0..10000`; si no → `400 "invalid offset"` |
 
 Responden un **array simple**. Para saber si hay más, pedí `limit+1` y fijate si vino uno extra.
+
+Las listas de administración (`/admin/users`, `/admin/cars`, `/admin/reservations`, `/admin/payments`, `/admin/audit`) responden un **objeto** con `items`, `total`, `limit` y `offset`.
 
 ## Endpoints
 
@@ -93,6 +97,17 @@ Responden un **array simple**. Para saber si hay más, pedí `limit+1` y fijate 
 | PATCH | `/seller/reservations/{id}/reject` | vendedor | [payments](payments.md) |
 | POST | `/uploads` | sí | [uploads](uploads.md) |
 | GET | `/uploads/{nombre}` | no | [uploads](uploads.md) |
+| GET | `/admin/users` | admin | [admin](admin.md) |
+| GET | `/admin/users/{id}` | admin | [admin](admin.md) |
+| PATCH | `/admin/users/{id}` | admin | [admin](admin.md) |
+| PATCH | `/admin/users/{id}/roles` | admin | [admin](admin.md) |
+| GET | `/admin/cars` | admin | [admin](admin.md) |
+| PATCH | `/admin/cars/{id}` | admin | [admin](admin.md) |
+| DELETE | `/admin/cars/{id}` | admin | [admin](admin.md) |
+| GET | `/admin/reservations` | admin | [admin](admin.md) |
+| GET | `/admin/payments` | admin | [admin](admin.md) |
+| GET | `/admin/stats` | admin | [admin](admin.md) |
+| GET | `/admin/audit` | admin | [admin](admin.md) |
 
 ## Formas que devuelve la API
 

@@ -160,7 +160,7 @@ Authorization: Bearer <token>
 {"id":3,"email":"demo@example.com","roles":["buyer"],"phone":"+56912345678"}
 ```
 
-`phone` viene vacío (`""`) si no cargaste uno; los vendedores siempre lo tienen. `roles` es `["buyer"]` o `["buyer","seller"]`.
+`phone` viene vacío (`""`) si no cargaste uno; los vendedores siempre lo tienen. `roles` es `["buyer"]` o `["buyer","seller"]`, o `["admin","buyer"]` si la cuenta está en la allow-list `ADMIN_EMAILS`. Ver [`admin.md`](admin.md).
 
 | Código | Mensaje | Cuándo |
 |--------|---------|--------|
