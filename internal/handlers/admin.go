@@ -584,3 +584,56 @@ func (a *API) AdminPatchCar(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
+
+// AdminDeleteCar removes any car in the system, but only if it never had
+// reservations (same guard as the seller path). The administrator can delete a
+// listing without being its owner.
+func (a *API) AdminDeleteCar(w http.ResponseWriter, r *http.Request) {
+	actor, _ := auth.CurrentUser(r.Context())
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid car id")
+		return
+	}
+
+	deleted := false
+	err = withImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
+		ctx := r.Context()
+		var exists int
+		if err := conn.QueryRowContext(ctx, `SELECT 1 FROM cars WHERE id = ?`, id).Scan(&exists); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				writeError(w, http.StatusNotFound, "car not found")
+				return errTxHandled
+			}
+			serverError(w, err)
+			return errTxHandled
+		}
+		var reservations int
+		if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM reservations WHERE car_id = ?`, id).Scan(&reservations); err != nil {
+			serverError(w, err)
+			return errTxHandled
+		}
+		if reservations > 0 {
+			writeError(w, http.StatusConflict, "car has reservations, cannot delete")
+			return errTxHandled
+		}
+		if _, err := conn.ExecContext(ctx, `DELETE FROM cars WHERE id = ?`, id); err != nil {
+			serverError(w, err)
+			return errTxHandled
+		}
+		if err := a.auditAction(ctx, conn, actor.ID, auditActionCarDelete, targetCars, id, ""); err != nil {
+			serverError(w, err)
+			return errTxHandled
+		}
+		deleted = true
+		return nil
+	})
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	if !deleted {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
