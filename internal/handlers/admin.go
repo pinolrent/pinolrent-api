@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -121,4 +122,54 @@ func (a *API) AdminListUsers(w http.ResponseWriter, r *http.Request) {
 		"limit":  limit,
 		"offset": offset,
 	})
+}
+
+// AdminGetUser returns the profile of a single user.
+func (a *API) AdminGetUser(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+	var email, phone string
+	var suspended sql.NullInt64
+	if err := a.DB.QueryRowContext(r.Context(),
+		`SELECT email, phone, suspended_at FROM users WHERE id = ?`, id).Scan(&email, &phone, &suspended); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusNotFound, "user not found")
+			return
+		}
+		serverError(w, err)
+		return
+	}
+	rows, err := a.DB.QueryContext(r.Context(),
+		`SELECT role FROM user_roles WHERE user_id = ? ORDER BY role`, id)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	defer func() { _ = rows.Close() }()
+	var roles []string
+	for rows.Next() {
+		var role string
+		if err := rows.Scan(&role); err != nil {
+			serverError(w, err)
+			return
+		}
+		roles = append(roles, role)
+	}
+	if err := rows.Err(); err != nil {
+		serverError(w, err)
+		return
+	}
+	out := map[string]any{
+		"id":    id,
+		"email": email,
+		"phone": phone,
+		"roles": roles,
+	}
+	if suspended.Valid {
+		out["suspended_at"] = suspended.Int64
+	}
+	writeJSON(w, http.StatusOK, out)
 }
