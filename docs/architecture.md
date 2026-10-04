@@ -184,7 +184,3 @@ responses from inside one.
 - Timeouts: header 5 s, read 10 s, write 120 s (generous so a 5 MB upload gets through from a slow link), idle 60 s. Max header 1 MB.
 - Every request leaves a log line with method, path, status and duration; if the caller sends `X-Request-Id` it is included for correlation.
 - `GET /health` answers `{"status":"ok","version":"..."}` (or `503 degraded` if the database does not answer); the version is injected by `make build`. On `SIGINT`/`SIGTERM` it shuts down cleanly in up to 10 s.
-
-## What it does not do yet (MVP)
-
-Payment gateway, WhatsApp, frontend, and a rate limit shared across several servers.
