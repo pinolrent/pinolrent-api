@@ -28,29 +28,24 @@ func (a *API) ListCars(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ownerCond := ""
-	var ownerID int64
+	var f filter
+	f.add("c.active = 1")
 	if s := r.URL.Query().Get("owner_id"); s != "" {
 		n, err := strconv.ParseInt(s, 10, 64)
 		if err != nil || n < 1 {
 			writeError(w, http.StatusBadRequest, "invalid owner_id")
 			return
 		}
-		ownerID = n
-		ownerCond = " AND c.owner_id = ?"
+		f.add("c.owner_id = ?", n)
 	}
 
 	var cars []models.Car
 	if startStr == "" {
-		args := []any{limit, offset}
-		if ownerCond != "" {
-			args = append([]any{ownerID}, args...)
-		}
-		// #nosec G202 -- ownerCond/carColumns are fixed internal fragments,
+		// #nosec G202 -- the WHERE body comes from fixed filter fragments,
 		// not user input; owner_id is bound as a parameter.
 		rows, err := a.DB.QueryContext(r.Context(),
-			`SELECT `+carColumnsQualified+` FROM cars c WHERE c.active = 1`+ownerCond+` ORDER BY c.id LIMIT ? OFFSET ?`,
-			args...)
+			`SELECT `+carColumnsQualified+` FROM cars c WHERE `+f.where()+` ORDER BY c.id LIMIT ? OFFSET ?`,
+			f.page(limit, offset)...)
 		if err != nil {
 			serverError(w, err)
 			return
@@ -76,25 +71,21 @@ func (a *API) ListCars(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		args := make([]any, 0, 7)
-		if ownerCond != "" {
-			args = append(args, ownerID)
-		}
-		args = append(args, db.ReservationCancelled, db.ReservationRejected, endStr, startStr, limit, offset)
-
-		// #nosec G202 -- db.OverlapPredicate, ownerCond and carColumns are fixed
-		// internal SQL fragments, not user input; the values are bound params.
-		rows, err := a.DB.QueryContext(r.Context(), `
-			SELECT `+carColumnsQualified+`
-			FROM cars c
-			WHERE c.active = 1`+ownerCond+`
-			AND NOT EXISTS (
+		f.add(`NOT EXISTS (
 				SELECT 1 FROM reservations r
 				WHERE r.car_id = c.id
 					AND r.status NOT IN (?, ?)
 					AND `+db.OverlapPredicate+`
-			)
-			ORDER BY c.id LIMIT ? OFFSET ?`, args...)
+			)`, db.ReservationCancelled, db.ReservationRejected, endStr, startStr)
+
+		// #nosec G202 -- the WHERE body comes from fixed filter fragments
+		// (including db.OverlapPredicate), not user input; the values are
+		// bound params.
+		rows, err := a.DB.QueryContext(r.Context(), `
+			SELECT `+carColumnsQualified+`
+			FROM cars c
+			WHERE `+f.where()+`
+			ORDER BY c.id LIMIT ? OFFSET ?`, f.page(limit, offset)...)
 		if err != nil {
 			serverError(w, err)
 			return
