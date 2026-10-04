@@ -36,34 +36,27 @@ func (a *API) AcceptReservation(w http.ResponseWriter, r *http.Request) {
 			JOIN cars c ON c.id = r.car_id
 			WHERE r.id = ?`, id).Scan(&status, &ownerID, &buyerID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				writeError(w, http.StatusNotFound, "reservation not found")
-				return db.ErrTxHandled
+				return &statusError{http.StatusNotFound, "reservation not found"}
 			}
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		if ownerID != u.ID {
-			writeError(w, http.StatusNotFound, "reservation not found")
-			return db.ErrTxHandled
+			return &statusError{http.StatusNotFound, "reservation not found"}
 		}
 		if status != db.ReservationPending {
-			writeError(w, http.StatusConflict, "reservation is not pending")
-			return db.ErrTxHandled
+			return &statusError{http.StatusConflict, "reservation is not pending"}
 		}
 
 		if _, err := conn.ExecContext(ctx, `UPDATE reservations SET status = ? WHERE id = ?`, db.ReservationAccepted, id); err != nil {
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		if err := notifyUsers(ctx, conn, []int64{buyerID}, notifyAccepted, id); err != nil {
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		accepted = true
 		return nil
 	})
-	if err != nil {
-		serverError(w, err)
+	if writeTxErr(w, err) {
 		return
 	}
 	if !accepted {
@@ -105,44 +98,35 @@ func (a *API) RejectReservation(w http.ResponseWriter, r *http.Request) {
 			JOIN cars c ON c.id = r.car_id
 			WHERE r.id = ?`, id).Scan(&status, &ownerID, &buyerID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				writeError(w, http.StatusNotFound, "reservation not found")
-				return db.ErrTxHandled
+				return &statusError{http.StatusNotFound, "reservation not found"}
 			}
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		if ownerID != u.ID {
-			writeError(w, http.StatusNotFound, "reservation not found")
-			return db.ErrTxHandled
+			return &statusError{http.StatusNotFound, "reservation not found"}
 		}
 		if status != db.ReservationPending {
-			writeError(w, http.StatusConflict, "reservation is not pending")
-			return db.ErrTxHandled
+			return &statusError{http.StatusConflict, "reservation is not pending"}
 		}
 
 		if _, err := conn.ExecContext(ctx,
 			`UPDATE payments SET status = ? WHERE reservation_id = ? AND status = ?`, db.PaymentRejected, id, db.PaymentPending); err != nil {
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		if _, err := conn.ExecContext(ctx, `UPDATE reservations SET status = ? WHERE id = ?`, db.ReservationRejected, id); err != nil {
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		admins, err := adminIDs(ctx, conn)
 		if err != nil {
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		if err := notifyUsers(ctx, conn, append(admins, buyerID), notifyRejected, id); err != nil {
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		rejected = true
 		return nil
 	})
-	if err != nil {
-		serverError(w, err)
+	if writeTxErr(w, err) {
 		return
 	}
 	if !rejected {
