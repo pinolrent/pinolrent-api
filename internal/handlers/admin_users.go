@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -93,9 +92,9 @@ func (a *API) AdminListUsers(w http.ResponseWriter, r *http.Request) {
 
 // AdminGetUser returns the profile of a single user.
 func (a *API) AdminGetUser(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid user id")
+	id, errMsg := pathID(r, "user")
+	if errMsg != "" {
+		writeError(w, http.StatusBadRequest, errMsg)
 		return
 	}
 	var email, phone string
@@ -146,9 +145,9 @@ func (a *API) AdminGetUser(w http.ResponseWriter, r *http.Request) {
 // platform and is rejected with 400.
 func (a *API) AdminPatchUser(w http.ResponseWriter, r *http.Request) {
 	actor, _ := auth.CurrentUser(r.Context())
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid user id")
+	id, errMsg := pathID(r, "user")
+	if errMsg != "" {
+		writeError(w, http.StatusBadRequest, errMsg)
 		return
 	}
 	if actor.ID == id {
@@ -168,7 +167,7 @@ func (a *API) AdminPatchUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = db.WithImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
+	err := db.WithImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
 		ctx := r.Context()
 		var current sql.NullInt64
 		if err := conn.QueryRowContext(ctx,
@@ -230,9 +229,9 @@ func (a *API) AdminPatchUser(w http.ResponseWriter, r *http.Request) {
 // admin.
 func (a *API) AdminPatchUserRoles(w http.ResponseWriter, r *http.Request) {
 	actor, _ := auth.CurrentUser(r.Context())
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid user id")
+	id, errMsg := pathID(r, "user")
+	if errMsg != "" {
+		writeError(w, http.StatusBadRequest, errMsg)
 		return
 	}
 
@@ -248,7 +247,7 @@ func (a *API) AdminPatchUserRoles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = db.WithImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
+	err := db.WithImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
 		ctx := r.Context()
 		var phone string
 		if err := conn.QueryRowContext(ctx,

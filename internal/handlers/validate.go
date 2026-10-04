@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"net/http"
 	"net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -27,6 +29,19 @@ func lenBetween(s string, minLen, maxLen int) bool {
 		return false
 	}
 	return true
+}
+
+// pathID parses the {id} path value for the named resource ("car",
+// "reservation", ...). Like the other validators it returns "" when valid
+// and an error message when not, so the per-resource noun stays in one
+// place. Zero and negative ids never exist, so they are invalid input
+// (400), not missing rows (404).
+func pathID(r *http.Request, name string) (int64, string) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id < 1 {
+		return 0, "invalid " + name + " id"
+	}
+	return id, ""
 }
 
 // uploadExtensions are the file extensions served from /uploads/, kept in

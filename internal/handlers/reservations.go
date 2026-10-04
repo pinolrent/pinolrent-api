@@ -155,9 +155,9 @@ func (a *API) ListReservations(w http.ResponseWriter, r *http.Request) {
 func (a *API) GetReservation(w http.ResponseWriter, r *http.Request) {
 	u, _ := auth.CurrentUser(r.Context())
 
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid reservation id")
+	id, errMsg := pathID(r, "reservation")
+	if errMsg != "" {
+		writeError(w, http.StatusBadRequest, errMsg)
 		return
 	}
 
@@ -185,14 +185,14 @@ func (a *API) GetReservation(w http.ResponseWriter, r *http.Request) {
 func (a *API) CancelReservation(w http.ResponseWriter, r *http.Request) {
 	u, _ := auth.CurrentUser(r.Context())
 
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid reservation id")
+	id, errMsg := pathID(r, "reservation")
+	if errMsg != "" {
+		writeError(w, http.StatusBadRequest, errMsg)
 		return
 	}
 
 	cancelled := false
-	err = db.WithImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
+	err := db.WithImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
 		ctx := r.Context()
 
 		var buyerID int64

@@ -109,9 +109,9 @@ func (a *API) AdminListCars(w http.ResponseWriter, r *http.Request) {
 // unpublish a problematic car regardless of its booking history.
 func (a *API) AdminPatchCar(w http.ResponseWriter, r *http.Request) {
 	actor, _ := auth.CurrentUser(r.Context())
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid car id")
+	id, errMsg := pathID(r, "car")
+	if errMsg != "" {
+		writeError(w, http.StatusBadRequest, errMsg)
 		return
 	}
 
@@ -151,7 +151,7 @@ func (a *API) AdminPatchCar(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var updated bool
-	err = db.WithImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
+	err := db.WithImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
 		ctx := r.Context()
 		var curName, curPhoto string
 		var curPrice int64
@@ -205,14 +205,14 @@ func (a *API) AdminPatchCar(w http.ResponseWriter, r *http.Request) {
 // listing without being its owner.
 func (a *API) AdminDeleteCar(w http.ResponseWriter, r *http.Request) {
 	actor, _ := auth.CurrentUser(r.Context())
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid car id")
+	id, errMsg := pathID(r, "car")
+	if errMsg != "" {
+		writeError(w, http.StatusBadRequest, errMsg)
 		return
 	}
 
 	deleted := false
-	err = db.WithImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
+	err := db.WithImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
 		ctx := r.Context()
 		var exists int
 		if err := conn.QueryRowContext(ctx, `SELECT 1 FROM cars WHERE id = ?`, id).Scan(&exists); err != nil {

@@ -106,9 +106,9 @@ func (a *API) ListCars(w http.ResponseWriter, r *http.Request) {
 // GetCar returns a single active car from the catalog by id. Inactive cars are
 // hidden from the public catalog, so they 404 here too.
 func (a *API) GetCar(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid car id")
+	id, errMsg := pathID(r, "car")
+	if errMsg != "" {
+		writeError(w, http.StatusBadRequest, errMsg)
 		return
 	}
 
@@ -129,14 +129,14 @@ func (a *API) GetCar(w http.ResponseWriter, r *http.Request) {
 // This is the only place a phone number is exposed, and it requires auth on
 // purpose: the public catalog must not be harvestable for phone numbers.
 func (a *API) GetCarContact(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid car id")
+	id, errMsg := pathID(r, "car")
+	if errMsg != "" {
+		writeError(w, http.StatusBadRequest, errMsg)
 		return
 	}
 
 	var name, phone string
-	err = a.DB.QueryRowContext(r.Context(),
+	err := a.DB.QueryRowContext(r.Context(),
 		`SELECT c.name, u.phone FROM cars c JOIN users u ON u.id = c.owner_id
 		 WHERE c.id = ? AND c.active = 1`, id).Scan(&name, &phone)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -242,9 +242,9 @@ func (a *API) ListMyCars(w http.ResponseWriter, r *http.Request) {
 func (a *API) PatchCar(w http.ResponseWriter, r *http.Request) {
 	u, _ := auth.CurrentUser(r.Context())
 
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid car id")
+	id, errMsg := pathID(r, "car")
+	if errMsg != "" {
+		writeError(w, http.StatusBadRequest, errMsg)
 		return
 	}
 
@@ -284,7 +284,7 @@ func (a *API) PatchCar(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var updated bool
-	err = db.WithImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
+	err := db.WithImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
 		ctx := r.Context()
 
 		var curName, curPhoto string
@@ -363,14 +363,14 @@ func (a *API) PatchCar(w http.ResponseWriter, r *http.Request) {
 func (a *API) DeleteCar(w http.ResponseWriter, r *http.Request) {
 	u, _ := auth.CurrentUser(r.Context())
 
-	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid car id")
+	id, errMsg := pathID(r, "car")
+	if errMsg != "" {
+		writeError(w, http.StatusBadRequest, errMsg)
 		return
 	}
 
 	deleted := false
-	err = db.WithImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
+	err := db.WithImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
 		ctx := r.Context()
 
 		var ownerID int64
