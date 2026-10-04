@@ -210,6 +210,32 @@ func TestRefreshRejectsAccessToken(t *testing.T) {
 	}
 }
 
+func TestBecomeSellerReplayUpdatesPhone(t *testing.T) {
+	a := newTestAPI(t)
+	token := newSeller(t, a)
+
+	rec := doJSON(t, a, "POST", "/auth/become-seller", token, map[string]any{
+		"phone": "+56987654321",
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("replay: status = %d (body %s)", rec.Code, rec.Body.String())
+	}
+	var out struct {
+		Phone string   `json:"phone"`
+		Roles []string `json:"roles"`
+	}
+	decodeJSON(t, rec, &out)
+	if out.Phone != "+56987654321" {
+		t.Fatalf("phone = %q, want the new number", out.Phone)
+	}
+
+	rec = doJSON(t, a, "GET", "/auth/me", token, nil)
+	decodeJSON(t, rec, &out)
+	if out.Phone != "+56987654321" {
+		t.Fatalf("persisted phone = %q, want the new number", out.Phone)
+	}
+}
+
 func TestLogoutSuspendedSelfRevokes(t *testing.T) {
 	a := newTestAPI(t)
 	token := registerBuyer(t, a, "user@example.com", "secret123")

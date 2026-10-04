@@ -221,8 +221,8 @@ func (a *API) Register(w http.ResponseWriter, r *http.Request) {
 }
 
 // BecomeSeller grants the seller role to the authenticated buyer account and
-// stores its contact phone. It is idempotent: a seller calling it again gets
-// its current profile back.
+// stores its contact phone. The phone is updated on every call, so repeating
+// it with a new number moves the contact; the role grant itself is idempotent.
 func (a *API) BecomeSeller(w http.ResponseWriter, r *http.Request) {
 	u, _ := auth.CurrentUser(r.Context())
 
@@ -240,24 +240,27 @@ func (a *API) BecomeSeller(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !u.HasRole(db.RoleSeller) {
-		err := db.WithImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
-			ctx := r.Context()
+	alreadySeller := u.HasRole(db.RoleSeller)
+	err := db.WithImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
+		ctx := r.Context()
 
-			if _, err := conn.ExecContext(ctx,
-				`UPDATE users SET phone = ? WHERE id = ?`, phone, u.ID); err != nil {
-				return err
-			}
+		if _, err := conn.ExecContext(ctx,
+			`UPDATE users SET phone = ? WHERE id = ?`, phone, u.ID); err != nil {
+			return err
+		}
+		if !alreadySeller {
 			if _, err := conn.ExecContext(ctx,
 				`INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, ?)`, u.ID, db.RoleSeller); err != nil {
 				return err
 			}
-			return nil
-		})
-		if writeTxErr(w, err) {
-			return
 		}
-		u.Phone = phone
+		return nil
+	})
+	if writeTxErr(w, err) {
+		return
+	}
+	u.Phone = phone
+	if !alreadySeller {
 		u.Roles = append(u.Roles, db.RoleSeller)
 	}
 
