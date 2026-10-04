@@ -42,17 +42,23 @@ make watch   # starts with hot reload on edit (requires make tools)
 | PATCH | `/reservations/{id}/cancel` | yes | Cancel one of your reservations (only if you have not paid yet) |
 | POST | `/reservations/{id}/payment` | yes | Pay for a reservation (`pos` or `cash`) |
 | GET | `/seller/reservations` | seller | See the reservations of your cars |
-| PATCH | `/seller/reservations/{id}/confirm` | seller | Confirm a reservation and approve its payment |
-| PATCH | `/seller/reservations/{id}/reject` | seller | Reject the payment, cancel the reservation and release the dates |
+| PATCH | `/seller/reservations/{id}/accept` | seller | Accept a pending reservation of your cars |
+| PATCH | `/seller/reservations/{id}/reject` | seller | Reject a pending reservation (its pending payment is rejected too) |
+| GET | `/notifications` | yes | See your own notifications |
+| PATCH | `/notifications/{id}/read` | yes | Mark one of your notifications as read |
+| PATCH | `/admin/reservations/{id}/confirm` | admin | Confirm an accepted reservation and approve its payment |
+| PATCH | `/admin/reservations/{id}/request-correction` | admin | Reject the payment so the buyer uploads a new proof |
+| GET | `/admin/users` · `/admin/cars` · `/admin/reservations` · `/admin/payments` · `/admin/notifications` · `/admin/stats` · `/admin/audit` | admin | Operate and inspect the platform (see the API reference for detail) |
 | POST | `/uploads` | yes | Upload an image (jpg/png/webp, 5 MB) and get its local URL; jpg/png are re-encoded without metadata |
-| GET | `/uploads/{name}` | no | See an uploaded image |
+| GET | `/uploads/` | no | Serve an uploaded image (subtree, basename only) |
 
 If you try to read or touch something that is not yours, the API answers `404` as if it did not exist.
 
 ## Roles
 
 - **Buyer:** books cars, pays and sees its reservations.
-- **Seller:** publishes its cars and confirms the reservations of its cars. Each seller only sees its own. It registers with a mandatory phone: that is the number buyers use to reach it (WhatsApp).
+- **Seller:** publishes its cars and accepts or rejects the pending reservations of its cars. Each seller only sees its own. It registers with a mandatory phone: that is the number buyers use to reach it (WhatsApp).
+- **Admin:** confirms accepted reservations (approving their payment), operates any car or account, and inspects the platform. Granted from the `ADMIN_EMAILS` allow-list only.
 
 ## Documentation
 
