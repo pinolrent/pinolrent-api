@@ -18,7 +18,9 @@ scripts/                  # dev.sh, demo.sh
 bruno/                    # Bruno API collection
 ```
 
-Docs are in Spanish (`docs/`), code comments in English. Follow that convention.
+Everything written for humans is English: docs, code comments, scripts, commit messages and
+the Bruno collection. API strings (error messages, status values, field names) are English too.
+Do not reintroduce Spanish.
 
 ## Setup
 
@@ -36,7 +38,7 @@ Required env: `JWT_SECRET` (min 32 bytes). Optional: `PORT` (default 8080, must 
 `TRUSTED_PROXY_CIDRS` (default empty: only a loopback proxy is trusted for `X-Forwarded-For`).
 
 Priority: shell env > `.env` > defaults. A malformed `.env` is a hard error. See `.env.example`
-and `docs/configuracion.md` for details.
+and `docs/configuration.md` for details.
 
 ## Build, test and lint
 
@@ -120,6 +122,7 @@ Move the generated file to `internal/db/migrations/` and edit `Up`/`Down`.
 `bruno/pinolrent-api/` — all requests live in the single `flujo/` folder and run in `seq` order (tokens and IDs chain via variables).
 The Bruno CLI only honors `seq` within a folder and runs folders alphabetically, so a chained flow must not be split across folders.
 Assertions use `res.status` / `res.body.*` (the `$res` variant throws `ReferenceError` in the CLI).
+Every `meta.name` equals its filename, and the `seq` values are unique and gapless (`1..N`) in dependency order.
 `collection.bru` defines `baseUrl` (default `http://localhost:8080`), `sellerToken`/`buyerToken`,
 `carId`/`reservationId`. Update the collection when adding or changing endpoints.
 
