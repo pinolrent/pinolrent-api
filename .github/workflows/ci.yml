@@ -99,7 +99,7 @@ jobs:
     name: build and e2e smoke
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [test]
+    needs: [test, lint, vuln]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -121,7 +121,7 @@ jobs:
     name: docker image
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [test]
+    needs: [test, lint, vuln]
     steps:
       - uses: actions/checkout@v4
 
@@ -141,7 +141,7 @@ jobs:
     name: bruno collection
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [test]
+    needs: [test, lint, vuln]
     steps:
       - uses: actions/checkout@v4
         with:
