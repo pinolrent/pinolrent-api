@@ -38,7 +38,7 @@ ENV DATABASE_URL=/data/pinolrent.db \
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-	CMD wget -q -O /dev/null http://127.0.0.1:8080/health || exit 1
+	CMD wget -q -O /dev/null http://127.0.0.1:${PORT:-8080}/health || exit 1
 
 # The entrypoint starts as root to be able to fix the volume owner
 # (Docker creates it as root) and then drops to app.
