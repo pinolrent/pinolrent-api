@@ -5,14 +5,11 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/pinolrent/pinolrent-api/internal/auth"
 	"github.com/pinolrent/pinolrent-api/internal/db"
 	"github.com/pinolrent/pinolrent-api/internal/models"
 )
-
-const dateLayout = "2006-01-02"
 
 // ListCars returns active cars, optionally filtered by owner and excluding
 // those already reserved in the [start_date, end_date] range.
@@ -431,20 +428,4 @@ func (a *API) DeleteCar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-}
-
-func parseDate(s string) (time.Time, error) {
-	t, err := time.Parse(dateLayout, s)
-	if err != nil {
-		return time.Time{}, err
-	}
-	if t.Format(dateLayout) != s {
-		return time.Time{}, errors.New("invalid date")
-	}
-	return t, nil
-}
-
-func todayStart() time.Time {
-	now := time.Now().UTC()
-	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 }
