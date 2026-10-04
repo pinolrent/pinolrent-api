@@ -95,6 +95,25 @@ stateDiagram-v2
 - A reservation is born `pending`. The buyer can cancel it while it is still `pending` and has no payment. The owner accepts it (`accepted`) or rejects it (`rejected`, releasing the dates); only an `accepted` reservation with a validated payment becomes `confirmed`, and only through the administrator.
 - A payment is born `pending` and becomes `approved` when the administrator confirms, or `rejected` when the owner rejects the request or the administrator sends it back for correction. A rejected reservation is terminal, but a correction keeps the reservation `accepted` so the buyer attaches a new proof without booking again.
 
+The legal transitions, with who performs them:
+
+| From | To | Who | Endpoint |
+|------|----|-----|----------|
+| — | `pending` | any authenticated buyer | `POST /reservations` |
+| `pending` | `accepted` | owner (seller) | `PATCH /seller/reservations/{id}/accept` |
+| `pending` | `rejected` | owner (seller) | `PATCH /seller/reservations/{id}/reject` (pending payment is rejected too) |
+| `pending` | `cancelled` | buyer who booked | `PATCH /reservations/{id}/cancel` (only without payment) |
+| `accepted` | `confirmed` | admin | `PATCH /admin/reservations/{id}/confirm` (requires a `pending` payment, approved atomically) |
+| `accepted` | `accepted` | admin | `PATCH /admin/reservations/{id}/request-correction` (payment `pending` → `rejected`, buyer re-attaches) |
+
+There is no other edge: no `pending → confirmed`, no `accepted → rejected/cancelled`, no admin hard-reject, and `confirmed`/`rejected`/`cancelled` are terminal. The guards live in the handlers inside `WithImmediateTx` (SELECT-guard + conditional `UPDATE`); the database only enforces membership (`CHECK`) plus `UNIQUE(reservation_id)` on payments, so any future writer must go through the same endpoints.
+
+Blocking has three deliberate strictness levels for three different questions:
+
+- **Booking / availability:** `pending`, `accepted` and `confirmed` block dates (`NOT IN (cancelled, rejected)`, shared `db.OverlapPredicate`).
+- **Deactivation:** same blocking set, but only reservations ending today or later (`end_date >= date('now')`); history never blocks deactivation. The admin override skips this guard on purpose.
+- **Deletion:** any reservation in history blocks it (seller and admin alike); only a car that never had reservations can be deleted.
+
 ## Business rules
 
 **Availability:**
