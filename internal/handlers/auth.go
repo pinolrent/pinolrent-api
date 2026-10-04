@@ -186,47 +186,43 @@ func (a *API) Register(w http.ResponseWriter, r *http.Request) {
 	// The response intentionally omits the user id: returning id=0 for a
 	// duplicate and the real id for a new account would let an attacker
 	// enumerate registered emails. Both paths return the identical body.
-	tx, err := a.DB.BeginTx(r.Context(), nil)
-	if err != nil {
-		serverError(w, err)
-		return
-	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = tx.Rollback()
+	registered := false
+	err = db.WithImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
+		ctx := r.Context()
+
+		res, err := conn.ExecContext(ctx,
+			`INSERT INTO users (email, password_hash, phone) VALUES (?, ?, ?)`,
+			in.Email, hash, phone)
+		if err != nil {
+			if !isUniqueViolation(err) {
+				serverError(w, err)
+				return db.ErrTxHandled
+			}
+			writeJSON(w, http.StatusCreated, map[string]any{"email": in.Email})
+			return db.ErrTxHandled
 		}
-	}()
-	res, err := tx.ExecContext(r.Context(),
-		`INSERT INTO users (email, password_hash, phone) VALUES (?, ?, ?)`,
-		in.Email, hash, phone)
-	if err != nil {
-		if !isUniqueViolation(err) {
+		id, err := res.LastInsertId()
+		if err != nil {
 			serverError(w, err)
-			return
+			return db.ErrTxHandled
 		}
-		_ = tx.Rollback()
-		committed = true
-		writeJSON(w, http.StatusCreated, map[string]any{"email": in.Email})
-		return
-	}
-	id, err := res.LastInsertId()
+		for _, role := range roles {
+			if _, err := conn.ExecContext(ctx,
+				`INSERT INTO user_roles (user_id, role) VALUES (?, ?)`, id, role); err != nil {
+				serverError(w, err)
+				return db.ErrTxHandled
+			}
+		}
+		registered = true
+		return nil
+	})
 	if err != nil {
 		serverError(w, err)
 		return
 	}
-	for _, role := range roles {
-		if _, err := tx.ExecContext(r.Context(),
-			`INSERT INTO user_roles (user_id, role) VALUES (?, ?)`, id, role); err != nil {
-			serverError(w, err)
-			return
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		serverError(w, err)
+	if !registered {
 		return
 	}
-	committed = true
 	writeJSON(w, http.StatusCreated, map[string]any{"email": in.Email})
 }
 
