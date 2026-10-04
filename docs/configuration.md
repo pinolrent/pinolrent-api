@@ -14,7 +14,10 @@
 | `TRUSTED_PROXY_CIDRS` | — (empty) | no | Networks whose `X-Forwarded-For`/`X-Real-IP` are believed, comma-separated (e.g. `172.18.0.0/16`). Empty = only a loopback proxy is trusted |
 | `ADMIN_EMAILS` | — (empty) | no | Allow-list of accounts with the `admin` role, comma-separated (e.g. `admin@pinolrent.cl`). Empty = the installation has no administrator. A malformed entry prevents startup |
 
-The priority order is: **shell variables > `.env` > default values**. An empty variable is ignored.
+The priority order is: **shell variables > `.env` > default values**. An empty variable is
+not ignored: it overrides the default with `""` and usually fails `Validate`
+(the only exception is `scripts/dev.sh`, which treats empty values as unset
+before starting the server).
 
 ### If the secret is missing, it does not start
 
