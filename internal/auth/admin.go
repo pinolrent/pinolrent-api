@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+
+	"github.com/pinolrent/pinolrent-api/internal/db"
 )
 
 // SyncAdminRoles makes the allow-list the single source of truth for the admin
@@ -44,8 +46,8 @@ func (a *Auth) SyncAdminRoles(ctx context.Context, emails []string) (granted, re
 	if len(emails) > 0 {
 		res, execErr := tx.ExecContext(ctx,
 			`INSERT OR IGNORE INTO user_roles (user_id, role)
-			 SELECT id, 'admin' FROM users
-			 WHERE lower(email) IN (SELECT value FROM json_each(?))`, list)
+			 SELECT id, ? FROM users
+			 WHERE lower(email) IN (SELECT value FROM json_each(?))`, db.RoleAdmin, list)
 		if execErr != nil {
 			return 0, 0, fmt.Errorf("grant admin role: %w", execErr)
 		}
@@ -56,12 +58,12 @@ func (a *Auth) SyncAdminRoles(ctx context.Context, emails []string) (granted, re
 
 	// Every administrator not on the list loses the role. With an empty list
 	// that revokes all of them, which is what an unconfigured deployment means.
-	revoke := `DELETE FROM user_roles WHERE role = 'admin'`
-	var revokeArgs []any
+	revoke := `DELETE FROM user_roles WHERE role = ?`
+	revokeArgs := []any{db.RoleAdmin}
 	if len(emails) > 0 {
 		revoke += ` AND user_id NOT IN (
 			SELECT id FROM users WHERE lower(email) IN (SELECT value FROM json_each(?)))`
-		revokeArgs = []any{list}
+		revokeArgs = append(revokeArgs, list)
 	}
 	res, err := tx.ExecContext(ctx, revoke, revokeArgs...)
 	if err != nil {
