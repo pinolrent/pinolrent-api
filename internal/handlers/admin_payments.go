@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/pinolrent/pinolrent-api/internal/db"
 )
 
 // AdminListPayments returns all payments in the platform.
@@ -18,7 +20,7 @@ func (a *API) AdminListPayments(w http.ResponseWriter, r *http.Request) {
 	clauses := []string{"1=1"}
 	args := []any{}
 	if s := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("status"))); s != "" {
-		if s != "pending" && s != "approved" && s != "rejected" {
+		if !db.ValidPaymentStatus(s) {
 			writeError(w, http.StatusBadRequest, "invalid status")
 			return
 		}

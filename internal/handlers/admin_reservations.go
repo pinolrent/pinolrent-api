@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/pinolrent/pinolrent-api/internal/db"
 )
 
 const adminReservationSelect = `
@@ -26,10 +28,10 @@ func (a *API) AdminListReservations(w http.ResponseWriter, r *http.Request) {
 	clauses := []string{"1=1"}
 	args := []any{}
 	if s := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("status"))); s != "" {
-		// The reservations CHECK admits pending, accepted, confirmed,
-		// rejected and cancelled. A reservation is paid when its payment row
-		// is approved, not through its own status.
-		if s != "pending" && s != "accepted" && s != "confirmed" && s != "rejected" && s != "cancelled" {
+		// The reservations CHECK admits every ValidReservationStatus. A
+		// reservation is paid when its payment row is approved, not through
+		// its own status.
+		if !db.ValidReservationStatus(s) {
 			writeError(w, http.StatusBadRequest, "invalid status")
 			return
 		}

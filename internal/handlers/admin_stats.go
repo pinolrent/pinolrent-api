@@ -3,6 +3,8 @@ package handlers
 import (
 	"database/sql"
 	"net/http"
+
+	"github.com/pinolrent/pinolrent-api/internal/db"
 )
 
 // AdminStats returns high-level platform metrics for administrators.
@@ -12,11 +14,11 @@ func (a *API) AdminStats(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	if err := a.DB.QueryRowContext(r.Context(), `SELECT COUNT(DISTINCT user_id) FROM user_roles WHERE role='seller'`).Scan(&totalSellers); err != nil {
+	if err := a.DB.QueryRowContext(r.Context(), `SELECT COUNT(DISTINCT user_id) FROM user_roles WHERE role = ?`, db.RoleSeller).Scan(&totalSellers); err != nil {
 		serverError(w, err)
 		return
 	}
-	if err := a.DB.QueryRowContext(r.Context(), `SELECT COUNT(DISTINCT user_id) FROM user_roles WHERE role='admin'`).Scan(&totalAdmins); err != nil {
+	if err := a.DB.QueryRowContext(r.Context(), `SELECT COUNT(DISTINCT user_id) FROM user_roles WHERE role = ?`, db.RoleAdmin).Scan(&totalAdmins); err != nil {
 		serverError(w, err)
 		return
 	}
@@ -32,37 +34,37 @@ func (a *API) AdminStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var pendingRes, acceptedRes, confirmedRes, rejectedRes, cancelledRes int64
-	if err := a.DB.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM reservations WHERE status='pending'`).Scan(&pendingRes); err != nil {
+	if err := a.DB.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM reservations WHERE status = ?`, db.ReservationPending).Scan(&pendingRes); err != nil {
 		serverError(w, err)
 		return
 	}
-	if err := a.DB.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM reservations WHERE status='accepted'`).Scan(&acceptedRes); err != nil {
+	if err := a.DB.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM reservations WHERE status = ?`, db.ReservationAccepted).Scan(&acceptedRes); err != nil {
 		serverError(w, err)
 		return
 	}
-	if err := a.DB.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM reservations WHERE status='confirmed'`).Scan(&confirmedRes); err != nil {
+	if err := a.DB.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM reservations WHERE status = ?`, db.ReservationConfirmed).Scan(&confirmedRes); err != nil {
 		serverError(w, err)
 		return
 	}
-	if err := a.DB.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM reservations WHERE status='rejected'`).Scan(&rejectedRes); err != nil {
+	if err := a.DB.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM reservations WHERE status = ?`, db.ReservationRejected).Scan(&rejectedRes); err != nil {
 		serverError(w, err)
 		return
 	}
-	if err := a.DB.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM reservations WHERE status='cancelled'`).Scan(&cancelledRes); err != nil {
+	if err := a.DB.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM reservations WHERE status = ?`, db.ReservationCancelled).Scan(&cancelledRes); err != nil {
 		serverError(w, err)
 		return
 	}
 
 	var pendingPay, approvedPay, rejectedPay int64
-	if err := a.DB.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM payments WHERE status='pending'`).Scan(&pendingPay); err != nil {
+	if err := a.DB.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM payments WHERE status = ?`, db.PaymentPending).Scan(&pendingPay); err != nil {
 		serverError(w, err)
 		return
 	}
-	if err := a.DB.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM payments WHERE status='approved'`).Scan(&approvedPay); err != nil {
+	if err := a.DB.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM payments WHERE status = ?`, db.PaymentApproved).Scan(&approvedPay); err != nil {
 		serverError(w, err)
 		return
 	}
-	if err := a.DB.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM payments WHERE status='rejected'`).Scan(&rejectedPay); err != nil {
+	if err := a.DB.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM payments WHERE status = ?`, db.PaymentRejected).Scan(&rejectedPay); err != nil {
 		serverError(w, err)
 		return
 	}
@@ -72,7 +74,7 @@ func (a *API) AdminStats(w http.ResponseWriter, r *http.Request) {
 		 FROM payments p
 		 JOIN reservations r ON r.id = p.reservation_id
 		 JOIN cars c ON c.id = r.car_id
-		 WHERE p.status='approved'`).Scan(&approvedAmount); err != nil {
+		 WHERE p.status = ?`, db.PaymentApproved).Scan(&approvedAmount); err != nil {
 		serverError(w, err)
 		return
 	}

@@ -47,7 +47,7 @@ func notifyUsers(ctx context.Context, conn *sql.Conn, userIDs []int64, kind stri
 // adminIDs returns every administrator account, the audience for the review
 // steps of the reservation flow.
 func adminIDs(ctx context.Context, conn *sql.Conn) ([]int64, error) {
-	rows, err := conn.QueryContext(ctx, `SELECT user_id FROM user_roles WHERE role = 'admin'`)
+	rows, err := conn.QueryContext(ctx, `SELECT user_id FROM user_roles WHERE role = ?`, db.RoleAdmin)
 	if err != nil {
 		return nil, err
 	}

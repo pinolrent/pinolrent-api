@@ -1,6 +1,10 @@
 package handlers
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/pinolrent/pinolrent-api/internal/db"
+)
 
 // limiterKind selects which rate limiter protects a route. The kinds name the
 // bucket, not the HTTP method: strict and standard are per-IP budgets.
@@ -44,10 +48,10 @@ func (a *API) routes() []route {
 		// Contact exposes the seller's phone, so it gets the strict bucket even
 		// though it is a read.
 		{http.MethodGet, "/cars/{id}/contact", a.Auth.RequireAuth(a.GetCarContact), limitStrict},
-		{http.MethodGet, "/seller/cars", a.Auth.RequireRole("seller", a.ListMyCars), limitNone},
-		{http.MethodPost, "/seller/cars", a.Auth.RequireRole("seller", a.CreateCar), limitStandard},
-		{http.MethodPatch, "/seller/cars/{id}", a.Auth.RequireRole("seller", a.PatchCar), limitStandard},
-		{http.MethodDelete, "/seller/cars/{id}", a.Auth.RequireRole("seller", a.DeleteCar), limitStandard},
+		{http.MethodGet, "/seller/cars", a.Auth.RequireRole(db.RoleSeller, a.ListMyCars), limitNone},
+		{http.MethodPost, "/seller/cars", a.Auth.RequireRole(db.RoleSeller, a.CreateCar), limitStandard},
+		{http.MethodPatch, "/seller/cars/{id}", a.Auth.RequireRole(db.RoleSeller, a.PatchCar), limitStandard},
+		{http.MethodDelete, "/seller/cars/{id}", a.Auth.RequireRole(db.RoleSeller, a.DeleteCar), limitStandard},
 		{http.MethodPost, "/reservations", a.Auth.RequireAuth(a.CreateReservation), limitStandard},
 		{http.MethodGet, "/reservations", a.Auth.RequireAuth(a.ListReservations), limitNone},
 		{http.MethodGet, "/reservations/{id}", a.Auth.RequireAuth(a.GetReservation), limitNone},
@@ -57,23 +61,23 @@ func (a *API) routes() []route {
 		{http.MethodPatch, "/notifications/{id}/read", a.Auth.RequireAuth(a.MarkNotificationRead), limitStandard},
 		{http.MethodPost, "/uploads", a.Auth.RequireAuth(a.UploadFile), limitStandard},
 		{http.MethodGet, "/uploads/", a.serveUpload, limitNone},
-		{http.MethodGet, "/seller/reservations", a.Auth.RequireRole("seller", a.ListSellerReservations), limitNone},
-		{http.MethodPatch, "/seller/reservations/{id}/accept", a.Auth.RequireRole("seller", a.AcceptReservation), limitStandard},
-		{http.MethodPatch, "/seller/reservations/{id}/reject", a.Auth.RequireRole("seller", a.RejectReservation), limitStandard},
-		{http.MethodGet, "/admin/users", a.Auth.RequireRole("admin", a.AdminListUsers), limitNone},
-		{http.MethodGet, "/admin/users/{id}", a.Auth.RequireRole("admin", a.AdminGetUser), limitNone},
-		{http.MethodPatch, "/admin/users/{id}", a.Auth.RequireRole("admin", a.AdminPatchUser), limitStandard},
-		{http.MethodPatch, "/admin/users/{id}/roles", a.Auth.RequireRole("admin", a.AdminPatchUserRoles), limitStandard},
-		{http.MethodGet, "/admin/cars", a.Auth.RequireRole("admin", a.AdminListCars), limitNone},
-		{http.MethodPatch, "/admin/cars/{id}", a.Auth.RequireRole("admin", a.AdminPatchCar), limitStandard},
-		{http.MethodDelete, "/admin/cars/{id}", a.Auth.RequireRole("admin", a.AdminDeleteCar), limitStandard},
-		{http.MethodGet, "/admin/reservations", a.Auth.RequireRole("admin", a.AdminListReservations), limitNone},
-		{http.MethodPatch, "/admin/reservations/{id}/confirm", a.Auth.RequireRole("admin", a.AdminConfirmReservation), limitStandard},
-		{http.MethodPatch, "/admin/reservations/{id}/request-correction", a.Auth.RequireRole("admin", a.AdminRequestCorrection), limitStandard},
-		{http.MethodGet, "/admin/payments", a.Auth.RequireRole("admin", a.AdminListPayments), limitNone},
-		{http.MethodGet, "/admin/notifications", a.Auth.RequireRole("admin", a.AdminListNotifications), limitNone},
-		{http.MethodGet, "/admin/stats", a.Auth.RequireRole("admin", a.AdminStats), limitNone},
-		{http.MethodGet, "/admin/audit", a.Auth.RequireRole("admin", a.AdminListAudit), limitNone},
+		{http.MethodGet, "/seller/reservations", a.Auth.RequireRole(db.RoleSeller, a.ListSellerReservations), limitNone},
+		{http.MethodPatch, "/seller/reservations/{id}/accept", a.Auth.RequireRole(db.RoleSeller, a.AcceptReservation), limitStandard},
+		{http.MethodPatch, "/seller/reservations/{id}/reject", a.Auth.RequireRole(db.RoleSeller, a.RejectReservation), limitStandard},
+		{http.MethodGet, "/admin/users", a.Auth.RequireRole(db.RoleAdmin, a.AdminListUsers), limitNone},
+		{http.MethodGet, "/admin/users/{id}", a.Auth.RequireRole(db.RoleAdmin, a.AdminGetUser), limitNone},
+		{http.MethodPatch, "/admin/users/{id}", a.Auth.RequireRole(db.RoleAdmin, a.AdminPatchUser), limitStandard},
+		{http.MethodPatch, "/admin/users/{id}/roles", a.Auth.RequireRole(db.RoleAdmin, a.AdminPatchUserRoles), limitStandard},
+		{http.MethodGet, "/admin/cars", a.Auth.RequireRole(db.RoleAdmin, a.AdminListCars), limitNone},
+		{http.MethodPatch, "/admin/cars/{id}", a.Auth.RequireRole(db.RoleAdmin, a.AdminPatchCar), limitStandard},
+		{http.MethodDelete, "/admin/cars/{id}", a.Auth.RequireRole(db.RoleAdmin, a.AdminDeleteCar), limitStandard},
+		{http.MethodGet, "/admin/reservations", a.Auth.RequireRole(db.RoleAdmin, a.AdminListReservations), limitNone},
+		{http.MethodPatch, "/admin/reservations/{id}/confirm", a.Auth.RequireRole(db.RoleAdmin, a.AdminConfirmReservation), limitStandard},
+		{http.MethodPatch, "/admin/reservations/{id}/request-correction", a.Auth.RequireRole(db.RoleAdmin, a.AdminRequestCorrection), limitStandard},
+		{http.MethodGet, "/admin/payments", a.Auth.RequireRole(db.RoleAdmin, a.AdminListPayments), limitNone},
+		{http.MethodGet, "/admin/notifications", a.Auth.RequireRole(db.RoleAdmin, a.AdminListNotifications), limitNone},
+		{http.MethodGet, "/admin/stats", a.Auth.RequireRole(db.RoleAdmin, a.AdminStats), limitNone},
+		{http.MethodGet, "/admin/audit", a.Auth.RequireRole(db.RoleAdmin, a.AdminListAudit), limitNone},
 	}
 }
 
