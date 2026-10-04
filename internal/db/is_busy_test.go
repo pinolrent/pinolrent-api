@@ -12,10 +12,10 @@ import (
 // against real driver errors rather than hand-built ones.
 
 func TestIsBusyError(t *testing.T) {
-	if isBusyError(nil) {
+	if IsBusyError(nil) {
 		t.Fatal("nil should not be a busy error")
 	}
-	if isBusyError(errors.New("database is locked")) {
+	if IsBusyError(errors.New("database is locked")) {
 		t.Fatal("plain error with busy-like text should not be a busy error")
 	}
 }
@@ -54,7 +54,7 @@ func TestIsBusyErrorReal(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected write to fail while conn A holds the exclusive lock")
 	}
-	if !isBusyError(err) {
+	if !IsBusyError(err) {
 		t.Fatalf("expected busy error, got: %v", err)
 	}
 }
