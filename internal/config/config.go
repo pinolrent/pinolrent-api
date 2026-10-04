@@ -4,8 +4,8 @@ package config
 import (
 	"fmt"
 	"net"
-	"net/mail"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -107,9 +107,10 @@ func (c Config) AdminEmailList() ([]string, error) {
 		if entry == "" {
 			continue
 		}
-		addr, err := mail.ParseAddress(entry)
-		if err != nil || addr.Name != "" || addr.Address != entry ||
-			len(entry) > maxEmailLen || !hasDottedDomain(entry) {
+		// The shape must match what registration accepts: an entry that
+		// cannot be registered could never match an account, leaving the
+		// deployment unadministered with no error to explain it.
+		if len(entry) > maxEmailLen || !ValidEmail(entry) {
 			return nil, fmt.Errorf("invalid ADMIN_EMAILS entry %q: want a plain address like admin@example.com", entry)
 		}
 		emails = append(emails, entry)
@@ -117,30 +118,18 @@ func (c Config) AdminEmailList() ([]string, error) {
 	return emails, nil
 }
 
-// hasDottedDomain requires a dot-separated domain with an alphabetic TLD of
-// at least two characters. net/mail happily parses "admin@localhost", but
-// registration rejects it, so such an entry could never match an account and
-// the deployment would end up with no administrator and no error to explain
-// it.
-func hasDottedDomain(email string) bool {
-	_, domain, ok := strings.Cut(email, "@")
-	if !ok {
-		return false
-	}
-	_, tld, ok := strings.Cut(domain, ".")
-	if !ok {
-		return false
-	}
-	if len(tld) < 2 {
-		return false
-	}
-	for i := 0; i < len(tld); i++ {
-		c := tld[i]
-		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') {
-			return false
-		}
-	}
-	return true
+// emailRe is the single email rule for the platform: local and domain labels
+// cannot start or end with a dot or hyphen, no consecutive dots, and the TLD
+// has at least 2 letters. It is pragmatic, not fully RFC 5322, and it governs
+// both account registration and the ADMIN_EMAILS allow-list so an allow-listed
+// address can always be registered afterwards.
+var emailRe = regexp.MustCompile(`^[A-Za-z0-9!#$%&'*+/=?^_` + "`" + `{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_` + "`" + `{|}~-]+)*@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*\.[A-Za-z]{2,}$`)
+
+// ValidEmail reports whether s has an acceptable account address shape.
+// Length is checked separately by each caller so empty and overlong inputs
+// keep their own messages.
+func ValidEmail(s string) bool {
+	return emailRe.MatchString(s)
 }
 
 // maxEmailLen bounds an administrator address at the same width the

@@ -6,19 +6,14 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/pinolrent/pinolrent-api/internal/auth"
+	"github.com/pinolrent/pinolrent-api/internal/config"
 	"github.com/pinolrent/pinolrent-api/internal/db"
 	"github.com/pinolrent/pinolrent-api/internal/models"
 )
-
-// emailRe is a pragmatic (not fully RFC 5322) validation: local and domain
-// labels cannot start or end with a dot or hyphen, no consecutive dots, and
-// the TLD has at least 2 characters.
-var emailRe = regexp.MustCompile(`^[A-Za-z0-9!#$%&'*+/=?^_` + "`" + `{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_` + "`" + `{|}~-]+)*@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*\.[A-Za-z]{2,}$`)
 
 // Health reports liveness, build version, and database reachability.
 func (a *API) Health(w http.ResponseWriter, r *http.Request) {
@@ -146,7 +141,7 @@ func (a *API) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	in.Email = strings.ToLower(strings.TrimSpace(in.Email))
-	if !emailRe.MatchString(in.Email) {
+	if !config.ValidEmail(in.Email) {
 		writeError(w, http.StatusBadRequest, "invalid email")
 		return
 	}
