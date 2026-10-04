@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/pinolrent/pinolrent-api/internal/db"
 	"github.com/pinolrent/pinolrent-api/internal/models"
@@ -87,6 +88,43 @@ func TestHashPasswordIsBcrypt(t *testing.T) {
 	}
 	if len(hash) < 4 || hash[:4] != "$2a$" && hash[:4] != "$2b$" && hash[:4] != "$2y$" {
 		t.Fatalf("hash %q is not bcrypt", hash)
+	}
+}
+
+// TestNewDefaultsToDefaultCost pins the production default: New without
+// options must hash at bcrypt.DefaultCost no matter what cost tests use.
+func TestNewDefaultsToDefaultCost(t *testing.T) {
+	a := newTestAuth(t)
+	hash, err := a.HashPassword("x")
+	if err != nil {
+		t.Fatalf("hash: %v", err)
+	}
+	cost, err := bcrypt.Cost([]byte(hash))
+	if err != nil {
+		t.Fatalf("cost: %v", err)
+	}
+	if cost != bcrypt.DefaultCost {
+		t.Fatalf("cost = %d, want bcrypt.DefaultCost (%d)", cost, bcrypt.DefaultCost)
+	}
+}
+
+// TestWithPasswordCostIsHonored covers the knob test harnesses use to keep
+// the race-detector suite inside its timeout.
+func TestWithPasswordCostIsHonored(t *testing.T) {
+	a := New(testSecret, nil, WithPasswordCost(bcrypt.MinCost))
+	hash, err := a.HashPassword("x")
+	if err != nil {
+		t.Fatalf("hash: %v", err)
+	}
+	cost, err := bcrypt.Cost([]byte(hash))
+	if err != nil {
+		t.Fatalf("cost: %v", err)
+	}
+	if cost != bcrypt.MinCost {
+		t.Fatalf("cost = %d, want bcrypt.MinCost (%d)", cost, bcrypt.MinCost)
+	}
+	if !a.CheckPassword(hash, "x") {
+		t.Fatal("MinCost hash rejected its own password")
 	}
 }
 

@@ -37,12 +37,28 @@ const (
 type Auth struct {
 	secret []byte
 	db     *sql.DB
+	cost   int
+}
+
+// Option configures an Auth.
+type Option func(*Auth)
+
+// WithPasswordCost sets the bcrypt cost HashPassword uses. Production keeps
+// bcrypt.DefaultCost; tests may opt into bcrypt.MinCost so the race-detector
+// suite does not spend its budget on blowfish work.
+func WithPasswordCost(cost int) Option {
+	return func(a *Auth) { a.cost = cost }
 }
 
 // New returns an Auth that signs tokens with the given secret and looks up
-// users in the provided database.
-func New(secret string, d *sql.DB) *Auth {
-	return &Auth{secret: []byte(secret), db: d}
+// users in the provided database. Options exist for tests; production calls
+// New without any.
+func New(secret string, d *sql.DB, opts ...Option) *Auth {
+	a := &Auth{secret: []byte(secret), db: d, cost: bcrypt.DefaultCost}
+	for _, opt := range opts {
+		opt(a)
+	}
+	return a
 }
 
 // Claims is the JWT payload carried by issued tokens.
@@ -71,7 +87,7 @@ func (c *Claims) ExpiresAtUnix() int64 {
 
 // HashPassword returns the bcrypt hash of pw.
 func (a *Auth) HashPassword(pw string) (string, error) {
-	b, err := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.DefaultCost)
+	b, err := bcrypt.GenerateFromPassword([]byte(pw), a.cost)
 	return string(b), err
 }
 
