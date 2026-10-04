@@ -64,7 +64,7 @@ func (a *API) RecordPayment(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "reservation not found")
 			return db.ErrTxHandled
 		}
-		if status != "pending" && status != "accepted" {
+		if status != db.ReservationPending && status != db.ReservationAccepted {
 			writeError(w, http.StatusConflict, "reservation is not pending")
 			return db.ErrTxHandled
 		}
@@ -78,10 +78,10 @@ func (a *API) RecordPayment(w http.ResponseWriter, r *http.Request) {
 			return db.ErrTxHandled
 		}
 		if payErr == nil {
-			if payStatus == "rejected" && status == "accepted" {
+			if payStatus == db.PaymentRejected && status == db.ReservationAccepted {
 				if _, err := conn.ExecContext(ctx,
-					`UPDATE payments SET method = ?, proof_url = ?, status = 'pending' WHERE id = ?`,
-					in.Method, in.ProofURL, payID); err != nil {
+					`UPDATE payments SET method = ?, proof_url = ?, status = ? WHERE id = ?`,
+					in.Method, in.ProofURL, db.PaymentPending, payID); err != nil {
 					serverError(w, err)
 					return db.ErrTxHandled
 				}
@@ -128,7 +128,7 @@ func (a *API) RecordPayment(w http.ResponseWriter, r *http.Request) {
 		ID:            pid,
 		ReservationID: id,
 		Method:        payMethod,
-		Status:        "pending",
+		Status:        db.PaymentPending,
 		ProofURL:      payProofURL,
 	})
 }

@@ -41,7 +41,7 @@ func (a *API) AdminConfirmReservation(w http.ResponseWriter, r *http.Request) {
 			serverError(w, err)
 			return db.ErrTxHandled
 		}
-		if status != "accepted" {
+		if status != db.ReservationAccepted {
 			writeError(w, http.StatusConflict, "reservation is not accepted")
 			return db.ErrTxHandled
 		}
@@ -55,16 +55,16 @@ func (a *API) AdminConfirmReservation(w http.ResponseWriter, r *http.Request) {
 			serverError(w, err)
 			return db.ErrTxHandled
 		}
-		if pStatus != "pending" {
+		if pStatus != db.PaymentPending {
 			writeError(w, http.StatusConflict, "payment is not pending")
 			return db.ErrTxHandled
 		}
 
-		if _, err := conn.ExecContext(ctx, `UPDATE payments SET status = 'approved' WHERE reservation_id = ? AND status = 'pending'`, id); err != nil {
+		if _, err := conn.ExecContext(ctx, `UPDATE payments SET status = ? WHERE reservation_id = ? AND status = ?`, db.PaymentApproved, id, db.PaymentPending); err != nil {
 			serverError(w, err)
 			return db.ErrTxHandled
 		}
-		if _, err := conn.ExecContext(ctx, `UPDATE reservations SET status = 'confirmed' WHERE id = ?`, id); err != nil {
+		if _, err := conn.ExecContext(ctx, `UPDATE reservations SET status = ? WHERE id = ?`, db.ReservationConfirmed, id); err != nil {
 			serverError(w, err)
 			return db.ErrTxHandled
 		}
@@ -127,12 +127,12 @@ func (a *API) AdminRequestCorrection(w http.ResponseWriter, r *http.Request) {
 			serverError(w, err)
 			return db.ErrTxHandled
 		}
-		if status != "accepted" {
+		if status != db.ReservationAccepted {
 			writeError(w, http.StatusConflict, "reservation is not accepted")
 			return db.ErrTxHandled
 		}
 
-		res, err := conn.ExecContext(ctx, `UPDATE payments SET status = 'rejected' WHERE reservation_id = ? AND status = 'pending'`, id)
+		res, err := conn.ExecContext(ctx, `UPDATE payments SET status = ? WHERE reservation_id = ? AND status = ?`, db.PaymentRejected, id, db.PaymentPending)
 		if err != nil {
 			serverError(w, err)
 			return db.ErrTxHandled

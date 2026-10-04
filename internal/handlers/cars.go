@@ -76,11 +76,11 @@ func (a *API) ListCars(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		args := make([]any, 0, 5)
+		args := make([]any, 0, 7)
 		if ownerCond != "" {
 			args = append(args, ownerID)
 		}
-		args = append(args, endStr, startStr, limit, offset)
+		args = append(args, db.ReservationCancelled, db.ReservationRejected, endStr, startStr, limit, offset)
 
 		// #nosec G202 -- db.OverlapPredicate, ownerCond and carColumns are fixed
 		// internal SQL fragments, not user input; the values are bound params.
@@ -91,7 +91,7 @@ func (a *API) ListCars(w http.ResponseWriter, r *http.Request) {
 			AND NOT EXISTS (
 				SELECT 1 FROM reservations r
 				WHERE r.car_id = c.id
-					AND r.status NOT IN ('cancelled', 'rejected')
+					AND r.status NOT IN (?, ?)
 					AND `+db.OverlapPredicate+`
 			)
 			ORDER BY c.id LIMIT ? OFFSET ?`, args...)
@@ -331,7 +331,7 @@ func (a *API) PatchCar(w http.ResponseWriter, r *http.Request) {
 		if in.Active != nil && !*in.Active {
 			var hasFuture int
 			if err := conn.QueryRowContext(ctx,
-				`SELECT COUNT(*) FROM reservations WHERE car_id = ? AND status NOT IN ('cancelled', 'rejected') AND end_date >= date('now')`, id).Scan(&hasFuture); err != nil {
+				`SELECT COUNT(*) FROM reservations WHERE car_id = ? AND status NOT IN (?, ?) AND end_date >= date('now')`, id, db.ReservationCancelled, db.ReservationRejected).Scan(&hasFuture); err != nil {
 				serverError(w, err)
 				return db.ErrTxHandled
 			}

@@ -77,8 +77,8 @@ func (a *API) CreateReservation(w http.ResponseWriter, r *http.Request) {
 		var overlap int
 		if err := conn.QueryRowContext(ctx, `
 			SELECT COUNT(*) FROM reservations r
-			WHERE r.car_id = ? AND r.status NOT IN ('cancelled', 'rejected')
-				AND `+db.OverlapPredicate, in.CarID, in.EndDate, in.StartDate).Scan(&overlap); err != nil {
+			WHERE r.car_id = ? AND r.status NOT IN (?, ?)
+				AND `+db.OverlapPredicate, in.CarID, db.ReservationCancelled, db.ReservationRejected, in.EndDate, in.StartDate).Scan(&overlap); err != nil {
 			serverError(w, err)
 			return db.ErrTxHandled
 		}
@@ -218,7 +218,7 @@ func (a *API) CancelReservation(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "reservation not found")
 			return db.ErrTxHandled
 		}
-		if status != "pending" {
+		if status != db.ReservationPending {
 			writeError(w, http.StatusConflict, "reservation is not pending")
 			return db.ErrTxHandled
 		}
@@ -235,7 +235,7 @@ func (a *API) CancelReservation(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if _, err := conn.ExecContext(ctx,
-			`UPDATE reservations SET status = 'cancelled' WHERE id = ? AND user_id = ?`, id, u.ID); err != nil {
+			`UPDATE reservations SET status = ? WHERE id = ? AND user_id = ?`, db.ReservationCancelled, id, u.ID); err != nil {
 			serverError(w, err)
 			return db.ErrTxHandled
 		}

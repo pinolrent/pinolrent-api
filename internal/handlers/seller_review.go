@@ -46,12 +46,12 @@ func (a *API) AcceptReservation(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "reservation not found")
 			return db.ErrTxHandled
 		}
-		if status != "pending" {
+		if status != db.ReservationPending {
 			writeError(w, http.StatusConflict, "reservation is not pending")
 			return db.ErrTxHandled
 		}
 
-		if _, err := conn.ExecContext(ctx, `UPDATE reservations SET status = 'accepted' WHERE id = ?`, id); err != nil {
+		if _, err := conn.ExecContext(ctx, `UPDATE reservations SET status = ? WHERE id = ?`, db.ReservationAccepted, id); err != nil {
 			serverError(w, err)
 			return db.ErrTxHandled
 		}
@@ -115,17 +115,17 @@ func (a *API) RejectReservation(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "reservation not found")
 			return db.ErrTxHandled
 		}
-		if status != "pending" {
+		if status != db.ReservationPending {
 			writeError(w, http.StatusConflict, "reservation is not pending")
 			return db.ErrTxHandled
 		}
 
 		if _, err := conn.ExecContext(ctx,
-			`UPDATE payments SET status = 'rejected' WHERE reservation_id = ? AND status = 'pending'`, id); err != nil {
+			`UPDATE payments SET status = ? WHERE reservation_id = ? AND status = ?`, db.PaymentRejected, id, db.PaymentPending); err != nil {
 			serverError(w, err)
 			return db.ErrTxHandled
 		}
-		if _, err := conn.ExecContext(ctx, `UPDATE reservations SET status = 'rejected' WHERE id = ?`, id); err != nil {
+		if _, err := conn.ExecContext(ctx, `UPDATE reservations SET status = ? WHERE id = ?`, db.ReservationRejected, id); err != nil {
 			serverError(w, err)
 			return db.ErrTxHandled
 		}
