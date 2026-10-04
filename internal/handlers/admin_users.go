@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/pinolrent/pinolrent-api/internal/auth"
+	"github.com/pinolrent/pinolrent-api/internal/db"
 )
 
 // AdminListUsers returns the platform user list for an administrator.
@@ -172,28 +173,28 @@ func (a *API) AdminPatchUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = withImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
+	err = db.WithImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
 		ctx := r.Context()
 		var current sql.NullInt64
 		if err := conn.QueryRowContext(ctx,
 			`SELECT suspended_at FROM users WHERE id = ?`, id).Scan(&current); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				writeError(w, http.StatusNotFound, "user not found")
-				return errTxHandled
+				return db.ErrTxHandled
 			}
 			serverError(w, err)
-			return errTxHandled
+			return db.ErrTxHandled
 		}
 		if *in.Suspended {
 			if !current.Valid {
 				if _, err := conn.ExecContext(ctx,
 					`UPDATE users SET suspended_at = ? WHERE id = ?`, time.Now().Unix(), id); err != nil {
 					serverError(w, err)
-					return errTxHandled
+					return db.ErrTxHandled
 				}
 				if err := a.auditAction(ctx, conn, actor.ID, auditActionUserSuspend, targetUsers, id, ""); err != nil {
 					serverError(w, err)
-					return errTxHandled
+					return db.ErrTxHandled
 				}
 			}
 		} else {
@@ -201,11 +202,11 @@ func (a *API) AdminPatchUser(w http.ResponseWriter, r *http.Request) {
 				if _, err := conn.ExecContext(ctx,
 					`UPDATE users SET suspended_at = NULL WHERE id = ?`, id); err != nil {
 					serverError(w, err)
-					return errTxHandled
+					return db.ErrTxHandled
 				}
 				if err := a.auditAction(ctx, conn, actor.ID, auditActionUserUnsuspend, targetUsers, id, ""); err != nil {
 					serverError(w, err)
-					return errTxHandled
+					return db.ErrTxHandled
 				}
 			}
 		}
@@ -259,34 +260,34 @@ func (a *API) AdminPatchUserRoles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = withImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
+	err = db.WithImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
 		ctx := r.Context()
 		var exists int
 		if err := conn.QueryRowContext(ctx,
 			`SELECT 1 FROM users WHERE id = ?`, id).Scan(&exists); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				writeError(w, http.StatusNotFound, "user not found")
-				return errTxHandled
+				return db.ErrTxHandled
 			}
 			serverError(w, err)
-			return errTxHandled
+			return db.ErrTxHandled
 		}
 		if *in.Seller {
 			res, err := conn.ExecContext(ctx,
 				`INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, 'seller')`, id)
 			if err != nil {
 				serverError(w, err)
-				return errTxHandled
+				return db.ErrTxHandled
 			}
 			rows, err := res.RowsAffected()
 			if err != nil {
 				serverError(w, err)
-				return errTxHandled
+				return db.ErrTxHandled
 			}
 			if rows > 0 {
 				if err := a.auditAction(ctx, conn, actor.ID, auditActionUserRoleGrantSeller, targetUsers, id, ""); err != nil {
 					serverError(w, err)
-					return errTxHandled
+					return db.ErrTxHandled
 				}
 			}
 		} else {
@@ -294,17 +295,17 @@ func (a *API) AdminPatchUserRoles(w http.ResponseWriter, r *http.Request) {
 				`DELETE FROM user_roles WHERE user_id = ? AND role = 'seller'`, id)
 			if err != nil {
 				serverError(w, err)
-				return errTxHandled
+				return db.ErrTxHandled
 			}
 			rows, err := res.RowsAffected()
 			if err != nil {
 				serverError(w, err)
-				return errTxHandled
+				return db.ErrTxHandled
 			}
 			if rows > 0 {
 				if err := a.auditAction(ctx, conn, actor.ID, auditActionUserRoleRevokeSeller, targetUsers, id, ""); err != nil {
 					serverError(w, err)
-					return errTxHandled
+					return db.ErrTxHandled
 				}
 			}
 		}

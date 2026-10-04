@@ -1,4 +1,4 @@
-package handlers
+package db
 
 import (
 	"context"
@@ -8,10 +8,14 @@ import (
 )
 
 func TestWithImmediateTxCommits(t *testing.T) {
-	a := newTestAPI(t)
+	d, err := Open(":memory:")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer func() { _ = d.Close() }()
 	ctx := context.Background()
 
-	err := withImmediateTx(ctx, a.DB, func(conn *sql.Conn) error {
+	err = WithImmediateTx(ctx, d, func(conn *sql.Conn) error {
 		_, err := conn.ExecContext(ctx, `INSERT INTO users (email, password_hash) VALUES ('tx@example.com', 'h')`)
 		return err
 	})
@@ -20,7 +24,7 @@ func TestWithImmediateTxCommits(t *testing.T) {
 	}
 
 	var n int
-	if err := a.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE email = 'tx@example.com'`).Scan(&n); err != nil {
+	if err := d.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE email = 'tx@example.com'`).Scan(&n); err != nil {
 		t.Fatalf("count: %v", err)
 	}
 	if n != 1 {
@@ -29,21 +33,25 @@ func TestWithImmediateTxCommits(t *testing.T) {
 }
 
 func TestWithImmediateTxHandledRollsBack(t *testing.T) {
-	a := newTestAPI(t)
+	d, err := Open(":memory:")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer func() { _ = d.Close() }()
 	ctx := context.Background()
 
-	err := withImmediateTx(ctx, a.DB, func(conn *sql.Conn) error {
+	err = WithImmediateTx(ctx, d, func(conn *sql.Conn) error {
 		if _, err := conn.ExecContext(ctx, `INSERT INTO users (email, password_hash) VALUES ('rb@example.com', 'h')`); err != nil {
 			t.Fatalf("insert: %v", err)
 		}
-		return errTxHandled
+		return ErrTxHandled
 	})
 	if err != nil {
 		t.Fatalf("handled tx should return nil, got %v", err)
 	}
 
 	var n int
-	if err := a.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE email = 'rb@example.com'`).Scan(&n); err != nil {
+	if err := d.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE email = 'rb@example.com'`).Scan(&n); err != nil {
 		t.Fatalf("count: %v", err)
 	}
 	if n != 0 {
@@ -52,11 +60,15 @@ func TestWithImmediateTxHandledRollsBack(t *testing.T) {
 }
 
 func TestWithImmediateTxPropagatesError(t *testing.T) {
-	a := newTestAPI(t)
+	d, err := Open(":memory:")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer func() { _ = d.Close() }()
 	ctx := context.Background()
 	boom := errors.New("boom")
 
-	err := withImmediateTx(ctx, a.DB, func(_ *sql.Conn) error { return boom })
+	err = WithImmediateTx(ctx, d, func(_ *sql.Conn) error { return boom })
 	if !errors.Is(err, boom) {
 		t.Fatalf("err = %v, want boom", err)
 	}

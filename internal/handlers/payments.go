@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/pinolrent/pinolrent-api/internal/auth"
+	"github.com/pinolrent/pinolrent-api/internal/db"
 	"github.com/pinolrent/pinolrent-api/internal/models"
 )
 
@@ -41,7 +42,7 @@ func (a *API) RecordPayment(w http.ResponseWriter, r *http.Request) {
 	var payMethod string
 	var payProofURL string
 	created := false
-	err = withImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
+	err = db.WithImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
 		ctx := r.Context()
 
 		var buyerID int64
@@ -50,29 +51,29 @@ func (a *API) RecordPayment(w http.ResponseWriter, r *http.Request) {
 			`SELECT user_id, status FROM reservations WHERE id = ?`, id).Scan(&buyerID, &status); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				writeError(w, http.StatusNotFound, "reservation not found")
-				return errTxHandled
+				return db.ErrTxHandled
 			}
 			serverError(w, err)
-			return errTxHandled
+			return db.ErrTxHandled
 		}
 		if buyerID != u.ID {
 			writeError(w, http.StatusNotFound, "reservation not found")
-			return errTxHandled
+			return db.ErrTxHandled
 		}
 		if status != "pending" {
 			writeError(w, http.StatusConflict, "reservation is not pending")
-			return errTxHandled
+			return db.ErrTxHandled
 		}
 
 		var count int
 		if err := conn.QueryRowContext(ctx,
 			`SELECT COUNT(*) FROM payments WHERE reservation_id = ?`, id).Scan(&count); err != nil {
 			serverError(w, err)
-			return errTxHandled
+			return db.ErrTxHandled
 		}
 		if count > 0 {
 			writeError(w, http.StatusConflict, "payment already recorded")
-			return errTxHandled
+			return db.ErrTxHandled
 		}
 
 		res, err := conn.ExecContext(ctx,
@@ -81,10 +82,10 @@ func (a *API) RecordPayment(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			if isUniqueViolation(err) {
 				writeError(w, http.StatusConflict, "payment already recorded")
-				return errTxHandled
+				return db.ErrTxHandled
 			}
 			serverError(w, err)
-			return errTxHandled
+			return db.ErrTxHandled
 		}
 		pid, _ = res.LastInsertId()
 		payMethod = in.Method
@@ -122,7 +123,7 @@ func (a *API) ConfirmReservation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	confirmed := false
-	err = withImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
+	err = db.WithImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
 		ctx := r.Context()
 
 		var status string
@@ -133,46 +134,46 @@ func (a *API) ConfirmReservation(w http.ResponseWriter, r *http.Request) {
 			WHERE r.id = ?`, id).Scan(&status, &ownerID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				writeError(w, http.StatusNotFound, "reservation not found")
-				return errTxHandled
+				return db.ErrTxHandled
 			}
 			serverError(w, err)
-			return errTxHandled
+			return db.ErrTxHandled
 		}
 		if ownerID != u.ID {
 			writeError(w, http.StatusNotFound, "reservation not found")
-			return errTxHandled
+			return db.ErrTxHandled
 		}
 		if status != "pending" {
 			writeError(w, http.StatusConflict, "reservation is not pending")
-			return errTxHandled
+			return db.ErrTxHandled
 		}
 
 		var pStatus string
 		if err := conn.QueryRowContext(ctx, `SELECT method, status FROM payments WHERE reservation_id = ?`, id).Scan(new(string), &pStatus); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				writeError(w, http.StatusConflict, "no payment recorded for this reservation")
-				return errTxHandled
+				return db.ErrTxHandled
 			}
 			serverError(w, err)
-			return errTxHandled
+			return db.ErrTxHandled
 		}
 		if pStatus != "pending" {
 			writeError(w, http.StatusConflict, "payment is not pending")
-			return errTxHandled
+			return db.ErrTxHandled
 		}
 
 		res, err := conn.ExecContext(ctx, `UPDATE payments SET status = 'approved' WHERE reservation_id = ? AND status = 'pending'`, id)
 		if err != nil {
 			serverError(w, err)
-			return errTxHandled
+			return db.ErrTxHandled
 		}
 		if n, _ := res.RowsAffected(); n == 0 {
 			writeError(w, http.StatusConflict, "no payment recorded for this reservation")
-			return errTxHandled
+			return db.ErrTxHandled
 		}
 		if _, err := conn.ExecContext(ctx, `UPDATE reservations SET status = 'confirmed' WHERE id = ?`, id); err != nil {
 			serverError(w, err)
-			return errTxHandled
+			return db.ErrTxHandled
 		}
 		confirmed = true
 		return nil
@@ -208,7 +209,7 @@ func (a *API) RejectReservation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rejected := false
-	err = withImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
+	err = db.WithImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
 		ctx := r.Context()
 
 		var status string
@@ -219,46 +220,46 @@ func (a *API) RejectReservation(w http.ResponseWriter, r *http.Request) {
 			WHERE r.id = ?`, id).Scan(&status, &ownerID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				writeError(w, http.StatusNotFound, "reservation not found")
-				return errTxHandled
+				return db.ErrTxHandled
 			}
 			serverError(w, err)
-			return errTxHandled
+			return db.ErrTxHandled
 		}
 		if ownerID != u.ID {
 			writeError(w, http.StatusNotFound, "reservation not found")
-			return errTxHandled
+			return db.ErrTxHandled
 		}
 		if status != "pending" {
 			writeError(w, http.StatusConflict, "reservation is not pending")
-			return errTxHandled
+			return db.ErrTxHandled
 		}
 
 		var pStatus string
 		if err := conn.QueryRowContext(ctx, `SELECT status FROM payments WHERE reservation_id = ?`, id).Scan(&pStatus); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				writeError(w, http.StatusConflict, "no payment recorded for this reservation")
-				return errTxHandled
+				return db.ErrTxHandled
 			}
 			serverError(w, err)
-			return errTxHandled
+			return db.ErrTxHandled
 		}
 		if pStatus != "pending" {
 			writeError(w, http.StatusConflict, "payment is not pending")
-			return errTxHandled
+			return db.ErrTxHandled
 		}
 
 		res, err := conn.ExecContext(ctx, `UPDATE payments SET status = 'rejected' WHERE reservation_id = ? AND status = 'pending'`, id)
 		if err != nil {
 			serverError(w, err)
-			return errTxHandled
+			return db.ErrTxHandled
 		}
 		if n, _ := res.RowsAffected(); n == 0 {
 			writeError(w, http.StatusConflict, "payment is not pending")
-			return errTxHandled
+			return db.ErrTxHandled
 		}
 		if _, err := conn.ExecContext(ctx, `UPDATE reservations SET status = 'cancelled' WHERE id = ?`, id); err != nil {
 			serverError(w, err)
-			return errTxHandled
+			return db.ErrTxHandled
 		}
 		rejected = true
 		return nil
