@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/pinolrent/pinolrent-api/internal/models"
@@ -18,12 +17,10 @@ func (a *API) AdminListNotifications(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var f filter
-	if s := r.URL.Query().Get("user_id"); s != "" {
-		uid, err := strconv.ParseInt(s, 10, 64)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid user_id")
-			return
-		}
+	if uid, present, errMsg := queryID(r, "user_id"); errMsg != "" {
+		writeError(w, http.StatusBadRequest, errMsg)
+		return
+	} else if present {
 		f.add("user_id = ?", uid)
 	}
 	if s := strings.TrimSpace(r.URL.Query().Get("kind")); s != "" {

@@ -44,6 +44,23 @@ func pathID(r *http.Request, name string) (int64, string) {
 	return id, ""
 }
 
+// queryID parses an optional integer query param ("user_id", "owner_id",
+// ...). It reports whether the param was present; like the other validators
+// it returns "" when valid and an error message when not. Absent means no
+// filter, garbage and non-positive ids are invalid input (400), the same rule
+// as pathID.
+func queryID(r *http.Request, key string) (id int64, present bool, errMsg string) {
+	s := r.URL.Query().Get(key)
+	if s == "" {
+		return 0, false, ""
+	}
+	id, err := strconv.ParseInt(s, 10, 64)
+	if err != nil || id < 1 {
+		return 0, true, "invalid " + key
+	}
+	return id, true, ""
+}
+
 // uploadExtensions are the file extensions served from /uploads/, kept in
 // sync with uploadExtByType in uploads.go.
 var uploadExtensions = map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".webp": true}

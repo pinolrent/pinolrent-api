@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
-	"strconv"
 
 	"github.com/pinolrent/pinolrent-api/internal/auth"
 	"github.com/pinolrent/pinolrent-api/internal/db"
@@ -30,13 +29,11 @@ func (a *API) ListCars(w http.ResponseWriter, r *http.Request) {
 
 	var f filter
 	f.add("c.active = 1")
-	if s := r.URL.Query().Get("owner_id"); s != "" {
-		n, err := strconv.ParseInt(s, 10, 64)
-		if err != nil || n < 1 {
-			writeError(w, http.StatusBadRequest, "invalid owner_id")
-			return
-		}
-		f.add("c.owner_id = ?", n)
+	if oid, present, errMsg := queryID(r, "owner_id"); errMsg != "" {
+		writeError(w, http.StatusBadRequest, errMsg)
+		return
+	} else if present {
+		f.add("c.owner_id = ?", oid)
 	}
 
 	var cars []models.Car

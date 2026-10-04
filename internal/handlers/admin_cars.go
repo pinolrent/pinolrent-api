@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/pinolrent/pinolrent-api/internal/auth"
@@ -26,12 +25,10 @@ func (a *API) AdminListCars(w http.ResponseWriter, r *http.Request) {
 	if s := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q"))); s != "" {
 		f.add("(lower(c.name) LIKE ? OR CAST(c.id AS TEXT)=?)", "%"+s+"%", s)
 	}
-	if s := r.URL.Query().Get("owner_id"); s != "" {
-		oid, err := strconv.ParseInt(s, 10, 64)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid owner_id")
-			return
-		}
+	if oid, present, errMsg := queryID(r, "owner_id"); errMsg != "" {
+		writeError(w, http.StatusBadRequest, errMsg)
+		return
+	} else if present {
 		f.add("c.owner_id = ?", oid)
 	}
 	if s := r.URL.Query().Get("active"); s != "" {

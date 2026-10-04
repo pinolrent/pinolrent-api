@@ -3,7 +3,6 @@ package handlers
 import (
 	"database/sql"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/pinolrent/pinolrent-api/internal/db"
@@ -36,20 +35,16 @@ func (a *API) AdminListReservations(w http.ResponseWriter, r *http.Request) {
 		}
 		f.add("r.status = ?", s)
 	}
-	if s := r.URL.Query().Get("user_id"); s != "" {
-		uid, err := strconv.ParseInt(s, 10, 64)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid user_id")
-			return
-		}
+	if uid, present, errMsg := queryID(r, "user_id"); errMsg != "" {
+		writeError(w, http.StatusBadRequest, errMsg)
+		return
+	} else if present {
 		f.add("r.user_id = ?", uid)
 	}
-	if s := r.URL.Query().Get("car_id"); s != "" {
-		cid, err := strconv.ParseInt(s, 10, 64)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid car_id")
-			return
-		}
+	if cid, present, errMsg := queryID(r, "car_id"); errMsg != "" {
+		writeError(w, http.StatusBadRequest, errMsg)
+		return
+	} else if present {
 		f.add("r.car_id = ?", cid)
 	}
 

@@ -28,3 +28,27 @@ func TestPathID(t *testing.T) {
 		}
 	}
 }
+
+// TestQueryID pins the single query-int parser: absent means no filter,
+// numbers parse, garbage and non-positive ids are invalid like pathID.
+func TestQueryID(t *testing.T) {
+	for _, tc := range []struct {
+		raw         string
+		wantID      int64
+		wantPresent bool
+		wantMsg     string
+	}{
+		{"", 0, false, ""},
+		{"7", 7, true, ""},
+		{"garbage", 0, true, "invalid user_id"},
+		{"0", 0, true, "invalid user_id"},
+		{"-3", 0, true, "invalid user_id"},
+	} {
+		r := httptest.NewRequest("GET", "/x?user_id="+tc.raw, nil)
+		id, present, msg := queryID(r, "user_id")
+		if id != tc.wantID || present != tc.wantPresent || msg != tc.wantMsg {
+			t.Errorf("queryID(%q) = (%d, %v, %q), want (%d, %v, %q)",
+				tc.raw, id, present, msg, tc.wantID, tc.wantPresent, tc.wantMsg)
+		}
+	}
+}

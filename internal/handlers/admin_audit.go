@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 )
 
@@ -57,12 +56,10 @@ func (a *API) AdminListAudit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var f filter
-	if s := r.URL.Query().Get("actor_id"); s != "" {
-		aid, err := strconv.ParseInt(s, 10, 64)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid actor_id")
-			return
-		}
+	if aid, present, errMsg := queryID(r, "actor_id"); errMsg != "" {
+		writeError(w, http.StatusBadRequest, errMsg)
+		return
+	} else if present {
 		f.add("a.actor_id = ?", aid)
 	}
 	if s := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("action"))); s != "" {

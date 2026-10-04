@@ -3,7 +3,6 @@ package handlers
 import (
 	"database/sql"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/pinolrent/pinolrent-api/internal/db"
@@ -26,12 +25,10 @@ func (a *API) AdminListPayments(w http.ResponseWriter, r *http.Request) {
 		}
 		f.add("p.status = ?", s)
 	}
-	if s := r.URL.Query().Get("reservation_id"); s != "" {
-		rid, err := strconv.ParseInt(s, 10, 64)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid reservation_id")
-			return
-		}
+	if rid, present, errMsg := queryID(r, "reservation_id"); errMsg != "" {
+		writeError(w, http.StatusBadRequest, errMsg)
+		return
+	} else if present {
 		f.add("p.reservation_id = ?", rid)
 	}
 
