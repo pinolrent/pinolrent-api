@@ -17,27 +17,23 @@ func (a *API) AdminListNotifications(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	clauses := []string{"1=1"}
-	args := []any{}
+	var f filter
 	if s := r.URL.Query().Get("user_id"); s != "" {
 		uid, err := strconv.ParseInt(s, 10, 64)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid user_id")
 			return
 		}
-		clauses = append(clauses, "user_id = ?")
-		args = append(args, uid)
+		f.add("user_id = ?", uid)
 	}
 	if s := strings.TrimSpace(r.URL.Query().Get("kind")); s != "" {
 		if !validNotifyKind(s) {
 			writeError(w, http.StatusBadRequest, "invalid kind")
 			return
 		}
-		clauses = append(clauses, "kind = ?")
-		args = append(args, s)
+		f.add("kind = ?", s)
 	}
-	var ok bool
-	if clauses, args, ok = unreadClause(clauses, args, r.URL.Query().Get("unread")); !ok {
+	if !f.unread(r.URL.Query().Get("unread")) {
 		writeError(w, http.StatusBadRequest, "invalid unread")
 		return
 	}
@@ -46,7 +42,7 @@ func (a *API) AdminListNotifications(w http.ResponseWriter, r *http.Request) {
 	// #nosec G202 G701 -- clauses are built here from fixed fragments with placeholders;
 	// every value from the query string is bound as a parameter.
 	if err := a.DB.QueryRowContext(r.Context(),
-		`SELECT COUNT(*) FROM notifications WHERE `+strings.Join(clauses, " AND "), args...).Scan(&total); err != nil {
+		`SELECT COUNT(*) FROM notifications WHERE `+f.where(), f.params()...).Scan(&total); err != nil {
 		serverError(w, err)
 		return
 	}
@@ -55,9 +51,9 @@ func (a *API) AdminListNotifications(w http.ResponseWriter, r *http.Request) {
 	// every value from the query string is bound as a parameter.
 	rows, err := a.DB.QueryContext(r.Context(),
 		`SELECT id, user_id, kind, reservation_id, read_at, created_at FROM notifications
-		 WHERE `+strings.Join(clauses, " AND ")+`
+		 WHERE `+f.where()+`
 		 ORDER BY id DESC
-		 LIMIT ? OFFSET ?`, append(args, limit, offset)...)
+		 LIMIT ? OFFSET ?`, f.page(limit, offset)...)
 	if err != nil {
 		serverError(w, err)
 		return

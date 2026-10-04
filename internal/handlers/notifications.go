@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/pinolrent/pinolrent-api/internal/auth"
 	"github.com/pinolrent/pinolrent-api/internal/db"
@@ -75,19 +74,6 @@ func scanNotification(row rowScanner, n *models.Notification) error {
 	return nil
 }
 
-// unreadClause appends the read filter shared by both listings.
-func unreadClause(clauses []string, args []any, raw string) ([]string, []any, bool) {
-	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "":
-		return clauses, args, true
-	case "true":
-		return append(clauses, "read_at IS NULL"), args, true
-	case "false":
-		return append(clauses, "read_at IS NOT NULL"), args, true
-	}
-	return clauses, args, false
-}
-
 // ListNotifications returns the authenticated user's notifications, newest
 // first, optionally filtered to unread only.
 func (a *API) ListNotifications(w http.ResponseWriter, r *http.Request) {
@@ -99,10 +85,9 @@ func (a *API) ListNotifications(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	clauses := []string{"user_id = ?"}
-	args := []any{u.ID}
-	var ok bool
-	if clauses, args, ok = unreadClause(clauses, args, r.URL.Query().Get("unread")); !ok {
+	var f filter
+	f.add("user_id = ?", u.ID)
+	if !f.unread(r.URL.Query().Get("unread")) {
 		writeError(w, http.StatusBadRequest, "invalid unread")
 		return
 	}
@@ -111,8 +96,8 @@ func (a *API) ListNotifications(w http.ResponseWriter, r *http.Request) {
 	// every value from the query string is bound as a parameter.
 	rows, err := a.DB.QueryContext(r.Context(),
 		`SELECT id, user_id, kind, reservation_id, read_at, created_at FROM notifications
-		 WHERE `+strings.Join(clauses, " AND ")+`
-		 ORDER BY id DESC LIMIT ? OFFSET ?`, append(args, limit, offset)...)
+		 WHERE `+f.where()+`
+		 ORDER BY id DESC LIMIT ? OFFSET ?`, f.page(limit, offset)...)
 	if err != nil {
 		serverError(w, err)
 		return
