@@ -32,22 +32,23 @@ func TestWithImmediateTxCommits(t *testing.T) {
 	}
 }
 
-func TestWithImmediateTxHandledRollsBack(t *testing.T) {
+func TestWithImmediateTxRollsBack(t *testing.T) {
 	d, err := Open(":memory:")
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
 	defer func() { _ = d.Close() }()
 	ctx := context.Background()
+	boom := errors.New("boom")
 
 	err = WithImmediateTx(ctx, d, func(conn *sql.Conn) error {
 		if _, err := conn.ExecContext(ctx, `INSERT INTO users (email, password_hash) VALUES ('rb@example.com', 'h')`); err != nil {
 			t.Fatalf("insert: %v", err)
 		}
-		return ErrTxHandled
+		return boom
 	})
-	if err != nil {
-		t.Fatalf("handled tx should return nil, got %v", err)
+	if !errors.Is(err, boom) {
+		t.Fatalf("err = %v, want boom", err)
 	}
 
 	var n int
@@ -55,7 +56,7 @@ func TestWithImmediateTxHandledRollsBack(t *testing.T) {
 		t.Fatalf("count: %v", err)
 	}
 	if n != 0 {
-		t.Fatalf("handled tx not rolled back, count = %d", n)
+		t.Fatalf("tx not rolled back, count = %d", n)
 	}
 }
 
