@@ -54,19 +54,15 @@ func (a *API) RecordPayment(w http.ResponseWriter, r *http.Request) {
 		if err := conn.QueryRowContext(ctx,
 			`SELECT user_id, status FROM reservations WHERE id = ?`, id).Scan(&buyerID, &status); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				writeError(w, http.StatusNotFound, "reservation not found")
-				return db.ErrTxHandled
+				return &statusError{http.StatusNotFound, "reservation not found"}
 			}
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		if buyerID != u.ID {
-			writeError(w, http.StatusNotFound, "reservation not found")
-			return db.ErrTxHandled
+			return &statusError{http.StatusNotFound, "reservation not found"}
 		}
 		if status != db.ReservationPending && status != db.ReservationAccepted {
-			writeError(w, http.StatusConflict, "reservation is not pending")
-			return db.ErrTxHandled
+			return &statusError{http.StatusConflict, "reservation is not pending"}
 		}
 
 		var payID int64
@@ -74,16 +70,14 @@ func (a *API) RecordPayment(w http.ResponseWriter, r *http.Request) {
 		payErr := conn.QueryRowContext(ctx,
 			`SELECT id, status FROM payments WHERE reservation_id = ?`, id).Scan(&payID, &payStatus)
 		if payErr != nil && !errors.Is(payErr, sql.ErrNoRows) {
-			serverError(w, payErr)
-			return db.ErrTxHandled
+			return payErr
 		}
 		if payErr == nil {
 			if payStatus == db.PaymentRejected && status == db.ReservationAccepted {
 				if _, err := conn.ExecContext(ctx,
 					`UPDATE payments SET method = ?, proof_url = ?, status = ? WHERE id = ?`,
 					in.Method, in.ProofURL, db.PaymentPending, payID); err != nil {
-					serverError(w, err)
-					return db.ErrTxHandled
+					return err
 				}
 				pid = payID
 				payMethod = in.Method
@@ -91,8 +85,7 @@ func (a *API) RecordPayment(w http.ResponseWriter, r *http.Request) {
 				corrected = true
 				return nil
 			}
-			writeError(w, http.StatusConflict, "payment already recorded")
-			return db.ErrTxHandled
+			return &statusError{http.StatusConflict, "payment already recorded"}
 		}
 
 		res, err := conn.ExecContext(ctx,
@@ -100,11 +93,9 @@ func (a *API) RecordPayment(w http.ResponseWriter, r *http.Request) {
 			id, in.Method, in.ProofURL)
 		if err != nil {
 			if isUniqueViolation(err) {
-				writeError(w, http.StatusConflict, "payment already recorded")
-				return db.ErrTxHandled
+				return &statusError{http.StatusConflict, "payment already recorded"}
 			}
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		pid, _ = res.LastInsertId()
 		payMethod = in.Method
@@ -112,8 +103,7 @@ func (a *API) RecordPayment(w http.ResponseWriter, r *http.Request) {
 		created = true
 		return nil
 	})
-	if err != nil {
-		serverError(w, err)
+	if writeTxErr(w, err) {
 		return
 	}
 	if !created && !corrected {
