@@ -154,19 +154,16 @@ func (a *API) MarkNotificationRead(w http.ResponseWriter, r *http.Request) {
 		res, err := conn.ExecContext(ctx,
 			`UPDATE notifications SET read_at = COALESCE(read_at, strftime('%s','now')) WHERE id = ? AND user_id = ?`, id, u.ID)
 		if err != nil {
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		n, _ := res.RowsAffected()
 		if n == 0 {
-			writeError(w, http.StatusNotFound, "notification not found")
-			return db.ErrTxHandled
+			return &statusError{http.StatusNotFound, "notification not found"}
 		}
 		read = true
 		return nil
 	})
-	if err != nil {
-		serverError(w, err)
+	if writeTxErr(w, err) {
 		return
 	}
 	if !read {

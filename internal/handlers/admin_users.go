@@ -179,41 +179,34 @@ func (a *API) AdminPatchUser(w http.ResponseWriter, r *http.Request) {
 		if err := conn.QueryRowContext(ctx,
 			`SELECT suspended_at FROM users WHERE id = ?`, id).Scan(&current); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				writeError(w, http.StatusNotFound, "user not found")
-				return db.ErrTxHandled
+				return &statusError{http.StatusNotFound, "user not found"}
 			}
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		if *in.Suspended {
 			if !current.Valid {
 				if _, err := conn.ExecContext(ctx,
 					`UPDATE users SET suspended_at = ? WHERE id = ?`, time.Now().Unix(), id); err != nil {
-					serverError(w, err)
-					return db.ErrTxHandled
+					return err
 				}
 				if err := a.auditAction(ctx, conn, actor.ID, auditActionUserSuspend, targetUsers, id, ""); err != nil {
-					serverError(w, err)
-					return db.ErrTxHandled
+					return err
 				}
 			}
 		} else {
 			if current.Valid {
 				if _, err := conn.ExecContext(ctx,
 					`UPDATE users SET suspended_at = NULL WHERE id = ?`, id); err != nil {
-					serverError(w, err)
-					return db.ErrTxHandled
+					return err
 				}
 				if err := a.auditAction(ctx, conn, actor.ID, auditActionUserUnsuspend, targetUsers, id, ""); err != nil {
-					serverError(w, err)
-					return db.ErrTxHandled
+					return err
 				}
 			}
 		}
 		return nil
 	})
-	if err != nil {
-		serverError(w, err)
+	if writeTxErr(w, err) {
 		return
 	}
 
@@ -266,53 +259,44 @@ func (a *API) AdminPatchUserRoles(w http.ResponseWriter, r *http.Request) {
 		if err := conn.QueryRowContext(ctx,
 			`SELECT 1 FROM users WHERE id = ?`, id).Scan(&exists); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				writeError(w, http.StatusNotFound, "user not found")
-				return db.ErrTxHandled
+				return &statusError{http.StatusNotFound, "user not found"}
 			}
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		if *in.Seller {
 			res, err := conn.ExecContext(ctx,
 				`INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, ?)`, id, db.RoleSeller)
 			if err != nil {
-				serverError(w, err)
-				return db.ErrTxHandled
+				return err
 			}
 			rows, err := res.RowsAffected()
 			if err != nil {
-				serverError(w, err)
-				return db.ErrTxHandled
+				return err
 			}
 			if rows > 0 {
 				if err := a.auditAction(ctx, conn, actor.ID, auditActionUserRoleGrantSeller, targetUsers, id, ""); err != nil {
-					serverError(w, err)
-					return db.ErrTxHandled
+					return err
 				}
 			}
 		} else {
 			res, err := conn.ExecContext(ctx,
 				`DELETE FROM user_roles WHERE user_id = ? AND role = ?`, id, db.RoleSeller)
 			if err != nil {
-				serverError(w, err)
-				return db.ErrTxHandled
+				return err
 			}
 			rows, err := res.RowsAffected()
 			if err != nil {
-				serverError(w, err)
-				return db.ErrTxHandled
+				return err
 			}
 			if rows > 0 {
 				if err := a.auditAction(ctx, conn, actor.ID, auditActionUserRoleRevokeSeller, targetUsers, id, ""); err != nil {
-					serverError(w, err)
-					return db.ErrTxHandled
+					return err
 				}
 			}
 		}
 		return nil
 	})
-	if err != nil {
-		serverError(w, err)
+	if writeTxErr(w, err) {
 		return
 	}
 
