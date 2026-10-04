@@ -35,57 +35,45 @@ func (a *API) AdminConfirmReservation(w http.ResponseWriter, r *http.Request) {
 			JOIN cars c ON c.id = r.car_id
 			WHERE r.id = ?`, id).Scan(&status, &buyerID, &ownerID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				writeError(w, http.StatusNotFound, "reservation not found")
-				return db.ErrTxHandled
+				return &statusError{http.StatusNotFound, "reservation not found"}
 			}
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		if status != db.ReservationAccepted {
-			writeError(w, http.StatusConflict, "reservation is not accepted")
-			return db.ErrTxHandled
+			return &statusError{http.StatusConflict, "reservation is not accepted"}
 		}
 
 		var pStatus string
 		if err := conn.QueryRowContext(ctx, `SELECT status FROM payments WHERE reservation_id = ?`, id).Scan(&pStatus); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				writeError(w, http.StatusConflict, "no payment recorded for this reservation")
-				return db.ErrTxHandled
+				return &statusError{http.StatusConflict, "no payment recorded for this reservation"}
 			}
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		if pStatus != db.PaymentPending {
-			writeError(w, http.StatusConflict, "payment is not pending")
-			return db.ErrTxHandled
+			return &statusError{http.StatusConflict, "payment is not pending"}
 		}
 
 		if _, err := conn.ExecContext(ctx, `UPDATE payments SET status = ? WHERE reservation_id = ? AND status = ?`, db.PaymentApproved, id, db.PaymentPending); err != nil {
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		if _, err := conn.ExecContext(ctx, `UPDATE reservations SET status = ? WHERE id = ?`, db.ReservationConfirmed, id); err != nil {
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		if err := a.auditAction(ctx, conn, u.ID, auditActionReservationConfirm, targetReservations, id, ""); err != nil {
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		admins, err := adminIDs(ctx, conn)
 		if err != nil {
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		if err := notifyUsers(ctx, conn, append(admins, buyerID, ownerID), notifyConfirmed, id); err != nil {
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		confirmed = true
 		return nil
 	})
-	if err != nil {
-		serverError(w, err)
+	if writeTxErr(w, err) {
 		return
 	}
 	if !confirmed {
@@ -121,39 +109,31 @@ func (a *API) AdminRequestCorrection(w http.ResponseWriter, r *http.Request) {
 		if err := conn.QueryRowContext(ctx,
 			`SELECT status, user_id FROM reservations WHERE id = ?`, id).Scan(&status, &buyerID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				writeError(w, http.StatusNotFound, "reservation not found")
-				return db.ErrTxHandled
+				return &statusError{http.StatusNotFound, "reservation not found"}
 			}
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		if status != db.ReservationAccepted {
-			writeError(w, http.StatusConflict, "reservation is not accepted")
-			return db.ErrTxHandled
+			return &statusError{http.StatusConflict, "reservation is not accepted"}
 		}
 
 		res, err := conn.ExecContext(ctx, `UPDATE payments SET status = ? WHERE reservation_id = ? AND status = ?`, db.PaymentRejected, id, db.PaymentPending)
 		if err != nil {
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		if n, _ := res.RowsAffected(); n == 0 {
-			writeError(w, http.StatusConflict, "payment is not pending")
-			return db.ErrTxHandled
+			return &statusError{http.StatusConflict, "payment is not pending"}
 		}
 		if err := a.auditAction(ctx, conn, u.ID, auditActionReservationRequestCorrection, targetReservations, id, ""); err != nil {
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		if err := notifyUsers(ctx, conn, []int64{buyerID}, notifyCorrectionRequested, id); err != nil {
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		corrected = true
 		return nil
 	})
-	if err != nil {
-		serverError(w, err)
+	if writeTxErr(w, err) {
 		return
 	}
 	if !corrected {
