@@ -8,6 +8,34 @@ import (
 	"github.com/pinolrent/pinolrent-api/internal/models"
 )
 
+// TestBuyerRoutesRequireBuyerRole pins the role check on the business routes:
+// an account stripped of every role (only reachable by manual database edits,
+// since registration always grants buyer) cannot book, pay, list or upload.
+func TestBuyerRoutesRequireBuyerRole(t *testing.T) {
+	a := newTestAPI(t)
+	token := registerBuyer(t, a, "roleless@example.com", "secret123")
+	if _, err := a.DB.ExecContext(context.Background(),
+		`DELETE FROM user_roles WHERE user_id = (SELECT id FROM users WHERE email = ?)`, "roleless@example.com"); err != nil {
+		t.Fatalf("strip roles: %v", err)
+	}
+
+	for _, tc := range []struct {
+		method string
+		path   string
+		body   any
+	}{
+		{"POST", "/reservations", map[string]any{"car_id": 1, "start_date": futureDate(10), "end_date": futureDate(12)}},
+		{"GET", "/reservations", nil},
+		{"GET", "/notifications", nil},
+		{"POST", "/uploads", nil},
+	} {
+		rec := doJSON(t, a, tc.method, tc.path, token, tc.body)
+		if rec.Code != http.StatusForbidden {
+			t.Errorf("%s %s: status = %d, want 403 (body %s)", tc.method, tc.path, rec.Code, rec.Body.String())
+		}
+	}
+}
+
 func seedCar(t *testing.T, a *API) models.Car {
 	t.Helper()
 	return createCar(t, a, newSeller(t, a), map[string]any{
