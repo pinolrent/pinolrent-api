@@ -360,9 +360,10 @@ an approximation to size the platform, not a revenue ledger.
 
 ## `GET /admin/audit`
 
-History of administrative actions. Each row says who did what, to whom, and
-when. The indexes are on `actor_id` and on `action`, and the order is from most
-recent to oldest.
+History of human decisions on the platform — admin operations plus the
+seller/buyer decisions that move a reservation. Each row says who did what, to
+whom, and when. The indexes are on `actor_id` and on `action`, and the order
+is from most recent to oldest.
 
 **Query:** `actor_id`, `action`, `limit`, `offset`.
 
@@ -389,6 +390,16 @@ recent to oldest.
 | `user.role_revoke_seller` | `PATCH /admin/users/{id}/roles` | Seller revoked |
 | `car.update` | `PATCH /admin/cars/{id}` | Car edited or deactivated |
 | `car.delete` | `DELETE /admin/cars/{id}` | Car deleted |
+| `reservation.accept` | `PATCH /seller/reservations/{id}/accept` | Owner accepted (actor: seller) |
+| `reservation.reject` | `PATCH /seller/reservations/{id}/reject` | Owner rejected (actor: seller) |
+| `reservation.cancel` | `PATCH /reservations/{id}/cancel` | Buyer cancelled (actor: buyer) |
+| `reservation.confirm` | `PATCH /admin/reservations/{id}/confirm` | Payment approved, reservation confirmed |
+| `reservation.request_correction` | `PATCH /admin/reservations/{id}/request-correction` | Payment sent back for correction |
+
+The rule is decisions, not mechanics: booking, recording a payment and
+reading (`GET`) change no decision and are not audited — the first two stay
+visible in their listings. See [`notifications.md`](notifications.md) for the
+full event → notification → audit table.
 
 Every write happens **inside the same transaction** as the change that caused
 it: either both land, or neither does. That is why an idempotent operation that
