@@ -10,6 +10,7 @@ import (
 
 	"github.com/pinolrent/pinolrent-api/internal/auth"
 	"github.com/pinolrent/pinolrent-api/internal/db"
+	"github.com/pinolrent/pinolrent-api/internal/models"
 )
 
 // AdminListUsers returns the platform user list for an administrator.
@@ -54,28 +55,25 @@ func (a *API) AdminListUsers(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = rows.Close() }()
 
+	// outUser is the account with its suspension instant: the embedded
+	// models.User keeps the account shape in one place. SuspendedAt shadows
+	// User.SuspendedAt (never serialized) with the serialized form.
 	type outUser struct {
-		ID          int64    `json:"id"`
-		Email       string   `json:"email"`
-		Phone       string   `json:"phone,omitempty"`
-		Roles       []string `json:"roles"`
-		SuspendedAt int64    `json:"suspended_at,omitempty"`
+		models.User
+		SuspendedAt int64 `json:"suspended_at,omitempty"`
 	}
 	out := make([]outUser, 0, limit)
 	for rows.Next() {
-		var id int64
-		var email, phone string
+		var u outUser
 		var suspended sql.NullInt64
 		var rolesStr sql.NullString
-		if err := rows.Scan(&id, &email, &phone, &suspended, &rolesStr); err != nil {
+		if err := rows.Scan(&u.ID, &u.Email, &u.Phone, &suspended, &rolesStr); err != nil {
 			serverError(w, err)
 			return
 		}
-		var roles []string
 		if rolesStr.Valid && rolesStr.String != "" {
-			roles = strings.Split(rolesStr.String, ",")
+			u.Roles = strings.Split(rolesStr.String, ",")
 		}
-		u := outUser{ID: id, Email: email, Phone: phone, Roles: roles}
 		if suspended.Valid {
 			u.SuspendedAt = suspended.Int64
 		}
