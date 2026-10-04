@@ -50,6 +50,9 @@ func (a *API) AcceptReservation(w http.ResponseWriter, r *http.Request) {
 		if _, err := conn.ExecContext(ctx, `UPDATE reservations SET status = ? WHERE id = ?`, db.ReservationAccepted, id); err != nil {
 			return err
 		}
+		if err := a.auditAction(ctx, conn, u.ID, auditActionReservationAccept, targetReservations, id, ""); err != nil {
+			return err
+		}
 		if err := notifyUsers(ctx, conn, []int64{buyerID}, notifyAccepted, id); err != nil {
 			return err
 		}
@@ -114,6 +117,9 @@ func (a *API) RejectReservation(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		if _, err := conn.ExecContext(ctx, `UPDATE reservations SET status = ? WHERE id = ?`, db.ReservationRejected, id); err != nil {
+			return err
+		}
+		if err := a.auditAction(ctx, conn, u.ID, auditActionReservationReject, targetReservations, id, ""); err != nil {
 			return err
 		}
 		admins, err := adminIDs(ctx, conn)

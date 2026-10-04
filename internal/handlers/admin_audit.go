@@ -20,6 +20,9 @@ const (
 	auditActionUserRoleRevokeSeller         = "user.role_revoke_seller"
 	auditActionCarUpdate                    = "car.update"
 	auditActionCarDelete                    = "car.delete"
+	auditActionReservationAccept            = "reservation.accept"
+	auditActionReservationReject            = "reservation.reject"
+	auditActionReservationCancel            = "reservation.cancel"
 	auditActionReservationConfirm           = "reservation.confirm"
 	auditActionReservationRequestCorrection = "reservation.request_correction"
 )

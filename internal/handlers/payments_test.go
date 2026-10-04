@@ -272,3 +272,48 @@ func TestRejectReservationAfterConfirm(t *testing.T) {
 		t.Fatalf("reject after confirm: status = %d, want 409", rec.Code)
 	}
 }
+
+// TestSellerDecisionsAreAudited pins the audit side of the owner's decisions:
+// accept and reject each write one audit row with the seller as actor.
+func TestSellerDecisionsAreAudited(t *testing.T) {
+	a := newTestAPI(t)
+	_, seller, v := seedReservation(t, a)
+	_, seller2, w := seedReservation(t, a)
+
+	sellerID := func(token string) int64 {
+		t.Helper()
+		rec := doJSON(t, a, "GET", "/auth/me", token, nil)
+		var me struct {
+			ID int64 `json:"id"`
+		}
+		decodeJSON(t, rec, &me)
+		return me.ID
+	}
+
+	if rec := doJSON(t, a, "PATCH", "/seller/reservations/"+itoa(v.ID)+"/accept", seller, nil); rec.Code != http.StatusOK {
+		t.Fatalf("accept: status = %d", rec.Code)
+	}
+	if rec := doJSON(t, a, "PATCH", "/seller/reservations/"+itoa(w.ID)+"/reject", seller2, nil); rec.Code != http.StatusOK {
+		t.Fatalf("reject: status = %d", rec.Code)
+	}
+
+	for _, tc := range []struct {
+		action string
+		target int64
+		actor  int64
+	}{
+		{"reservation.accept", v.ID, sellerID(seller)},
+		{"reservation.reject", w.ID, sellerID(seller2)},
+	} {
+		var actor int64
+		var n int
+		if err := a.DB.QueryRowContext(context.Background(),
+			`SELECT actor_id, COUNT(*) FROM admin_audit_log WHERE action = ? AND target_id = ? GROUP BY actor_id`,
+			tc.action, tc.target).Scan(&actor, &n); err != nil {
+			t.Fatalf("%s: %v", tc.action, err)
+		}
+		if n != 1 || actor != tc.actor {
+			t.Fatalf("%s: rows = %d actor = %d, want 1 row by %d", tc.action, n, actor, tc.actor)
+		}
+	}
+}
