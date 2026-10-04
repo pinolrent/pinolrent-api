@@ -153,8 +153,10 @@ handler file for its domain.
   `users`, `cars`, `reservations`, `confirm`, `payments`, `notifications`,
   `stats`.
 
-`internal/db/tx.go` exposes `WithImmediateTx` (and `ErrTxHandled` for the
-"response already sent" rollback); handlers never open transactions by hand.
+`internal/db/tx.go` exposes `WithImmediateTx`: callbacks return business-rule
+outcomes as errors and the handler maps them to HTTP once, outside the
+transaction; handlers never open transactions by hand and never write
+responses from inside one.
 
 ## Server and logs
 
