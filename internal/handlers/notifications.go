@@ -12,19 +12,21 @@ import (
 )
 
 // Notification kinds fan out on every reservation transition: the owner learns
-// about new requests, the buyer about decisions, and the administrators about
-// the requests that need their review.
+// about new requests and about cancellations that free its dates, the buyer
+// about decisions, and the administrators about the requests that need their
+// review.
 const (
 	notifyRequested           = "reservation.requested"
 	notifyAccepted            = "reservation.accepted"
 	notifyRejected            = "reservation.rejected"
 	notifyConfirmed           = "reservation.confirmed"
 	notifyCorrectionRequested = "reservation.correction_requested"
+	notifyCancelled           = "reservation.cancelled"
 )
 
 func validNotifyKind(s string) bool {
 	switch s {
-	case notifyRequested, notifyAccepted, notifyRejected, notifyConfirmed, notifyCorrectionRequested:
+	case notifyRequested, notifyAccepted, notifyRejected, notifyConfirmed, notifyCorrectionRequested, notifyCancelled:
 		return true
 	}
 	return false

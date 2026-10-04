@@ -180,7 +180,8 @@ func (a *API) GetReservation(w http.ResponseWriter, r *http.Request) {
 }
 
 // CancelReservation cancels the authenticated buyer's pending reservation, as
-// long as no payment has been recorded for it.
+// long as no payment has been recorded for it. The owner is notified in the
+// same transaction: the cancelled dates were blocking its calendar.
 func (a *API) CancelReservation(w http.ResponseWriter, r *http.Request) {
 	u, _ := auth.CurrentUser(r.Context())
 
@@ -195,9 +196,12 @@ func (a *API) CancelReservation(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
 		var buyerID int64
+		var ownerID int64
 		var status string
-		if err := conn.QueryRowContext(ctx,
-			`SELECT user_id, status FROM reservations WHERE id = ?`, id).Scan(&buyerID, &status); err != nil {
+		if err := conn.QueryRowContext(ctx, `
+			SELECT r.user_id, c.owner_id, r.status FROM reservations r
+			JOIN cars c ON c.id = r.car_id
+			WHERE r.id = ?`, id).Scan(&buyerID, &ownerID, &status); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return &statusError{http.StatusNotFound, "reservation not found"}
 			}
@@ -221,6 +225,12 @@ func (a *API) CancelReservation(w http.ResponseWriter, r *http.Request) {
 
 		if _, err := conn.ExecContext(ctx,
 			`UPDATE reservations SET status = ? WHERE id = ? AND user_id = ?`, db.ReservationCancelled, id, u.ID); err != nil {
+			return err
+		}
+		if err := a.auditAction(ctx, conn, u.ID, auditActionReservationCancel, targetReservations, id, ""); err != nil {
+			return err
+		}
+		if err := notifyUsers(ctx, conn, []int64{ownerID}, notifyCancelled, id); err != nil {
 			return err
 		}
 		cancelled = true

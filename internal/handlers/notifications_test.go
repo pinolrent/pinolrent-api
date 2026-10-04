@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"testing"
 
@@ -81,6 +82,37 @@ func TestNotificationsRejectAndCorrection(t *testing.T) {
 	doJSON(t, a, "POST", "/reservations/"+itoa(v2.ID)+"/payment", buyer, map[string]any{"method": "cash"})
 	if rec := doJSON(t, a, "PATCH", "/admin/reservations/"+itoa(v2.ID)+"/request-correction", admin, nil); rec.Code != http.StatusConflict {
 		t.Fatalf("correction before accept: status = %d, want 409", rec.Code)
+	}
+}
+
+// TestCancelNotifiesOwnerAndAudits pins the buyer-cancel side effects: the
+// owner learns its dates are free again, and the decision is audited with the
+// buyer as actor.
+func TestCancelNotifiesOwnerAndAudits(t *testing.T) {
+	a := newTestAPI(t)
+	buyer, seller, v := seedReservation(t, a)
+
+	if rec := doJSON(t, a, "PATCH", "/reservations/"+itoa(v.ID)+"/cancel", buyer, nil); rec.Code != http.StatusOK {
+		t.Fatalf("cancel: status = %d", rec.Code)
+	}
+	if k := kinds(notificationsOf(t, a, seller)); !k["reservation.cancelled"] {
+		t.Fatalf("owner missing cancelled: %v", k)
+	}
+
+	rec := doJSON(t, a, "GET", "/auth/me", buyer, nil)
+	var me struct {
+		ID int64 `json:"id"`
+	}
+	decodeJSON(t, rec, &me)
+	var actor int64
+	var n int
+	if err := a.DB.QueryRowContext(context.Background(),
+		`SELECT actor_id, COUNT(*) FROM admin_audit_log WHERE action = 'reservation.cancel' AND target_id = ? GROUP BY actor_id`,
+		v.ID).Scan(&actor, &n); err != nil {
+		t.Fatalf("cancel audit: %v", err)
+	}
+	if n != 1 || actor != me.ID {
+		t.Fatalf("cancel audit: rows = %d actor = %d, want 1 row by %d", n, actor, me.ID)
 	}
 }
 
