@@ -58,6 +58,77 @@ func TestAdminConfirmReservation(t *testing.T) {
 	}
 }
 
+// TestReservationStateGraph pins the transition contract in one place: the
+// legal walk pending → accepted → confirmed, and every other edge answering
+// 409. Single transitions are covered by their own tests; this one proves no
+// edge exists outside the contract.
+func TestReservationStateGraph(t *testing.T) {
+	a := newTestAPI(t)
+	admin, _ := newAdmin(t, a)
+
+	conflict := func(name, method, path, token string, body any) {
+		t.Helper()
+		if rec := doJSON(t, a, method, path, token, body); rec.Code != http.StatusConflict {
+			t.Fatalf("%s: status = %d, want 409 (body %s)", name, rec.Code, rec.Body.String())
+		}
+	}
+	cash := map[string]any{"method": "cash"}
+
+	// Legal walk: pending → accepted → confirmed.
+	buyer, seller, v := seedReservation(t, a)
+	pay := "/reservations/" + itoa(v.ID) + "/payment"
+	accept := "/seller/reservations/" + itoa(v.ID) + "/accept"
+	reject := "/seller/reservations/" + itoa(v.ID) + "/reject"
+	confirm := "/admin/reservations/" + itoa(v.ID) + "/confirm"
+	cancel := "/reservations/" + itoa(v.ID) + "/cancel"
+	if rec := doJSON(t, a, "POST", pay, buyer, cash); rec.Code != http.StatusCreated {
+		t.Fatalf("payment: status = %d", rec.Code)
+	}
+	if rec := doJSON(t, a, "PATCH", accept, seller, nil); rec.Code != http.StatusOK {
+		t.Fatalf("accept: status = %d", rec.Code)
+	}
+	if rec := doJSON(t, a, "PATCH", confirm, admin, nil); rec.Code != http.StatusOK {
+		t.Fatalf("confirm: status = %d", rec.Code)
+	}
+
+	// Terminal: nothing moves out of confirmed.
+	conflict("re-accept confirmed", "PATCH", accept, seller, nil)
+	conflict("reject confirmed", "PATCH", reject, seller, nil)
+	conflict("re-confirm", "PATCH", confirm, admin, nil)
+	conflict("cancel confirmed", "PATCH", cancel, buyer, nil)
+	conflict("pay confirmed", "POST", pay, buyer, cash)
+
+	// No pending → confirmed: the owner goes first, with a payment attached.
+	buyer2, seller2, w := seedReservation(t, a)
+	conflict("confirm pending", "PATCH", "/admin/reservations/"+itoa(w.ID)+"/confirm", admin, nil)
+	if rec := doJSON(t, a, "POST", "/reservations/"+itoa(w.ID)+"/payment", buyer2, cash); rec.Code != http.StatusCreated {
+		t.Fatalf("payment: status = %d", rec.Code)
+	}
+	conflict("cancel paid pending", "PATCH", "/reservations/"+itoa(w.ID)+"/cancel", buyer2, nil)
+	if rec := doJSON(t, a, "PATCH", "/seller/reservations/"+itoa(w.ID)+"/accept", seller2, nil); rec.Code != http.StatusOK {
+		t.Fatalf("accept: status = %d", rec.Code)
+	}
+	conflict("cancel accepted", "PATCH", "/reservations/"+itoa(w.ID)+"/cancel", buyer2, nil)
+
+	// Accepted without payment: correction needs a pending payment, and
+	// only pending cancels.
+	_, seller4, y := seedReservation(t, a)
+	if rec := doJSON(t, a, "PATCH", "/seller/reservations/"+itoa(y.ID)+"/accept", seller4, nil); rec.Code != http.StatusOK {
+		t.Fatalf("accept: status = %d", rec.Code)
+	}
+	conflict("correction without payment", "PATCH", "/admin/reservations/"+itoa(y.ID)+"/request-correction", admin, nil)
+
+	// Terminal: nothing moves out of rejected.
+	buyer3, seller3, x := seedReservation(t, a)
+	rejectX := "/seller/reservations/" + itoa(x.ID) + "/reject"
+	if rec := doJSON(t, a, "PATCH", rejectX, seller3, nil); rec.Code != http.StatusOK {
+		t.Fatalf("reject: status = %d", rec.Code)
+	}
+	conflict("accept rejected", "PATCH", "/seller/reservations/"+itoa(x.ID)+"/accept", seller3, nil)
+	conflict("pay rejected", "POST", "/reservations/"+itoa(x.ID)+"/payment", buyer3, cash)
+	conflict("cancel rejected", "PATCH", "/reservations/"+itoa(x.ID)+"/cancel", buyer3, nil)
+}
+
 func TestAdminConfirmReservationRequires(t *testing.T) {
 	a := newTestAPI(t)
 	buyer, seller, v := seedReservation(t, a)
