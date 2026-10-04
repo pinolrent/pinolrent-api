@@ -63,9 +63,9 @@ func (a *API) UpdateMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	phone, ok := normalizePhone(in.Phone)
-	if !ok {
-		writeError(w, http.StatusBadRequest, "invalid phone")
+	phone, msg := normalizePhone(in.Phone)
+	if msg != "" {
+		writeError(w, http.StatusBadRequest, msg)
 		return
 	}
 	// Same rule as registration: a seller without a phone cannot be contacted.
@@ -159,9 +159,9 @@ func (a *API) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	phone, ok := normalizePhone(in.Phone)
-	if !ok {
-		writeError(w, http.StatusBadRequest, "invalid phone")
+	phone, msg := normalizePhone(in.Phone)
+	if msg != "" {
+		writeError(w, http.StatusBadRequest, msg)
 		return
 	}
 
@@ -240,8 +240,8 @@ func (a *API) BecomeSeller(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	phone, ok := normalizePhone(in.Phone)
-	if !ok || phone == "" {
+	phone, msg := normalizePhone(in.Phone)
+	if msg != "" || phone == "" {
 		writeError(w, http.StatusBadRequest, "phone is required for sellers")
 		return
 	}

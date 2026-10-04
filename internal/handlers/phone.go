@@ -18,14 +18,16 @@ var phoneRe = regexp.MustCompile(`^\+[1-9][0-9]{7,14}$`)
 // be turned into a wa.me link without guessing the country later. Chilean local
 // formats (9 digits, or the 56-prefixed 11-digit form) are completed with +56;
 // any other input must already be international. Empty input is valid and
-// returns "" — callers decide whether the number is required.
-func normalizePhone(raw string) (string, bool) {
+// returns "" — callers decide whether the number is required. The second
+// return is the validation error message ("" when valid), like the other
+// normalize/validate helpers.
+func normalizePhone(raw string) (string, string) {
 	s := strings.TrimSpace(raw)
 	if s == "" {
-		return "", true
+		return "", ""
 	}
 	if len(s) > maxPhoneLen {
-		return "", false
+		return "", "invalid phone"
 	}
 
 	// Keep a leading +, drop the separators people type, reject anything else.
@@ -39,7 +41,7 @@ func normalizePhone(raw string) (string, bool) {
 		case r == ' ' || r == '-' || r == '(' || r == ')' || r == '.':
 			// separators, dropped
 		default:
-			return "", false
+			return "", "invalid phone"
 		}
 	}
 	s = b.String()
@@ -52,13 +54,13 @@ func normalizePhone(raw string) (string, bool) {
 	case len(s) == 11 && strings.HasPrefix(s, "56"):
 		s = "+" + s
 	default:
-		return "", false
+		return "", "invalid phone"
 	}
 
 	if !phoneRe.MatchString(s) {
-		return "", false
+		return "", "invalid phone"
 	}
-	return s, true
+	return s, ""
 }
 
 // waLink builds a wa.me link with a prefilled message. The stored number is
