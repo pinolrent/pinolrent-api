@@ -182,6 +182,7 @@ func (a *API) Register(w http.ResponseWriter, r *http.Request) {
 	// duplicate and the real id for a new account would let an attacker
 	// enumerate registered emails. Both paths return the identical body.
 	registered := false
+	duplicate := false
 	err = db.WithImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
 		ctx := r.Context()
 
@@ -192,8 +193,10 @@ func (a *API) Register(w http.ResponseWriter, r *http.Request) {
 			if !isUniqueViolation(err) {
 				return err
 			}
-			writeJSON(w, http.StatusCreated, map[string]any{"email": in.Email})
-			return db.ErrTxHandled
+			// A duplicate answers like a creation so registered emails
+			// cannot be enumerated; the caller writes the shared body.
+			duplicate = true
+			return nil
 		}
 		id, err := res.LastInsertId()
 		if err != nil {
@@ -211,7 +214,7 @@ func (a *API) Register(w http.ResponseWriter, r *http.Request) {
 	if writeTxErr(w, err) {
 		return
 	}
-	if !registered {
+	if !registered && !duplicate {
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"email": in.Email})
