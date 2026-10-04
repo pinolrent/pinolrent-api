@@ -237,8 +237,16 @@ func TestAdminSuspendIsIdempotentAndAuditedOnce(t *testing.T) {
 func TestAdminGrantsAndRevokesSellerRole(t *testing.T) {
 	a := newTestAPI(t)
 	admin, adminID := newAdmin(t, a)
-	registerBuyer(t, a, "buyer@example.com", "secret123")
+	buyer := registerBuyer(t, a, "buyer@example.com", "secret123")
 	buyerID := userID(t, a, "buyer@example.com")
+	// Granting seller promises buyers a contact phone, so both targets get
+	// one first (phone is not unique, sharing it here is fine).
+	for _, tok := range []string{admin, buyer} {
+		if rec := doJSON(t, a, "PATCH", "/auth/me", tok,
+			map[string]any{"phone": "+56912345678"}); rec.Code != http.StatusOK {
+			t.Fatalf("set phone: %d body %s", rec.Code, rec.Body.String())
+		}
+	}
 	// The administrator is also a seller here, to prove the call leaves
 	// unrelated memberships alone.
 	if rec := doJSON(t, a, "PATCH", fmt.Sprintf("/admin/users/%d/roles", adminID), admin,
@@ -277,6 +285,25 @@ func TestAdminGrantsAndRevokesSellerRole(t *testing.T) {
 	}
 	if roles := userRoles(t, a, adminID); len(roles) != 3 {
 		t.Fatalf("admin roles changed: %v, want [admin buyer seller]", roles)
+	}
+}
+
+// TestAdminCannotGrantSellerWithoutPhone pins the seller-phone invariant on
+// the admin path too: granting seller to a phoneless account is a 409 and
+// changes nothing.
+func TestAdminCannotGrantSellerWithoutPhone(t *testing.T) {
+	a := newTestAPI(t)
+	admin, _ := newAdmin(t, a)
+	registerBuyer(t, a, "buyer@example.com", "secret123")
+	target := userID(t, a, "buyer@example.com")
+
+	rec := doJSON(t, a, "PATCH", fmt.Sprintf("/admin/users/%d/roles", target), admin,
+		map[string]any{"seller": true})
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409 (body %s)", rec.Code, rec.Body.String())
+	}
+	if roles := userRoles(t, a, target); len(roles) != 1 || roles[0] != "buyer" {
+		t.Fatalf("roles changed by rejected call: %v", roles)
 	}
 }
 

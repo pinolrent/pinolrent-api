@@ -250,13 +250,18 @@ func (a *API) AdminPatchUserRoles(w http.ResponseWriter, r *http.Request) {
 
 	err = db.WithImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
 		ctx := r.Context()
-		var exists int
+		var phone string
 		if err := conn.QueryRowContext(ctx,
-			`SELECT 1 FROM users WHERE id = ?`, id).Scan(&exists); err != nil {
+			`SELECT phone FROM users WHERE id = ?`, id).Scan(&phone); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return &statusError{http.StatusNotFound, "user not found"}
 			}
 			return err
+		}
+		if *in.Seller && phone == "" {
+			// The seller role promises a contact phone to buyers; an
+			// account without one cannot hold it, however it is granted.
+			return &statusError{http.StatusConflict, "user has no phone number"}
 		}
 		if *in.Seller {
 			res, err := conn.ExecContext(ctx,
