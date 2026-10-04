@@ -273,6 +273,10 @@ func (a *API) BecomeSeller(w http.ResponseWriter, r *http.Request) {
 // jti into revoked_tokens. The same token (or any token with the same
 // jti) is rejected with 401 by RequireAuth from then on. Other tokens
 // for the same user keep working: revocation is per-token, not per-user.
+//
+// It runs without RequireAuth on purpose: it only parses the token and
+// revokes its jti, so even a suspended account can clean up its sessions
+// instead of getting a 403 from the auth check.
 func (a *API) Logout(w http.ResponseWriter, r *http.Request) {
 	status, msg := a.Auth.RevokeFromRequest(r)
 	switch status {

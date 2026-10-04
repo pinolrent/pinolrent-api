@@ -210,6 +210,25 @@ func TestRefreshRejectsAccessToken(t *testing.T) {
 	}
 }
 
+func TestLogoutSuspendedSelfRevokes(t *testing.T) {
+	a := newTestAPI(t)
+	token := registerBuyer(t, a, "user@example.com", "secret123")
+	if _, err := a.DB.ExecContext(context.Background(),
+		`UPDATE users SET suspended_at = 1 WHERE email = ?`, "user@example.com"); err != nil {
+		t.Fatalf("suspend: %v", err)
+	}
+
+	rec := doJSON(t, a, "POST", "/auth/logout", token, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("logout: status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
+	}
+
+	rec = doJSON(t, a, "GET", "/auth/me", token, nil)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("me after logout: status = %d, want 401 (body %s)", rec.Code, rec.Body.String())
+	}
+}
+
 func TestLoginRejectsSuspended(t *testing.T) {
 	a := newTestAPI(t)
 	registerBuyer(t, a, "user@example.com", "secret123")

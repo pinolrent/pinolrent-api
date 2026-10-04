@@ -39,7 +39,7 @@ func (a *API) routes() []route {
 		{http.MethodPost, "/auth/become-seller", a.Auth.RequireAuth(a.BecomeSeller), limitStrict},
 		{http.MethodPost, "/auth/login", a.Login, limitStrict},
 		{http.MethodPost, "/auth/refresh", a.Refresh, limitStrict},
-		{http.MethodPost, "/auth/logout", a.Auth.RequireAuth(a.Logout), limitStrict},
+		{http.MethodPost, "/auth/logout", a.Logout, limitStrict},
 		{http.MethodGet, "/auth/me", a.Auth.RequireAuth(a.Me), limitStrict},
 		{http.MethodPatch, "/auth/me", a.Auth.RequireAuth(a.UpdateMe), limitStrict},
 		{http.MethodPatch, "/auth/password", a.Auth.RequireAuth(a.UpdatePassword), limitStrict},
