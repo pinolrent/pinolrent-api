@@ -21,7 +21,7 @@ func TestNormalizePhone(t *testing.T) {
 		{"surrounding whitespace", "  +56912345678  ", "+56912345678", true},
 		{"other country", "+14155552671", "+14155552671", true},
 
-		{"letters", "no-es-un-numero", "", false},
+		{"letters", "not-a-number", "", false},
 		{"plus in the middle", "56+912345678", "", false},
 		{"too short", "12345678", "", false},
 		{"too long", "1234567890123456789", "", false},

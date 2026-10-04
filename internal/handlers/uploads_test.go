@@ -427,7 +427,7 @@ func TestCleanupOrphanUploads(t *testing.T) {
 
 	// rows that reference two of the files
 	createCar(t, a, seller, map[string]any{
-		"name": "Con foto", "price_per_day": 100, "photo_url": "/uploads/car-ref.jpg",
+		"name": "With photo", "price_per_day": 100, "photo_url": "/uploads/car-ref.jpg",
 	})
 	buyer, _, v := seedReservation(t, a)
 	doJSON(t, a, "POST", "/reservations/"+itoa(v.ID)+"/payment", buyer, map[string]any{

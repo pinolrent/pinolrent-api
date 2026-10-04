@@ -282,8 +282,8 @@ func TestDeleteCar(t *testing.T) {
 func TestDeleteCarWithReservations(t *testing.T) {
 	a := newTestAPI(t)
 	token := newSeller(t, a)
-	car := createCar(t, a, token, map[string]any{"name": "Con historial", "price_per_day": 100})
-	buyer := registerBuyer(t, a, "del-buyer@example.com", "secret123")
+	car := createCar(t, a, token, map[string]any{"name": "With history", "price_per_day": 100})
+	buyer := registerBuyer(t, a, "of-buyer@example.com", "secret123")
 	createReservation(t, a, buyer, map[string]any{
 		"car_id": car.ID, "start_date": futureDate(10), "end_date": futureDate(12),
 	})
@@ -311,7 +311,7 @@ func TestDeleteCarOwnership(t *testing.T) {
 	if rec := doJSON(t, a, "DELETE", "/seller/cars/"+itoa(car.ID), other, nil); rec.Code != http.StatusNotFound {
 		t.Fatalf("other seller: status = %d, want 404", rec.Code)
 	}
-	buyer := registerBuyer(t, a, "del-role@example.com", "secret123")
+	buyer := registerBuyer(t, a, "of-role@example.com", "secret123")
 	if rec := doJSON(t, a, "DELETE", "/seller/cars/"+itoa(car.ID), buyer, nil); rec.Code != http.StatusForbidden {
 		t.Fatalf("buyer: status = %d, want 403", rec.Code)
 	}
