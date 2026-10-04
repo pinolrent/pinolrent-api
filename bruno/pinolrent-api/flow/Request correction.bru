@@ -1,0 +1,20 @@
+meta {
+  name: Request correction
+  type: http
+  seq: 55
+}
+
+patch {
+  url: {{baseUrl}}/admin/reservations/{{correctionReservationId}}/request-correction
+  body: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.status: eq accepted
+  res.body.payment.status: eq rejected
+}

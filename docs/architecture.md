@@ -76,27 +76,31 @@ What matters about the schema (`internal/db/migrations/`):
 stateDiagram-v2
     direction LR
     [*] --> pending: POST /reservations
-    pending --> confirmed: seller confirms (with payment)
+    pending --> accepted: seller accepts
+    pending --> rejected: seller rejects
     pending --> cancelled: buyer cancels (without payment)
+    accepted --> confirmed: admin confirms (approves payment)
+    accepted --> accepted: admin requests correction (payment rejected)
     confirmed --> [*]
+    rejected --> [*]
     cancelled --> [*]
 
     state "payment" as p {
         [*] --> pendingPay: POST /reservations/{id}/payment
-        pendingPay --> approved: seller confirms
-        pendingPay --> rejected: seller rejects
+        pendingPay --> approved: admin confirms
+        pendingPay --> rejected: seller rejects / admin requests correction
     }
 ```
 
-- A reservation is born `pending`. The buyer can cancel it while it is still `pending` and has no payment. The seller confirms it and it becomes `confirmed` (and the payment `approved`).
-- A payment is born `pending` and becomes `approved` on confirmation, or `rejected` if the seller rejects it: the reservation stays `cancelled` and the dates are released. Since there can only be one payment per reservation, after a rejection the buyer creates a new reservation.
+- A reservation is born `pending`. The buyer can cancel it while it is still `pending` and has no payment. The owner accepts it (`accepted`) or rejects it (`rejected`, releasing the dates); only an `accepted` reservation with a validated payment becomes `confirmed`, and only through the administrator.
+- A payment is born `pending` and becomes `approved` when the administrator confirms, or `rejected` when the owner rejects the request or the administrator sends it back for correction. A rejected reservation is terminal, but a correction keeps the reservation `accepted` so the buyer attaches a new proof without booking again.
 
 ## Business rules
 
 **Availability:**
 
 - Only cars with `active = 1` count.
-- Two reservations collide if `r.start_date <= end AND r.end_date >= start`, as long as neither is `cancelled`.
+- Two reservations collide if `r.start_date <= end AND r.end_date >= start`, as long as neither is `cancelled` nor `rejected`.
 - `start_date` cannot be before today (in UTC) and `end_date >= start_date`.
 - A reservation cannot last more than **30 days**.
 - Listings are plain arrays and can be paginated with `limit`/`offset`.

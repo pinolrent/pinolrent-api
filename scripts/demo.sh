@@ -190,9 +190,14 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/reservations/$res/p
   -d '{"method":"pos","proof_url":"https://example.com/receipt.jpg"}')
 check "record payment -> 201" "201" "$code"
 
-code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/seller/reservations/$res/confirm" \
+code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/seller/reservations/$res/accept" \
   -H "Authorization: Bearer $seller")
-check "confirm -> 200" "200" "$code"
+check "accept -> 200" "200" "$code"
+status=$(curl -s "$BASE/reservations/$res" -H "Authorization: Bearer $buyer" | jq -r .status)
+check "accepted, not confirmed" "accepted" "$status"
+# $res is reused as scratch below (catalog section), so keep the id aside for
+# the administrator confirmation later.
+acceptedRes=$res
 
 echo "== cancellation =="
 res2=$(curl -s -X POST "$BASE/reservations" -H "Authorization: Bearer $buyer" \
@@ -217,7 +222,7 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/reservations/$res3/
   -H "Authorization: Bearer $buyer" -H 'Content-Type: application/json' -d '{"method":"cash"}')
 check "payment to reject -> 201" "201" "$code"
 rej=$(curl -s -X PATCH "$BASE/seller/reservations/$res3/reject" -H "Authorization: Bearer $seller")
-check "reject -> cancelled" "cancelled" "$(printf '%s' "$rej" | jq -r .status)"
+check "reject -> rejected" "rejected" "$(printf '%s' "$rej" | jq -r .status)"
 check "payment rejected" "rejected" "$(printf '%s' "$rej" | jq -r .payment.status)"
 n=$(curl -s "$BASE/cars?start_date=2027-02-11&end_date=2027-02-11" | jq --argjson id "$car" '[.[] | select(.id == $id)] | length')
 check "dates released after rejection" "1" "$n"
@@ -396,6 +401,34 @@ for path in admin/cars admin/reservations admin/payments admin/stats; do
   code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/$path" -H "Authorization: Bearer $adminToken")
   check "GET /$path -> 200" "200" "$code"
 done
+# Two-step confirmation: the reservation the seller accepted above is confirmed
+# by the administrator, approving its payment in the same transaction.
+conf=$(curl -s -X PATCH "$BASE/admin/reservations/$acceptedRes/confirm" -H "Authorization: Bearer $adminToken")
+check "admin confirm -> confirmed" "confirmed" "$(printf '%s' "$conf" | jq -r .status)"
+check "payment approved" "approved" "$(printf '%s' "$conf" | jq -r .payment.status)"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/admin/reservations/$acceptedRes/confirm" \
+  -H "Authorization: Bearer $adminToken")
+check "re-confirm -> 409" "409" "$code"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/admin/reservations/$acceptedRes/confirm" \
+  -H "Authorization: Bearer $buyer")
+check "admin confirm with buyer token -> 403" "403" "$code"
+# Correction loop: an accepted reservation whose payment is sent back stays
+# accepted, the buyer attaches a new proof and the admin confirms it.
+res4=$(curl -s -X POST "$BASE/reservations" -H "Authorization: Bearer $buyer" \
+  -H 'Content-Type: application/json' \
+  -d "{\"car_id\":$car,\"start_date\":\"2027-03-10\",\"end_date\":\"2027-03-12\"}" | jq -r .id)
+check "reservation to correct" "number" "$([ "$res4" != "null" ] && echo number)"
+curl -s -X POST "$BASE/reservations/$res4/payment" -H "Authorization: Bearer $buyer" \
+  -H 'Content-Type: application/json' -d '{"method":"cash"}' > /dev/null
+curl -s -X PATCH "$BASE/seller/reservations/$res4/accept" -H "Authorization: Bearer $seller" > /dev/null
+corr=$(curl -s -X PATCH "$BASE/admin/reservations/$res4/request-correction" -H "Authorization: Bearer $adminToken")
+check "request correction keeps accepted" "accepted" "$(printf '%s' "$corr" | jq -r .status)"
+code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/reservations/$res4/payment" \
+  -H "Authorization: Bearer $buyer" -H 'Content-Type: application/json' \
+  -d '{"method":"pos","proof_url":"https://example.com/receipt2.jpg"}')
+check "re-record payment -> 200" "200" "$code"
+conf2=$(curl -s -X PATCH "$BASE/admin/reservations/$res4/confirm" -H "Authorization: Bearer $adminToken")
+check "admin confirm corrected -> confirmed" "confirmed" "$(printf '%s' "$conf2" | jq -r .status)"
 # The suspension pair above always writes two rows. Compared inside a
 # substitution so a regression reports FAIL instead of tripping `set -e`.
 audits=$(curl -s "$BASE/admin/audit" -H "Authorization: Bearer $adminToken" | jq -r '.total')

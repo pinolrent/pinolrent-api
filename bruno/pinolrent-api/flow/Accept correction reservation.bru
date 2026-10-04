@@ -1,0 +1,19 @@
+meta {
+  name: Accept correction reservation
+  type: http
+  seq: 54
+}
+
+patch {
+  url: {{baseUrl}}/seller/reservations/{{correctionReservationId}}/accept
+  body: none
+}
+
+headers {
+  Authorization: Bearer {{sellerToken}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.status: eq accepted
+}

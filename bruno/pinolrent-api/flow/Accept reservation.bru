@@ -1,11 +1,11 @@
 meta {
-  name: Confirm reservation
+  name: Accept reservation
   type: http
   seq: 21
 }
 
 patch {
-  url: {{baseUrl}}/seller/reservations/{{reservationId}}/confirm
+  url: {{baseUrl}}/seller/reservations/{{reservationId}}/accept
   body: none
 }
 
@@ -15,5 +15,5 @@ headers {
 
 assert {
   res.status: eq 200
-  res.body.status: isDefined
+  res.body.status: eq accepted
 }

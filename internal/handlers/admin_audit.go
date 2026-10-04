@@ -14,19 +14,22 @@ import (
 // (not suspended, due to RequireAuth) and focus on enforcing business rules.
 
 const (
-	auditActionUserSuspend          = "user.suspend"
-	auditActionUserUnsuspend        = "user.unsuspend"
-	auditActionUserRoleGrantSeller  = "user.role_grant_seller"
-	auditActionUserRoleRevokeSeller = "user.role_revoke_seller"
-	auditActionCarUpdate            = "car.update"
-	auditActionCarDelete            = "car.delete"
+	auditActionUserSuspend                  = "user.suspend"
+	auditActionUserUnsuspend                = "user.unsuspend"
+	auditActionUserRoleGrantSeller          = "user.role_grant_seller"
+	auditActionUserRoleRevokeSeller         = "user.role_revoke_seller"
+	auditActionCarUpdate                    = "car.update"
+	auditActionCarDelete                    = "car.delete"
+	auditActionReservationConfirm           = "reservation.confirm"
+	auditActionReservationRequestCorrection = "reservation.request_correction"
 )
 
 type targetType string
 
 const (
-	targetUsers = targetType("users")
-	targetCars  = targetType("cars")
+	targetUsers        = targetType("users")
+	targetCars         = targetType("cars")
+	targetReservations = targetType("reservations")
 )
 
 func (a *API) auditAction(ctx context.Context, conn *sql.Conn, actorID int64, action string, tt targetType, targetID int64, detail string) error {

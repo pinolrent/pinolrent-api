@@ -1,0 +1,20 @@
+meta {
+  name: Admin confirm corrected
+  type: http
+  seq: 57
+}
+
+patch {
+  url: {{baseUrl}}/admin/reservations/{{correctionReservationId}}/confirm
+  body: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.status: eq confirmed
+  res.body.payment.status: eq approved
+}

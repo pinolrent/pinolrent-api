@@ -246,6 +246,49 @@ no need to chain calls.
 
 ---
 
+## `PATCH /admin/reservations/{id}/confirm`
+
+The second half of the two-step confirmation: the administrator validates the payment of a reservation the owner already accepted, approving the payment and marking the reservation as confirmed, atomically. A reservation only becomes `confirmed` through this endpoint. Both the confirmation and the correction request below are written to the audit log (`reservation.confirm`, `reservation.request_correction`). No body.
+
+**Answers** `200`:
+
+```json
+{
+  "id": 1, "user_id": 3, "car_id": 1,
+  "start_date": "2026-10-05", "end_date": "2026-10-07", "status": "confirmed",
+  "payment": {"id": 1, "reservation_id": 1, "method": "pos", "status": "approved"}
+}
+```
+
+**Errors:**
+
+| Status | Message | When |
+|--------|---------|------|
+| `400` | `invalid reservation id` | `{id}` is not a number |
+| `404` | `reservation not found` | It does not exist |
+| `409` | `reservation is not accepted` | The owner has not accepted it yet, or it already moved on |
+| `409` | `no payment recorded for this reservation` | The buyer has not attached the proof yet |
+| `409` | `payment is not pending` | The payment already moved |
+
+---
+
+## `PATCH /admin/reservations/{id}/request-correction`
+
+Sends the payment back to the buyer: the payment moves to `rejected` but the reservation stays `accepted`, so the buyer attaches a corrected proof instead of starting over. No body.
+
+**Answers** `200`: the reservation view with `status: accepted` and its payment `rejected`.
+
+**Errors:**
+
+| Status | Message | When |
+|--------|---------|------|
+| `400` | `invalid reservation id` | `{id}` is not a number |
+| `404` | `reservation not found` | It does not exist |
+| `409` | `reservation is not accepted` | The owner has not accepted it yet, or it already moved on |
+| `409` | `payment is not pending` | There is no pending payment to send back |
+
+---
+
 ## `GET /admin/payments`
 
 Lists every payment, with the reservation and buyer context.

@@ -93,7 +93,7 @@ The admin listings (`/admin/users`, `/admin/cars`, `/admin/reservations`, `/admi
 | PATCH | `/reservations/{id}/cancel` | yes | [reservations](reservations.md) |
 | POST | `/reservations/{id}/payment` | yes | [payments](payments.md) |
 | GET | `/seller/reservations` | seller | [payments](payments.md) |
-| PATCH | `/seller/reservations/{id}/confirm` | seller | [payments](payments.md) |
+| PATCH | `/seller/reservations/{id}/accept` | seller | [payments](payments.md) |
 | PATCH | `/seller/reservations/{id}/reject` | seller | [payments](payments.md) |
 | POST | `/uploads` | yes | [uploads](uploads.md) |
 | GET | `/uploads/{name}` | no | [uploads](uploads.md) |
@@ -105,6 +105,8 @@ The admin listings (`/admin/users`, `/admin/cars`, `/admin/reservations`, `/admi
 | PATCH | `/admin/cars/{id}` | admin | [admin](admin.md) |
 | DELETE | `/admin/cars/{id}` | admin | [admin](admin.md) |
 | GET | `/admin/reservations` | admin | [admin](admin.md) |
+| PATCH | `/admin/reservations/{id}/confirm` | admin | [admin](admin.md) |
+| PATCH | `/admin/reservations/{id}/request-correction` | admin | [admin](admin.md) |
 | GET | `/admin/payments` | admin | [admin](admin.md) |
 | GET | `/admin/stats` | admin | [admin](admin.md) |
 | GET | `/admin/audit` | admin | [admin](admin.md) |

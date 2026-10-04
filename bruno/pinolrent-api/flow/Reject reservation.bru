@@ -15,6 +15,6 @@ headers {
 
 assert {
   res.status: eq 200
-  res.body.status: eq cancelled
+  res.body.status: eq rejected
   res.body.payment.status: eq rejected
 }

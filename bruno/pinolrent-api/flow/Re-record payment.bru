@@ -1,0 +1,27 @@
+meta {
+  name: Re-record payment
+  type: http
+  seq: 56
+}
+
+post {
+  url: {{baseUrl}}/reservations/{{correctionReservationId}}/payment
+  body: json
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{buyerToken}}
+}
+
+body:json {
+  {
+    "method": "pos",
+    "proof_url": "https://example.com/recibo-corregido.jpg"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.status: eq pending
+}

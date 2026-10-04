@@ -1,0 +1,45 @@
+meta {
+  name: Create correction reservation
+  type: http
+  seq: 52
+}
+
+post {
+  url: {{baseUrl}}/reservations
+  body: json
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{buyerToken}}
+}
+
+script:pre-request {
+  const fmt = (offsetDays) => {
+    const d = new Date();
+    d.setDate(d.getDate() + offsetDays);
+    return d.toISOString().slice(0, 10);
+  };
+  bru.setVar("correctionStartDate", fmt(40));
+  bru.setVar("correctionEndDate", fmt(42));
+}
+
+body:json {
+  {
+    "car_id": {{carId}},
+    "start_date": "{{correctionStartDate}}",
+    "end_date": "{{correctionEndDate}}"
+  }
+}
+
+assert {
+  res.status: eq 201
+  res.body.id: isDefined
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (body.id) {
+    bru.setVar("correctionReservationId", body.id);
+  }
+}

@@ -272,7 +272,11 @@ func TestCancelReservationRules(t *testing.T) {
 		"car_id": car.ID, "start_date": futureDate(22), "end_date": futureDate(23),
 	})
 	doJSON(t, a, "POST", "/reservations/"+itoa(confirmed.ID)+"/payment", tokenA, map[string]any{"method": "cash"})
-	if rec := doJSON(t, a, "PATCH", "/seller/reservations/"+itoa(confirmed.ID)+"/confirm", seller, nil); rec.Code != http.StatusOK {
+	admin, _ := newAdmin(t, a)
+	if rec := doJSON(t, a, "PATCH", "/seller/reservations/"+itoa(confirmed.ID)+"/accept", seller, nil); rec.Code != http.StatusOK {
+		t.Fatalf("accept: status = %d body %s", rec.Code, rec.Body.String())
+	}
+	if rec := doJSON(t, a, "PATCH", "/admin/reservations/"+itoa(confirmed.ID)+"/confirm", admin, nil); rec.Code != http.StatusOK {
 		t.Fatalf("confirm: status = %d body %s", rec.Code, rec.Body.String())
 	}
 	if rec := doJSON(t, a, "PATCH", "/reservations/"+itoa(confirmed.ID)+"/cancel", tokenA, nil); rec.Code != http.StatusConflict {
