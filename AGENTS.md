@@ -119,7 +119,7 @@ Move the generated file to `internal/db/migrations/` and edit `Up`/`Down`.
 
 ## Bruno collection
 
-`bruno/pinolrent-api/` — all requests live in the single `flujo/` folder and run in `seq` order (tokens and IDs chain via variables).
+`bruno/pinolrent-api/` — all requests live in the single `flow/` folder and run in `seq` order (tokens and IDs chain via variables).
 The Bruno CLI only honors `seq` within a folder and runs folders alphabetically, so a chained flow must not be split across folders.
 Assertions use `res.status` / `res.body.*` (the `$res` variant throws `ReferenceError` in the CLI).
 Every `meta.name` equals its filename, and the `seq` values are unique and gapless (`1..N`) in dependency order.
