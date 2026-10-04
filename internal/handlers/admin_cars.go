@@ -169,11 +169,9 @@ func (a *API) AdminPatchCar(w http.ResponseWriter, r *http.Request) {
 		if err := conn.QueryRowContext(ctx,
 			`SELECT name, photo_url, price_per_day, active FROM cars WHERE id = ?`, id).Scan(&curName, &curPhoto, &curPrice, &curActive); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				writeError(w, http.StatusNotFound, "car not found")
-				return db.ErrTxHandled
+				return &statusError{http.StatusNotFound, "car not found"}
 			}
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 
 		if in.Name != nil {
@@ -195,18 +193,15 @@ func (a *API) AdminPatchCar(w http.ResponseWriter, r *http.Request) {
 		if _, err := conn.ExecContext(ctx,
 			`UPDATE cars SET name=?, photo_url=?, price_per_day=?, active=? WHERE id=?`,
 			curName, curPhoto, curPrice, curActive, id); err != nil {
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		if err := a.auditAction(ctx, conn, actor.ID, auditActionCarUpdate, targetCars, id, ""); err != nil {
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		updated = true
 		return nil
 	})
-	if err != nil {
-		serverError(w, err)
+	if writeTxErr(w, err) {
 		return
 	}
 	if !updated {
@@ -232,34 +227,27 @@ func (a *API) AdminDeleteCar(w http.ResponseWriter, r *http.Request) {
 		var exists int
 		if err := conn.QueryRowContext(ctx, `SELECT 1 FROM cars WHERE id = ?`, id).Scan(&exists); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				writeError(w, http.StatusNotFound, "car not found")
-				return db.ErrTxHandled
+				return &statusError{http.StatusNotFound, "car not found"}
 			}
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		var reservations int
 		if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM reservations WHERE car_id = ?`, id).Scan(&reservations); err != nil {
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		if reservations > 0 {
-			writeError(w, http.StatusConflict, "car has reservations, cannot delete")
-			return db.ErrTxHandled
+			return &statusError{http.StatusConflict, "car has reservations, cannot delete"}
 		}
 		if _, err := conn.ExecContext(ctx, `DELETE FROM cars WHERE id = ?`, id); err != nil {
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		if err := a.auditAction(ctx, conn, actor.ID, auditActionCarDelete, targetCars, id, ""); err != nil {
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		deleted = true
 		return nil
 	})
-	if err != nil {
-		serverError(w, err)
+	if writeTxErr(w, err) {
 		return
 	}
 	if !deleted {
