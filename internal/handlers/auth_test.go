@@ -185,6 +185,29 @@ func TestRefreshRejectsAccessToken(t *testing.T) {
 	}
 }
 
+func TestLoginRejectsSuspended(t *testing.T) {
+	a := newTestAPI(t)
+	registerBuyer(t, a, "user@example.com", "secret123")
+	if _, err := a.DB.ExecContext(context.Background(),
+		`UPDATE users SET suspended_at = 1 WHERE email = ?`, "user@example.com"); err != nil {
+		t.Fatalf("suspend: %v", err)
+	}
+
+	rec := doJSON(t, a, "POST", "/auth/login", "", map[string]any{
+		"email": "user@example.com", "password": "secret123",
+	})
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403 (body %s)", rec.Code, rec.Body.String())
+	}
+
+	rec = doJSON(t, a, "POST", "/auth/login", "", map[string]any{
+		"email": "user@example.com", "password": "wrongpass",
+	})
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("wrong password: status = %d, want 401 (body %s)", rec.Code, rec.Body.String())
+	}
+}
+
 func TestLoginRejects(t *testing.T) {
 	a := newTestAPI(t)
 	registerBuyer(t, a, "user@example.com", "secret123")

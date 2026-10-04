@@ -313,10 +313,11 @@ func (a *API) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var u models.User
+	var suspended sql.NullInt64
 	err := a.DB.QueryRowContext(r.Context(),
-		`SELECT id, email, password_hash, phone FROM users WHERE email = ?`,
+		`SELECT id, email, password_hash, phone, suspended_at FROM users WHERE email = ?`,
 		strings.ToLower(strings.TrimSpace(in.Email))).
-		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Phone)
+		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Phone, &suspended)
 	if errors.Is(err, sql.ErrNoRows) {
 		// Run a bcrypt comparison against a fixed dummy hash so the
 		// response time is independent of whether the email exists.
@@ -330,6 +331,12 @@ func (a *API) Login(w http.ResponseWriter, r *http.Request) {
 	}
 	if !a.Auth.CheckPassword(u.PasswordHash, in.Password) {
 		writeError(w, http.StatusUnauthorized, "invalid credentials")
+		return
+	}
+	// Suspension is checked after the credentials, like RequireAuth checks it
+	// after the token: a suspended account cannot mint new sessions.
+	if suspended.Valid {
+		writeError(w, http.StatusForbidden, "account suspended")
 		return
 	}
 	roles, err := a.Auth.UserRoles(r.Context(), u.ID)
