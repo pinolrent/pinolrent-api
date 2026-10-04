@@ -21,7 +21,7 @@ You get the token from `POST /auth/login`: the access token lasts **15 min** and
 Roles (one account per email, with membership in 1–3 roles):
 
 - **`buyer`**: books, pays and sees its reservations. Every account is born at least a buyer.
-- **`seller`**: publishes its cars and confirms reservations of its cars. **Requires a phone**, because that is the number buyers use to reach it. You get it by registering with `phone` or later with `POST /auth/become-seller`.
+- **`seller`**: publishes its cars and accepts or rejects reservation requests for them (confirmation itself is the administrator's call). **Requires a phone**, because that is the number buyers use to reach it. You get it by registering with `phone` or later with `POST /auth/become-seller`.
 - **`admin`**: manages accounts, cars, reservations and payments across the whole platform. Only obtainable through the `ADMIN_EMAILS` allow-list; there is no endpoint that grants it. See [`admin.md`](admin.md).
 
 There is no "seller-only" account: a seller also books as a buyer with the same token. The frontend derives the Buy | Sell switch from `GET /auth/me` → `roles`.
