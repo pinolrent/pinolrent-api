@@ -19,6 +19,10 @@ import (
 // It returns how many accounts gained and lost the role. Addresses are matched
 // on lower(email) because that is the expression the unique index enforces, so
 // two spellings differing only in casing are one account.
+//
+// It uses a plain deferred transaction instead of db.WithImmediateTx on
+// purpose: it runs once at startup with no concurrent writers, so there is
+// nothing to serialize against.
 func (a *Auth) SyncAdminRoles(ctx context.Context, emails []string) (granted, revoked int64, err error) {
 	tx, err := a.db.BeginTx(ctx, nil)
 	if err != nil {
