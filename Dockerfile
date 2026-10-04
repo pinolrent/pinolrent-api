@@ -12,10 +12,10 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-# Version reported by GET /health: without --build-arg it comes from
-# git describe over the clone (requires .git in the build context, so it is
-# not in .dockerignore). Only the build stage uses it; the final image only
-# receives the binary.
+# Version reported by GET /health: pass it with --build-arg VERSION=... (CI
+# passes ci-<sha>). Without it the build tries git describe, which finds no
+# .git in the build context (it is in .dockerignore) and falls back to dev.
+# Only the build stage uses it; the final image only receives the binary.
 ARG VERSION=
 RUN V="${VERSION:-$(git describe --tags --always 2>/dev/null || echo dev)}"; \
 	CGO_ENABLED=0 go build -ldflags "-X main.version=${V}" -o /out/pinolrent-api ./cmd/api

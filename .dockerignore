@@ -1,9 +1,10 @@
 # Build context: only what is needed to compile, and only what must not end up
 # inside the image. In a remote build the context is the repo clone, but a
 # local `docker build` uses the whole directory: without these ignores a stale
-# dev.db or a .env with secrets would be baked into the image. `.git` is
-# deliberately left out of the list: the build stage runs `git describe` to
-# version the binary and the final image does not copy it.
+# dev.db or a .env with secrets would be baked into the image. `.git` stays
+# ignored on purpose (smaller context, no history inside the image): the build
+# stage still tries `git describe`, but a local build reports `dev` unless the
+# version is passed explicitly with --build-arg VERSION=... (CI does that).
 .git
 .github
 .codegraph

@@ -27,7 +27,7 @@ See [Configuration](configuration.md) for how the `X-Forwarded-For` chain is wal
 | `TRUSTED_PROXY_CIDRS` | reverse proxy network (see above) |
 | `PORT` | `8080` |
 
-The container must mount `/data` as a persistent volume: that is where the database lives (`pinolrent.db` with its `-wal`/`-shm`) along with `uploads/`. The healthcheck hits `GET /health` (port 8080). The image computes the reported version on its own with `git describe` over the clone (tag + sha); it can be overridden with the `VERSION` build-arg, and it only answers `dev` if the build had no `.git`.
+The container must mount `/data` as a persistent volume: that is where the database lives (`pinolrent.db` with its `-wal`/`-shm`) along with `uploads/`. The healthcheck hits `GET /health` (port 8080). The image reports the version from the `VERSION` build-arg (CI passes `ci-<sha>`); without it the build falls back to `git describe`, which finds no `.git` in the build context (it is in `.dockerignore`) and answers `dev`.
 
 ## Deploy and rollback
 
