@@ -97,6 +97,23 @@ func TestRecordPaymentOwnership(t *testing.T) {
 	}
 }
 
+// TestRecordPaymentMethodCase pins the case-insensitive method: "CASH" pays
+// as cash and is stored normalized.
+func TestRecordPaymentMethodCase(t *testing.T) {
+	a := newTestAPI(t)
+	token, _, v := seedReservation(t, a)
+
+	rec := doJSON(t, a, "POST", "/reservations/"+itoa(v.ID)+"/payment", token, map[string]any{"method": "CASH"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("uppercase method: status = %d body %s", rec.Code, rec.Body.String())
+	}
+	var p models.Payment
+	decodeJSON(t, rec, &p)
+	if p.Method != "cash" {
+		t.Fatalf("method = %q, want normalized cash", p.Method)
+	}
+}
+
 func TestRecordPaymentDuplicate(t *testing.T) {
 	a := newTestAPI(t)
 	token, _, v := seedReservation(t, a)

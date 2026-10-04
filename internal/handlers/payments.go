@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/pinolrent/pinolrent-api/internal/auth"
 	"github.com/pinolrent/pinolrent-api/internal/db"
@@ -31,6 +32,9 @@ func (a *API) RecordPayment(w http.ResponseWriter, r *http.Request) {
 		writeBodyErr(w, err)
 		return
 	}
+	// Like status filters, the method is case-insensitive: it is normalized
+	// before the lookup and stored normalized (the DB CHECK is lowercase).
+	in.Method = strings.ToLower(strings.TrimSpace(in.Method))
 	if !validMethods[in.Method] {
 		writeError(w, http.StatusBadRequest, "method must be pos or cash")
 		return
