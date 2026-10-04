@@ -331,6 +331,11 @@ func (a *Auth) RotateRefresh(ctx context.Context, token string) (access, refresh
 	if tokenSuperseded(&u, claims) {
 		return "", "", errTokenSuperseded
 	}
+	// A suspended account holds no valid session: like Login and RequireAuth,
+	// rotation refuses to mint new tokens for it.
+	if u.SuspendedAt > 0 {
+		return "", "", ErrAccountSuspended
+	}
 	if err := a.Revoke(ctx, claims.UserID, claims.JTI(), claims.ExpiresAtUnix()); err != nil {
 		return "", "", err
 	}
@@ -346,6 +351,11 @@ func (a *Auth) RotateRefresh(ctx context.Context, token string) (access, refresh
 }
 
 var errRefreshReused = errors.New("refresh token already used")
+
+// ErrAccountSuspended marks a token that is cryptographically fine but belongs
+// to a suspended account. Handlers map it to 403, unlike the 401 of dead
+// tokens, so the client learns the account — not the token — is the problem.
+var ErrAccountSuspended = errors.New("account suspended")
 
 // errTokenSuperseded marks a token that was cryptographically fine but issued
 // before the user's revocation stamp; handlers map it to the same 401 as an

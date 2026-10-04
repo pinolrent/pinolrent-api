@@ -375,6 +375,10 @@ func (a *API) Refresh(w http.ResponseWriter, r *http.Request) {
 	}
 	access, refresh, err := a.Auth.RotateRefresh(r.Context(), in.RefreshToken)
 	if err != nil {
+		if errors.Is(err, auth.ErrAccountSuspended) {
+			writeError(w, http.StatusForbidden, "account suspended")
+			return
+		}
 		writeError(w, http.StatusUnauthorized, "invalid or expired token")
 		return
 	}

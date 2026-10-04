@@ -173,6 +173,31 @@ func TestRefreshRotates(t *testing.T) {
 	}
 }
 
+func TestRefreshRejectsSuspended(t *testing.T) {
+	a := newTestAPI(t)
+	registerBuyer(t, a, "user@example.com", "secret123")
+
+	rec := doJSON(t, a, "POST", "/auth/login", "", map[string]any{
+		"email": "user@example.com", "password": "secret123",
+	})
+	var login struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+	decodeJSON(t, rec, &login)
+
+	if _, err := a.DB.ExecContext(context.Background(),
+		`UPDATE users SET suspended_at = 1 WHERE email = ?`, "user@example.com"); err != nil {
+		t.Fatalf("suspend: %v", err)
+	}
+
+	rec = doJSON(t, a, "POST", "/auth/refresh", "", map[string]any{
+		"refresh_token": login.RefreshToken,
+	})
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403 (body %s)", rec.Code, rec.Body.String())
+	}
+}
+
 func TestRefreshRejectsAccessToken(t *testing.T) {
 	a := newTestAPI(t)
 	token := registerBuyer(t, a, "user@example.com", "secret123")
