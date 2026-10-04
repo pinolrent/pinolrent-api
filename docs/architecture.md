@@ -53,7 +53,7 @@ erDiagram
 
 What matters about the schema (`internal/db/migrations/`):
 
-- `users.email` is unique (case-insensitive). Roles live in `user_roles` (`buyer` and/or `seller`, migration 00008): every account is at least a buyer and can add seller.
+- `users.email` is unique (case-insensitive). Roles live in `user_roles` (`buyer`, `seller`, `admin`): every account is at least a buyer and can add seller (migration 00008); `admin` comes from the `ADMIN_EMAILS` allow-list only (migration 00009, `auth.SyncAdminRoles` at startup plus grant on registration, no API can grant it).
 - `users.phone` stores E.164 (migration 00006, with a `CHECK`), empty when the user did not provide one; it is required to become a seller (either by registering with `phone` or through `POST /auth/become-seller`).
 - `cars.owner_id` says who owns the car. `price_per_day` in cents, `0..100_000_000` with a DB `CHECK` (migration 00005).
 - Reservations have `CHECK(end_date >= start_date)` in the DB.
@@ -123,9 +123,9 @@ stateDiagram-v2
 ## Module map
 
 Separation rule: `handlers` speaks HTTP (request parsing, status codes, JSON
-shape), `db` owns SQL execution and transactions, `httpx` owns the error
-envelope. Anything that does not touch `http.ResponseWriter` lives outside the
-handler file for its domain.
+shape), `db` owns SQL execution and transactions, `internal/httpx` owns the
+error envelope. Anything that does not touch `http.ResponseWriter` lives
+outside the handler file for its domain.
 
 `internal/handlers/` layout:
 
@@ -134,6 +134,7 @@ handler file for its domain.
   (single source of truth), the production chain, CORS and middlewares.
 - `http_json.go` — JSON envelope, body size limit and strict decoding.
 - `pagination.go` — `limit`/`offset` parsing and defaults.
+- `filters.go` — the shared `WHERE` builder for filtered listings.
 - `validate.go` — field caps, `lenBetween`, URL and `/uploads/` path checks.
 - `dbhelpers.go` — the shared `rowScanner` shape and SQLite error codes.
 - `dates.go` — `YYYY-MM-DD` parsing, today bound and the rental length cap.
@@ -150,8 +151,8 @@ handler file for its domain.
 - `uploads.go` + `uploads_files.go` — upload/serve/cleanup endpoints plus
   image re-encoding and disk-usage helpers.
 - `admin_*.go` — one file per admin domain: `audit` (log + helper),
-  `users`, `cars`, `reservations`, `confirm`, `payments`, `notifications`,
-  `stats`.
+  `users`, `cars`, `reservations`, `payments`, `notifications`, `stats`
+  (the confirm/request-correction flow lives in `admin_confirm.go` above).
 
 `internal/db/tx.go` exposes `WithImmediateTx`: callbacks return business-rule
 outcomes as errors and the handler maps them to HTTP once, outside the
