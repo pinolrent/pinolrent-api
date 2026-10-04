@@ -10,8 +10,6 @@ import (
 	"github.com/pinolrent/pinolrent-api/internal/models"
 )
 
-var validMethods = map[string]bool{"pos": true, "cash": true}
-
 // RecordPayment records a single pending payment for the client's reservation.
 func (a *API) RecordPayment(w http.ResponseWriter, r *http.Request) {
 	u, _ := auth.CurrentUser(r.Context())
@@ -34,15 +32,9 @@ func (a *API) RecordPayment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "method must be pos or cash")
 		return
 	}
-	if in.ProofURL != "" {
-		if len(in.ProofURL) > maxURLLen {
-			writeError(w, http.StatusBadRequest, "proof_url is too long")
-			return
-		}
-		if !validURL(in.ProofURL) {
-			writeError(w, http.StatusBadRequest, "invalid proof_url")
-			return
-		}
+	if msg := validateProofURL(in.ProofURL); msg != "" {
+		writeError(w, http.StatusBadRequest, msg)
+		return
 	}
 
 	var pid int64
