@@ -303,11 +303,9 @@ func (a *API) PatchCar(w http.ResponseWriter, r *http.Request) {
 			`SELECT name, photo_url, price_per_day, active FROM cars WHERE id = ? AND owner_id = ?`,
 			id, u.ID).Scan(&curName, &curPhoto, &curPrice, &curActive); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				writeError(w, http.StatusNotFound, "car not found")
-				return db.ErrTxHandled
+				return &statusError{http.StatusNotFound, "car not found"}
 			}
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 
 		if in.Name != nil {
@@ -332,12 +330,10 @@ func (a *API) PatchCar(w http.ResponseWriter, r *http.Request) {
 			var hasFuture int
 			if err := conn.QueryRowContext(ctx,
 				`SELECT COUNT(*) FROM reservations WHERE car_id = ? AND status NOT IN (?, ?) AND end_date >= date('now')`, id, db.ReservationCancelled, db.ReservationRejected).Scan(&hasFuture); err != nil {
-				serverError(w, err)
-				return db.ErrTxHandled
+				return err
 			}
 			if hasFuture > 0 {
-				writeError(w, http.StatusConflict, "car has future reservations, cannot deactivate")
-				return db.ErrTxHandled
+				return &statusError{http.StatusConflict, "car has future reservations, cannot deactivate"}
 			}
 		}
 
@@ -345,18 +341,15 @@ func (a *API) PatchCar(w http.ResponseWriter, r *http.Request) {
 			`UPDATE cars SET name = ?, photo_url = ?, price_per_day = ?, active = ? WHERE id = ? AND owner_id = ?`,
 			curName, curPhoto, curPrice, curActive, id, u.ID)
 		if err != nil {
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		if n, _ := res.RowsAffected(); n == 0 {
-			writeError(w, http.StatusNotFound, "car not found")
-			return db.ErrTxHandled
+			return &statusError{http.StatusNotFound, "car not found"}
 		}
 		updated = true
 		return nil
 	})
-	if err != nil {
-		serverError(w, err)
+	if writeTxErr(w, err) {
 		return
 	}
 	if !updated {
@@ -392,36 +385,29 @@ func (a *API) DeleteCar(w http.ResponseWriter, r *http.Request) {
 		var ownerID int64
 		if err := conn.QueryRowContext(ctx, `SELECT owner_id FROM cars WHERE id = ?`, id).Scan(&ownerID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				writeError(w, http.StatusNotFound, "car not found")
-				return db.ErrTxHandled
+				return &statusError{http.StatusNotFound, "car not found"}
 			}
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		if ownerID != u.ID {
-			writeError(w, http.StatusNotFound, "car not found")
-			return db.ErrTxHandled
+			return &statusError{http.StatusNotFound, "car not found"}
 		}
 
 		var reservations int
 		if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM reservations WHERE car_id = ?`, id).Scan(&reservations); err != nil {
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		if reservations > 0 {
-			writeError(w, http.StatusConflict, "car has reservations, cannot delete")
-			return db.ErrTxHandled
+			return &statusError{http.StatusConflict, "car has reservations, cannot delete"}
 		}
 
 		if _, err := conn.ExecContext(ctx, `DELETE FROM cars WHERE id = ? AND owner_id = ?`, id, u.ID); err != nil {
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		deleted = true
 		return nil
 	})
-	if err != nil {
-		serverError(w, err)
+	if writeTxErr(w, err) {
 		return
 	}
 	if !deleted {
