@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/pinolrent/pinolrent-api/internal/auth"
 	"github.com/pinolrent/pinolrent-api/internal/db"
@@ -25,7 +26,7 @@ func TestCreateReservationConcurrent(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = d.Close() })
 
-	a := auth.New("test-secret-32-bytes-minimum-okay", d)
+	a := auth.New("test-secret-32-bytes-minimum-okay", d, auth.WithPasswordCost(bcrypt.MinCost))
 	api := New(d, a)
 	car := createCar(t, api, newSeller(t, api), map[string]any{"name": "Toyota Yaris", "price_per_day": 100})
 	token := registerBuyer(t, api, "user@example.com", "secret123")

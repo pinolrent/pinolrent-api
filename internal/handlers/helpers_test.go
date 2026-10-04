@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
+
 	"github.com/pinolrent/pinolrent-api/internal/auth"
 	"github.com/pinolrent/pinolrent-api/internal/db"
 )
@@ -24,7 +26,7 @@ func newTestAPI(t *testing.T) *API {
 	}
 	t.Cleanup(func() { _ = d.Close() })
 
-	a := auth.New("test-secret-32-bytes-minimum-okay", d)
+	a := auth.New("test-secret-32-bytes-minimum-okay", d, auth.WithPasswordCost(bcrypt.MinCost))
 	return New(d, a)
 }
 
