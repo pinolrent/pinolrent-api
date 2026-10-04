@@ -53,25 +53,22 @@ func (a *API) AdminListAudit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	clauses := []string{"1=1"}
-	args := []any{}
+	var f filter
 	if s := r.URL.Query().Get("actor_id"); s != "" {
 		aid, err := strconv.ParseInt(s, 10, 64)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid actor_id")
 			return
 		}
-		clauses = append(clauses, "a.actor_id = ?")
-		args = append(args, aid)
+		f.add("a.actor_id = ?", aid)
 	}
 	if s := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("action"))); s != "" {
-		clauses = append(clauses, "lower(a.action) = ?")
-		args = append(args, s)
+		f.add("lower(a.action) = ?", s)
 	}
 
 	var total int64
 	if err := a.DB.QueryRowContext(r.Context(),
-		`SELECT COUNT(*) FROM admin_audit_log a WHERE `+strings.Join(clauses, " AND "), args...).Scan(&total); err != nil {
+		`SELECT COUNT(*) FROM admin_audit_log a WHERE `+f.where(), f.params()...).Scan(&total); err != nil {
 		serverError(w, err)
 		return
 	}
@@ -82,9 +79,9 @@ func (a *API) AdminListAudit(w http.ResponseWriter, r *http.Request) {
 		`SELECT a.id, a.actor_id, a.action, a.target_type, a.target_id, a.detail, a.created_at, u.email
 		 FROM admin_audit_log a
 		 LEFT JOIN users u ON u.id = a.actor_id
-		 WHERE `+strings.Join(clauses, " AND ")+`
+		 WHERE `+f.where()+`
 		 ORDER BY a.id DESC
-		 LIMIT ? OFFSET ?`, append(args, limit, offset)...)
+		 LIMIT ? OFFSET ?`, f.page(limit, offset)...)
 	if err != nil {
 		serverError(w, err)
 		return

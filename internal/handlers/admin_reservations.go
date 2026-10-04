@@ -25,18 +25,15 @@ func (a *API) AdminListReservations(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	clauses := []string{"1=1"}
-	args := []any{}
+	var f filter
 	if s := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("status"))); s != "" {
-		// The reservations CHECK admits every ValidReservationStatus. A
-		// reservation is paid when its payment row is approved, not through
+		// A reservation is paid when its payment row is approved, not through
 		// its own status.
 		if !db.ValidReservationStatus(s) {
 			writeError(w, http.StatusBadRequest, "invalid status")
 			return
 		}
-		clauses = append(clauses, "r.status = ?")
-		args = append(args, s)
+		f.add("r.status = ?", s)
 	}
 	if s := r.URL.Query().Get("user_id"); s != "" {
 		uid, err := strconv.ParseInt(s, 10, 64)
@@ -44,8 +41,7 @@ func (a *API) AdminListReservations(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "invalid user_id")
 			return
 		}
-		clauses = append(clauses, "r.user_id = ?")
-		args = append(args, uid)
+		f.add("r.user_id = ?", uid)
 	}
 	if s := r.URL.Query().Get("car_id"); s != "" {
 		cid, err := strconv.ParseInt(s, 10, 64)
@@ -53,22 +49,21 @@ func (a *API) AdminListReservations(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "invalid car_id")
 			return
 		}
-		clauses = append(clauses, "r.car_id = ?")
-		args = append(args, cid)
+		f.add("r.car_id = ?", cid)
 	}
 
 	var total int64
 	if err := a.DB.QueryRowContext(r.Context(),
-		`SELECT COUNT(*) FROM reservations r WHERE `+strings.Join(clauses, " AND "), args...).Scan(&total); err != nil {
+		`SELECT COUNT(*) FROM reservations r WHERE `+f.where(), f.params()...).Scan(&total); err != nil {
 		serverError(w, err)
 		return
 	}
 
 	rows, err := a.DB.QueryContext(r.Context(),
 		adminReservationSelect+`
-		 WHERE `+strings.Join(clauses, " AND ")+`
+		 WHERE `+f.where()+`
 		 ORDER BY r.id ASC
-		 LIMIT ? OFFSET ?`, append(args, limit, offset)...)
+		 LIMIT ? OFFSET ?`, f.page(limit, offset)...)
 	if err != nil {
 		serverError(w, err)
 		return

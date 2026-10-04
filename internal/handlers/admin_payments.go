@@ -17,15 +17,13 @@ func (a *API) AdminListPayments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	clauses := []string{"1=1"}
-	args := []any{}
+	var f filter
 	if s := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("status"))); s != "" {
 		if !db.ValidPaymentStatus(s) {
 			writeError(w, http.StatusBadRequest, "invalid status")
 			return
 		}
-		clauses = append(clauses, "p.status = ?")
-		args = append(args, s)
+		f.add("p.status = ?", s)
 	}
 	if s := r.URL.Query().Get("reservation_id"); s != "" {
 		rid, err := strconv.ParseInt(s, 10, 64)
@@ -33,13 +31,12 @@ func (a *API) AdminListPayments(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "invalid reservation_id")
 			return
 		}
-		clauses = append(clauses, "p.reservation_id = ?")
-		args = append(args, rid)
+		f.add("p.reservation_id = ?", rid)
 	}
 
 	var total int64
 	if err := a.DB.QueryRowContext(r.Context(),
-		`SELECT COUNT(*) FROM payments p WHERE `+strings.Join(clauses, " AND "), args...).Scan(&total); err != nil {
+		`SELECT COUNT(*) FROM payments p WHERE `+f.where(), f.params()...).Scan(&total); err != nil {
 		serverError(w, err)
 		return
 	}
@@ -51,9 +48,9 @@ func (a *API) AdminListPayments(w http.ResponseWriter, r *http.Request) {
 		 FROM payments p
 		 LEFT JOIN reservations r ON r.id = p.reservation_id
 		 LEFT JOIN users u ON u.id = r.user_id
-		 WHERE `+strings.Join(clauses, " AND ")+`
+		 WHERE `+f.where()+`
 		 ORDER BY p.id ASC
-		 LIMIT ? OFFSET ?`, append(args, limit, offset)...)
+		 LIMIT ? OFFSET ?`, f.page(limit, offset)...)
 	if err != nil {
 		serverError(w, err)
 		return
