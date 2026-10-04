@@ -127,8 +127,8 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      # Solo compila: la imagen que se despliega se construye desde el repo en
-      # el despliegue. Esto existe para que un Dockerfile roto se vea en el PR.
+      # Build only: the deployed image is built from the repo at deploy time.
+      # This exists so a broken Dockerfile shows up in the PR.
       - uses: docker/build-push-action@v6
         with:
           context: .

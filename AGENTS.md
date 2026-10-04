@@ -52,7 +52,7 @@ make vet         # go vet ./...
 make lint        # golangci-lint run ./... (config: .golangci.yml v2, must be 0)
 make fmt         # gofmt -w .
 make tidy        # go mod tidy
-make demo        # full E2E smoke on :8132 with ephemeral DB (todos los checks deben pasar)
+make demo        # full E2E smoke on :8132 with ephemeral DB (all checks must pass)
 make clean       # removes bin/, tmp/, air.log, dev.db, uploads/
 ```
 
