@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/pinolrent/pinolrent-api/internal/db"
+	"github.com/pinolrent/pinolrent-api/internal/models"
 )
 
 const adminReservationSelect = `
@@ -99,12 +100,7 @@ func (a *API) AdminListReservations(w http.ResponseWriter, r *http.Request) {
 }
 
 type adminReservationOut struct {
-	ID         int64  `json:"id"`
-	UserID     int64  `json:"user_id"`
-	CarID      int64  `json:"car_id"`
-	StartDate  string `json:"start_date"`
-	EndDate    string `json:"end_date"`
-	Status     string `json:"status"`
+	models.Reservation
 	BuyerEmail string `json:"buyer_email,omitempty"`
 	CarName    string `json:"car_name,omitempty"`
 }
