@@ -106,6 +106,26 @@ so preflights short-circuit before the limiter and even a `429` carries the CORS
 as a namespace, so unregistered paths under it stay limited too. `cmd/api/main.go` only wires config, db,
 auth and this router.
 
+## Conventions for new code
+
+- Writes run inside `db.WithImmediateTx`. The callback returns business-rule outcomes as errors
+  (`statusError`, mapped once by `writeTxErr`) and never writes HTTP. The only exception is
+  `auth.SyncAdminRoles` (startup, single-threaded, commented in code).
+- Reservation/payment statuses, roles and notification kinds are the `db.*` constants, bound as
+  query parameters — never string literals. The SQL `CHECK` is the hard gate; a typo'd literal
+  fails at runtime instead of at review time.
+- Validators return `(value, errMsg)` with `""` = valid; filtered listings build on `filter`;
+  admin views compose `models.*` via embedding plus join extras. Do not invent new error signals,
+  `WHERE` builders or re-declared entities.
+- A new endpoint is one `routes()` entry plus a test, a Bruno request (`seq` gapless) and its
+  `docs/api/` section. `docs/api/` is the reference; the README summarizes and links, it never
+  duplicates endpoint tables.
+- `admin` is granted from `ADMIN_EMAILS` only (no endpoint grants it); `seller` requires a valid
+  phone on every path that grants it. Notifications and audit rows are written in the same
+  transaction as the transition they describe, or the omission is documented.
+- `GET /uploads/` is a subtree (`TrimPrefix` + basename), not a `{name}` param; `filter.unread`
+  returns an error message like `paginate`, not a boolean.
+
 ## Migrations
 
 SQL files in `internal/db/migrations/*.sql`, applied at startup via embedded `goose`. Only pending migrations run.
