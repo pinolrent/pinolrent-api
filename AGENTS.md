@@ -101,7 +101,7 @@ the standard limiter, and every route that declares a limiter actually answers `
 
 `internal/handlers/router.go` attaches each limiter to its route (per route, never by path prefix: a pattern
 like `/reservations/{id}/payment` does not match a real request path) and assembles the production chain
-(limiters, CORS, security headers, request log, recover) in that nesting order — CORS is outermost on purpose
+(CORS, security headers, request log, recover, limiters) in that nesting order — CORS is outermost on purpose
 so preflights short-circuit before the limiter and even a `429` carries the CORS headers. `/auth/` is metered
 as a namespace, so unregistered paths under it stay limited too. `cmd/api/main.go` only wires config, db,
 auth and this router.
