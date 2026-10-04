@@ -190,29 +190,25 @@ func (a *API) Register(w http.ResponseWriter, r *http.Request) {
 			in.Email, hash, phone)
 		if err != nil {
 			if !isUniqueViolation(err) {
-				serverError(w, err)
-				return db.ErrTxHandled
+				return err
 			}
 			writeJSON(w, http.StatusCreated, map[string]any{"email": in.Email})
 			return db.ErrTxHandled
 		}
 		id, err := res.LastInsertId()
 		if err != nil {
-			serverError(w, err)
-			return db.ErrTxHandled
+			return err
 		}
 		for _, role := range roles {
 			if _, err := conn.ExecContext(ctx,
 				`INSERT INTO user_roles (user_id, role) VALUES (?, ?)`, id, role); err != nil {
-				serverError(w, err)
-				return db.ErrTxHandled
+				return err
 			}
 		}
 		registered = true
 		return nil
 	})
-	if err != nil {
-		serverError(w, err)
+	if writeTxErr(w, err) {
 		return
 	}
 	if !registered {
@@ -247,18 +243,15 @@ func (a *API) BecomeSeller(w http.ResponseWriter, r *http.Request) {
 
 			if _, err := conn.ExecContext(ctx,
 				`UPDATE users SET phone = ? WHERE id = ?`, phone, u.ID); err != nil {
-				serverError(w, err)
-				return db.ErrTxHandled
+				return err
 			}
 			if _, err := conn.ExecContext(ctx,
 				`INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, ?)`, u.ID, db.RoleSeller); err != nil {
-				serverError(w, err)
-				return db.ErrTxHandled
+				return err
 			}
 			return nil
 		})
-		if err != nil {
-			serverError(w, err)
+		if writeTxErr(w, err) {
 			return
 		}
 		u.Phone = phone
