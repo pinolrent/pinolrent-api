@@ -10,9 +10,9 @@ import (
 
 // Field length caps. Per-request body size is bounded separately by
 // maxBodyBytes; these caps reject oversized individual fields before they
-// reach the database.
+// reach the database. The email cap lives in config.MaxEmailLen, shared with
+// the ADMIN_EMAILS allow-list.
 const (
-	maxEmailLen    = 254 // RFC 5321
 	minPasswordLen = 8
 	maxPasswordLen = 72 // bcrypt silently truncates beyond this
 	maxNameLen     = 200

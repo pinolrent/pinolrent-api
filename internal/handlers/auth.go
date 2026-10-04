@@ -145,7 +145,7 @@ func (a *API) Register(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid email")
 		return
 	}
-	if !lenBetween(in.Email, 1, maxEmailLen) {
+	if !lenBetween(in.Email, 1, config.MaxEmailLen) {
 		writeError(w, http.StatusBadRequest, "email is too long")
 		return
 	}

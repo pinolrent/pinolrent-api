@@ -110,7 +110,7 @@ func (c Config) AdminEmailList() ([]string, error) {
 		// The shape must match what registration accepts: an entry that
 		// cannot be registered could never match an account, leaving the
 		// deployment unadministered with no error to explain it.
-		if len(entry) > maxEmailLen || !ValidEmail(entry) {
+		if len(entry) > MaxEmailLen || !ValidEmail(entry) {
 			return nil, fmt.Errorf("invalid ADMIN_EMAILS entry %q: want a plain address like admin@example.com", entry)
 		}
 		emails = append(emails, entry)
@@ -132,10 +132,10 @@ func ValidEmail(s string) bool {
 	return emailRe.MatchString(s)
 }
 
-// maxEmailLen bounds an administrator address at the same width the
-// registration handler accepts, so an allow-listed account can always be
-// registered afterwards.
-const maxEmailLen = 254
+// MaxEmailLen bounds an account address at the width registration and the
+// allow-list both accept, so an allow-listed account can always be registered
+// afterwards. It lives here so the two callers cannot drift apart.
+const MaxEmailLen = 254
 
 // CORSOrigins parses the comma-separated allow-list for cross-origin requests.
 // Each entry must be "*" (any origin) or a full origin like
