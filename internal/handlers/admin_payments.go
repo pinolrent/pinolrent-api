@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/pinolrent/pinolrent-api/internal/db"
+	"github.com/pinolrent/pinolrent-api/internal/models"
 )
 
 // AdminListPayments returns all payments in the platform.
@@ -57,26 +58,23 @@ func (a *API) AdminListPayments(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = rows.Close() }()
 
+	// outPay is the payment with its reservation context: the embedded
+	// models.Payment keeps the payment shape in one place, the extras come
+	// from the joins.
 	type outPay struct {
-		ID            int64  `json:"id"`
-		ReservationID int64  `json:"reservation_id"`
-		Method        string `json:"method"`
-		Status        string `json:"status"`
-		ProofURL      string `json:"proof_url,omitempty"`
-		UserID        int64  `json:"user_id,omitempty"`
-		CarID         int64  `json:"car_id,omitempty"`
-		BuyerEmail    string `json:"buyer_email,omitempty"`
+		models.Payment
+		UserID     int64  `json:"user_id,omitempty"`
+		CarID      int64  `json:"car_id,omitempty"`
+		BuyerEmail string `json:"buyer_email,omitempty"`
 	}
 	out := make([]outPay, 0, limit)
 	for rows.Next() {
-		var id, rid, uid, cid int64
-		var method, status, proof string
+		var po outPay
 		var buyerEmail sql.NullString
-		if err := rows.Scan(&id, &rid, &method, &status, &proof, &uid, &cid, &buyerEmail); err != nil {
+		if err := rows.Scan(&po.ID, &po.ReservationID, &po.Method, &po.Status, &po.ProofURL, &po.UserID, &po.CarID, &buyerEmail); err != nil {
 			serverError(w, err)
 			return
 		}
-		po := outPay{ID: id, ReservationID: rid, Method: method, Status: status, ProofURL: proof, UserID: uid, CarID: cid}
 		if buyerEmail.Valid {
 			po.BuyerEmail = buyerEmail.String
 		}
