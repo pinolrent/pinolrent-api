@@ -41,12 +41,10 @@ Releases are tagged `vX.Y.Z` (`git tag -a vX.Y.Z -m "..."`). Between tags the re
 
 A file-level copy of a database that is being written can come out inconsistent, so there are two layers:
 
-1. **Consistent snapshot** (daily job): `VACUUM INTO` uses the SQLite engine over the live database — the result is a complete, compact copy. The job prunes snapshots older than 14 days:
+1. **Consistent snapshot** (daily job): `VACUUM INTO` uses the SQLite engine over the live database — the result is a complete, compact copy. Run `scripts/backup.sh` from cron on the host that holds `/data` (see the header of the script for the cron line); it snapshots and prunes copies older than 14 days:
 
    ```sh
-   mkdir -p /data/backups && rm -f "/data/backups/pinolrent-$(date +%F).db" && \
-   sqlite3 "$DATABASE_URL" "VACUUM INTO '/data/backups/pinolrent-$(date +%F).db'" && \
-   find /data/backups -type f -name '*.db' -mtime +14 -delete
+   DATABASE_URL=/data/pinolrent.db ./scripts/backup.sh
    ```
 
 2. **Off-site copy**: the snapshots and `uploads/` live on the server's own disk, so a broken disk takes them with it. Upload them to any S3-compatible storage (Object Storage, R2, B2…) with independent retention: the local copy to restore fast, the remote one to survive the loss of the server.
