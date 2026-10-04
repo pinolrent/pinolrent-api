@@ -9,6 +9,7 @@ import (
 
 	"github.com/pinolrent/pinolrent-api/internal/auth"
 	"github.com/pinolrent/pinolrent-api/internal/db"
+	"github.com/pinolrent/pinolrent-api/internal/models"
 )
 
 // AdminListCars lists all cars in the system, including inactive ones. This is
@@ -69,29 +70,22 @@ func (a *API) AdminListCars(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = rows.Close() }()
 
+	// outCar is the car with its owner's email: the embedded models.Car keeps
+	// the car shape in one place, the extra comes from the join.
 	type outCar struct {
-		ID          int64  `json:"id"`
-		OwnerID     int64  `json:"owner_id"`
-		Name        string `json:"name"`
-		PhotoURL    string `json:"photo_url,omitempty"`
-		PricePerDay int64  `json:"price_per_day"`
-		Active      bool   `json:"active"`
-		OwnerEmail  string `json:"owner_email,omitempty"`
+		models.Car
+		OwnerEmail string `json:"owner_email,omitempty"`
 	}
 	out := make([]outCar, 0, limit)
 	for rows.Next() {
-		var id int64
-		var ownerID int64
-		var name string
-		var photoURL string
-		var price int64
+		var oc outCar
 		var active int
 		var ownerEmail sql.NullString
-		if err := rows.Scan(&id, &ownerID, &name, &photoURL, &price, &active, &ownerEmail); err != nil {
+		if err := rows.Scan(&oc.ID, &oc.OwnerID, &oc.Name, &oc.PhotoURL, &oc.PricePerDay, &active, &ownerEmail); err != nil {
 			serverError(w, err)
 			return
 		}
-		oc := outCar{ID: id, OwnerID: ownerID, Name: name, PhotoURL: photoURL, PricePerDay: price, Active: active == 1}
+		oc.Active = active == 1
 		if ownerEmail.Valid {
 			oc.OwnerEmail = ownerEmail.String
 		}
