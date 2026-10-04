@@ -28,7 +28,7 @@ erDiagram
         int car_id FK
         text start_date "YYYY-MM-DD"
         text end_date "YYYY-MM-DD"
-        text status "pending | confirmed | cancelled"
+        text status "pending | accepted | confirmed | rejected | cancelled"
     }
     payments {
         int id PK
@@ -164,4 +164,4 @@ handler file for its domain.
 
 ## What it does not do yet (MVP)
 
-Payment gateway, WhatsApp, frontend, a rate limit shared across several servers, and rejecting payments.
+Payment gateway, WhatsApp, frontend, and a rate limit shared across several servers.
