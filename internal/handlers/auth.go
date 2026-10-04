@@ -247,32 +247,25 @@ func (a *API) BecomeSeller(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !u.HasRole(db.RoleSeller) {
-		tx, err := a.DB.BeginTx(r.Context(), nil)
+		err := db.WithImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
+			ctx := r.Context()
+
+			if _, err := conn.ExecContext(ctx,
+				`UPDATE users SET phone = ? WHERE id = ?`, phone, u.ID); err != nil {
+				serverError(w, err)
+				return db.ErrTxHandled
+			}
+			if _, err := conn.ExecContext(ctx,
+				`INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, ?)`, u.ID, db.RoleSeller); err != nil {
+				serverError(w, err)
+				return db.ErrTxHandled
+			}
+			return nil
+		})
 		if err != nil {
 			serverError(w, err)
 			return
 		}
-		committed := false
-		defer func() {
-			if !committed {
-				_ = tx.Rollback()
-			}
-		}()
-		if _, err := tx.ExecContext(r.Context(),
-			`UPDATE users SET phone = ? WHERE id = ?`, phone, u.ID); err != nil {
-			serverError(w, err)
-			return
-		}
-		if _, err := tx.ExecContext(r.Context(),
-			`INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, ?)`, u.ID, db.RoleSeller); err != nil {
-			serverError(w, err)
-			return
-		}
-		if err := tx.Commit(); err != nil {
-			serverError(w, err)
-			return
-		}
-		committed = true
 		u.Phone = phone
 		u.Roles = append(u.Roles, db.RoleSeller)
 	}
