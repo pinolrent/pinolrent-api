@@ -26,6 +26,8 @@ Roles (one account per email, with membership in 1–3 roles):
 
 There is no "seller-only" account: a seller also books as a buyer with the same token. The frontend derives the Buy | Sell switch from `GET /auth/me` → `roles`.
 
+Authorization is resolved against the database on every request, not against the token: the `roles` inside the JWT only prove the token was issued to a real account, while roles, suspension and session validity are re-read from the `users` row. Role changes and suspensions therefore take effect on the next request without re-login. `GET /cars/{id}/contact` needs any login on purpose (buyers must reach the seller to coordinate); it is rate-limited strictly because it exposes the seller's phone.
+
 If something fails during login:
 
 | Status | Message | When it happens |
