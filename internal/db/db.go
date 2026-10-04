@@ -77,7 +77,7 @@ func migrate(d *sql.DB) error {
 	op := func() error {
 		var opErr error
 		applied, opErr = prov.Up(ctx)
-		if opErr != nil && isBusyError(opErr) {
+		if opErr != nil && IsBusyError(opErr) {
 			return opErr
 		}
 		return backoff.Permanent(opErr)
@@ -97,10 +97,11 @@ func migrate(d *sql.DB) error {
 // over a range [start, end]. The reservations table must be aliased as r.
 const OverlapPredicate = "r.start_date <= ? AND r.end_date >= ?"
 
-// isBusyError reports whether err is a SQLite busy/locked condition (the
+// IsBusyError reports whether err is a SQLite busy/locked condition (the
 // database is locked or the busy timeout expired), detected by the driver
-// result code rather than the error text.
-func isBusyError(err error) bool {
+// result code rather than the error text. Handlers map it to 503 so a
+// contended write reads as "retry" instead of a server bug.
+func IsBusyError(err error) bool {
 	var sqliteErr *sqlite.Error
 	if !errors.As(err, &sqliteErr) {
 		return false

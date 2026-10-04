@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/pinolrent/pinolrent-api/internal/db"
 	"github.com/pinolrent/pinolrent-api/internal/httpx"
 )
 
@@ -65,8 +66,10 @@ type statusError struct {
 func (e *statusError) Error() string { return e.msg }
 
 // writeTxErr maps a WithImmediateTx result to its response: nil means success
-// and the caller responds, a statusError becomes its status, anything else is
-// a 500. It reports whether the response was written.
+// and the caller responds, a statusError becomes its status, a SQLite
+// busy/locked condition becomes 503 with Retry-After (the client should retry;
+// only /health has a degraded mode, writes just ask to come back), anything
+// else is a 500. It reports whether the response was written.
 func writeTxErr(w http.ResponseWriter, err error) bool {
 	if err == nil {
 		return false
@@ -74,6 +77,11 @@ func writeTxErr(w http.ResponseWriter, err error) bool {
 	var se *statusError
 	if errors.As(err, &se) {
 		writeError(w, se.status, se.msg)
+		return true
+	}
+	if db.IsBusyError(err) {
+		w.Header().Set("Retry-After", "1")
+		writeError(w, http.StatusServiceUnavailable, "database is busy, retry")
 		return true
 	}
 	serverError(w, err)

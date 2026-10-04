@@ -67,6 +67,7 @@ What matters about the schema (`internal/db/migrations/`):
 
 - It opens with **WAL**, waits up to 5 seconds if the database is busy and uses up to 8 connections (1 for `:memory:`) with `MaxIdleTime` 5 min / `MaxLifetime` 30 min.
 - Operations that touch several tables use `BEGIN IMMEDIATE` so two reservations cannot collide at the same time.
+- Contention is answered, not hidden: a write that still finds the database busy after the 5 s timeout answers `503` with `Retry-After` (retry the request), never `500`. Only `/health` has a degraded mode; writes just ask to come back.
 - `synchronous=NORMAL` (what SQLite recommends with WAL): if the process dies nothing is lost. If the database is busy while migrating, it retries with backoff (up to 5 times).
 - There are indexes on `cars(owner_id)`, `reservations(user_id)` and `reservations(car_id, start_date, end_date)` so lookups stay fast.
 
