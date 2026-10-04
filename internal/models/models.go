@@ -57,3 +57,17 @@ type Payment struct {
 	Status        string `json:"status"`
 	ProofURL      string `json:"proof_url,omitempty"`
 }
+
+// Notification is an in-app note for a user about a reservation event, such
+// as a new request for an owner or a decision for a buyer. ReadAt is the Unix
+// instant the user marked it as read, or 0 while unread; it is never
+// serialized, the read state travels as Read.
+type Notification struct {
+	ID            int64  `json:"id"`
+	UserID        int64  `json:"user_id"`
+	Kind          string `json:"kind"`
+	ReservationID int64  `json:"reservation_id"`
+	ReadAt        int64  `json:"-"`
+	Read          bool   `json:"read"`
+	CreatedAt     string `json:"created_at"`
+}

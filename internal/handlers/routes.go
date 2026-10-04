@@ -53,6 +53,8 @@ func (a *API) routes() []route {
 		{http.MethodGet, "/reservations/{id}", a.Auth.RequireAuth(a.GetReservation), limitNone},
 		{http.MethodPatch, "/reservations/{id}/cancel", a.Auth.RequireAuth(a.CancelReservation), limitStandard},
 		{http.MethodPost, "/reservations/{id}/payment", a.Auth.RequireAuth(a.RecordPayment), limitStandard},
+		{http.MethodGet, "/notifications", a.Auth.RequireAuth(a.ListNotifications), limitNone},
+		{http.MethodPatch, "/notifications/{id}/read", a.Auth.RequireAuth(a.MarkNotificationRead), limitStandard},
 		{http.MethodPost, "/uploads", a.Auth.RequireAuth(a.UploadFile), limitStandard},
 		{http.MethodGet, "/uploads/", a.serveUpload, limitNone},
 		{http.MethodGet, "/seller/reservations", a.Auth.RequireRole("seller", a.ListSellerReservations), limitNone},
@@ -69,6 +71,7 @@ func (a *API) routes() []route {
 		{http.MethodPatch, "/admin/reservations/{id}/confirm", a.Auth.RequireRole("admin", a.AdminConfirmReservation), limitStandard},
 		{http.MethodPatch, "/admin/reservations/{id}/request-correction", a.Auth.RequireRole("admin", a.AdminRequestCorrection), limitStandard},
 		{http.MethodGet, "/admin/payments", a.Auth.RequireRole("admin", a.AdminListPayments), limitNone},
+		{http.MethodGet, "/admin/notifications", a.Auth.RequireRole("admin", a.AdminListNotifications), limitNone},
 		{http.MethodGet, "/admin/stats", a.Auth.RequireRole("admin", a.AdminStats), limitNone},
 		{http.MethodGet, "/admin/audit", a.Auth.RequireRole("admin", a.AdminListAudit), limitNone},
 	}

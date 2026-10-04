@@ -28,8 +28,12 @@ func (a *API) AdminConfirmReservation(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
 		var status string
-		if err := conn.QueryRowContext(ctx,
-			`SELECT status FROM reservations WHERE id = ?`, id).Scan(&status); err != nil {
+		var buyerID int64
+		var ownerID int64
+		if err := conn.QueryRowContext(ctx, `
+			SELECT r.status, r.user_id, c.owner_id FROM reservations r
+			JOIN cars c ON c.id = r.car_id
+			WHERE r.id = ?`, id).Scan(&status, &buyerID, &ownerID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				writeError(w, http.StatusNotFound, "reservation not found")
 				return db.ErrTxHandled
@@ -65,6 +69,15 @@ func (a *API) AdminConfirmReservation(w http.ResponseWriter, r *http.Request) {
 			return db.ErrTxHandled
 		}
 		if err := a.auditAction(ctx, conn, u.ID, auditActionReservationConfirm, targetReservations, id, ""); err != nil {
+			serverError(w, err)
+			return db.ErrTxHandled
+		}
+		admins, err := adminIDs(ctx, conn)
+		if err != nil {
+			serverError(w, err)
+			return db.ErrTxHandled
+		}
+		if err := notifyUsers(ctx, conn, append(admins, buyerID, ownerID), notifyConfirmed, id); err != nil {
 			serverError(w, err)
 			return db.ErrTxHandled
 		}
@@ -104,8 +117,9 @@ func (a *API) AdminRequestCorrection(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
 		var status string
+		var buyerID int64
 		if err := conn.QueryRowContext(ctx,
-			`SELECT status FROM reservations WHERE id = ?`, id).Scan(&status); err != nil {
+			`SELECT status, user_id FROM reservations WHERE id = ?`, id).Scan(&status, &buyerID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				writeError(w, http.StatusNotFound, "reservation not found")
 				return db.ErrTxHandled
@@ -128,6 +142,10 @@ func (a *API) AdminRequestCorrection(w http.ResponseWriter, r *http.Request) {
 			return db.ErrTxHandled
 		}
 		if err := a.auditAction(ctx, conn, u.ID, auditActionReservationRequestCorrection, targetReservations, id, ""); err != nil {
+			serverError(w, err)
+			return db.ErrTxHandled
+		}
+		if err := notifyUsers(ctx, conn, []int64{buyerID}, notifyCorrectionRequested, id); err != nil {
 			serverError(w, err)
 			return db.ErrTxHandled
 		}

@@ -142,11 +142,16 @@ handler file for its domain.
   field validators and row scanning.
 - `reservations.go` + `reservations_query.go` — booking endpoints, the
   reservation view and its scan helper.
+- `seller_review.go` — the owner's accept/reject of a request.
+- `admin_confirm.go` — the administrator's confirm/request-correction.
 - `payments.go` + `payments_validate.go` — payment endpoints and their checks.
+- `notifications.go` + `admin_notifications.go` — in-app notification fan-out
+  on every transition, plus the user and admin listings.
 - `uploads.go` + `uploads_files.go` — upload/serve/cleanup endpoints plus
   image re-encoding and disk-usage helpers.
 - `admin_*.go` — one file per admin domain: `audit` (log + helper),
-  `users`, `cars`, `reservations`, `payments`, `stats`.
+  `users`, `cars`, `reservations`, `confirm`, `payments`, `notifications`,
+  `stats`.
 
 `internal/db/tx.go` exposes `WithImmediateTx` (and `ErrTxHandled` for the
 "response already sent" rollback); handlers never open transactions by hand.

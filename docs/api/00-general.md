@@ -92,6 +92,8 @@ The admin listings (`/admin/users`, `/admin/cars`, `/admin/reservations`, `/admi
 | GET | `/reservations/{id}` | yes | [reservations](reservations.md) |
 | PATCH | `/reservations/{id}/cancel` | yes | [reservations](reservations.md) |
 | POST | `/reservations/{id}/payment` | yes | [payments](payments.md) |
+| GET | `/notifications` | yes | [notifications](notifications.md) |
+| PATCH | `/notifications/{id}/read` | yes | [notifications](notifications.md) |
 | GET | `/seller/reservations` | seller | [payments](payments.md) |
 | PATCH | `/seller/reservations/{id}/accept` | seller | [payments](payments.md) |
 | PATCH | `/seller/reservations/{id}/reject` | seller | [payments](payments.md) |
@@ -108,6 +110,7 @@ The admin listings (`/admin/users`, `/admin/cars`, `/admin/reservations`, `/admi
 | PATCH | `/admin/reservations/{id}/confirm` | admin | [admin](admin.md) |
 | PATCH | `/admin/reservations/{id}/request-correction` | admin | [admin](admin.md) |
 | GET | `/admin/payments` | admin | [admin](admin.md) |
+| GET | `/admin/notifications` | admin | [admin](admin.md) |
 | GET | `/admin/stats` | admin | [admin](admin.md) |
 | GET | `/admin/audit` | admin | [admin](admin.md) |
 

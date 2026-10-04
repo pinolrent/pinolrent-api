@@ -56,11 +56,12 @@ func (a *API) CreateReservation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var reservationID int64
+	var ownerID int64
 	err = db.WithImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
 		ctx := r.Context()
 
 		var active int
-		if err := conn.QueryRowContext(ctx, `SELECT active FROM cars WHERE id = ?`, in.CarID).Scan(&active); err != nil {
+		if err := conn.QueryRowContext(ctx, `SELECT active, owner_id FROM cars WHERE id = ?`, in.CarID).Scan(&active, &ownerID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				writeError(w, http.StatusNotFound, "car not found")
 				return db.ErrTxHandled
@@ -95,6 +96,15 @@ func (a *API) CreateReservation(w http.ResponseWriter, r *http.Request) {
 			return db.ErrTxHandled
 		}
 		reservationID, _ = res.LastInsertId()
+		admins, err := adminIDs(ctx, conn)
+		if err != nil {
+			serverError(w, err)
+			return db.ErrTxHandled
+		}
+		if err := notifyUsers(ctx, conn, append(admins, ownerID), notifyRequested, reservationID); err != nil {
+			serverError(w, err)
+			return db.ErrTxHandled
+		}
 		return nil
 	})
 	if err != nil {

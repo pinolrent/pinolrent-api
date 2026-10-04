@@ -289,6 +289,28 @@ Sends the payment back to the buyer: the payment moves to `rejected` but the res
 
 ---
 
+## `GET /admin/notifications`
+
+Every notification on the platform, newest first, so administrators can audit
+what each account was told.
+
+**Query:** `user_id`, `kind` (one of `reservation.requested`,
+`reservation.accepted`, `reservation.rejected`, `reservation.confirmed`,
+`reservation.correction_requested`), `unread` (`true`/`false`), `limit`,
+`offset`.
+
+**Answers** `200`: `{"items": [...], "total": N, "limit": 50, "offset": 0}`,
+where each item is a [notification](notifications.md).
+
+**Errors:**
+
+| Status | Message | When |
+|--------|---------|------|
+| `400` | `invalid kind` | Unknown kind |
+| `400` | `invalid unread` | `unread` is neither `true` nor `false` |
+
+---
+
 ## `GET /admin/payments`
 
 Lists every payment, with the reservation and buyer context.

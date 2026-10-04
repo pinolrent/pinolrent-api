@@ -1,0 +1,27 @@
+meta {
+  name: My notifications
+  type: http
+  seq: 58
+}
+
+get {
+  url: {{baseUrl}}/notifications
+  body: none
+}
+
+headers {
+  Authorization: Bearer {{buyerToken}}
+}
+
+assert {
+  res.status: eq 200
+  res.body[0].kind: isDefined
+  res.body[0].reservation_id: isDefined
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (body.length > 0) {
+    bru.setVar("notificationId", body[0].id);
+  }
+}

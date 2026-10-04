@@ -1,0 +1,20 @@
+meta {
+  name: Admin notifications
+  type: http
+  seq: 60
+}
+
+get {
+  url: {{baseUrl}}/admin/notifications
+  body: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.items: isDefined
+  res.body.total: isDefined
+}

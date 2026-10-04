@@ -52,3 +52,25 @@ func TestSnakeCaseKeys(t *testing.T) {
 		}
 	}
 }
+
+func TestNotificationReadShape(t *testing.T) {
+	b, err := json.Marshal(Notification{ID: 1, UserID: 2, Kind: "reservation.requested", ReservationID: 3, CreatedAt: "2027-01-01 00:00:00"})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	for _, k := range []string{"user_id", "reservation_id", "read", "created_at"} {
+		if _, ok := m[k]; !ok {
+			t.Fatalf("key %q missing in %s", k, b)
+		}
+	}
+	if m["read"] != false {
+		t.Fatalf("unread notification should report read=false: %s", b)
+	}
+	if _, ok := m["read_at"]; ok {
+		t.Fatalf("read_at instant should not be serialized: %s", b)
+	}
+}

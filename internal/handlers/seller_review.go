@@ -30,10 +30,11 @@ func (a *API) AcceptReservation(w http.ResponseWriter, r *http.Request) {
 
 		var status string
 		var ownerID int64
+		var buyerID int64
 		if err := conn.QueryRowContext(ctx, `
-			SELECT r.status, c.owner_id FROM reservations r
+			SELECT r.status, c.owner_id, r.user_id FROM reservations r
 			JOIN cars c ON c.id = r.car_id
-			WHERE r.id = ?`, id).Scan(&status, &ownerID); err != nil {
+			WHERE r.id = ?`, id).Scan(&status, &ownerID, &buyerID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				writeError(w, http.StatusNotFound, "reservation not found")
 				return db.ErrTxHandled
@@ -51,6 +52,10 @@ func (a *API) AcceptReservation(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if _, err := conn.ExecContext(ctx, `UPDATE reservations SET status = 'accepted' WHERE id = ?`, id); err != nil {
+			serverError(w, err)
+			return db.ErrTxHandled
+		}
+		if err := notifyUsers(ctx, conn, []int64{buyerID}, notifyAccepted, id); err != nil {
 			serverError(w, err)
 			return db.ErrTxHandled
 		}
@@ -94,10 +99,11 @@ func (a *API) RejectReservation(w http.ResponseWriter, r *http.Request) {
 
 		var status string
 		var ownerID int64
+		var buyerID int64
 		if err := conn.QueryRowContext(ctx, `
-			SELECT r.status, c.owner_id FROM reservations r
+			SELECT r.status, c.owner_id, r.user_id FROM reservations r
 			JOIN cars c ON c.id = r.car_id
-			WHERE r.id = ?`, id).Scan(&status, &ownerID); err != nil {
+			WHERE r.id = ?`, id).Scan(&status, &ownerID, &buyerID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				writeError(w, http.StatusNotFound, "reservation not found")
 				return db.ErrTxHandled
@@ -120,6 +126,15 @@ func (a *API) RejectReservation(w http.ResponseWriter, r *http.Request) {
 			return db.ErrTxHandled
 		}
 		if _, err := conn.ExecContext(ctx, `UPDATE reservations SET status = 'rejected' WHERE id = ?`, id); err != nil {
+			serverError(w, err)
+			return db.ErrTxHandled
+		}
+		admins, err := adminIDs(ctx, conn)
+		if err != nil {
+			serverError(w, err)
+			return db.ErrTxHandled
+		}
+		if err := notifyUsers(ctx, conn, append(admins, buyerID), notifyRejected, id); err != nil {
 			serverError(w, err)
 			return db.ErrTxHandled
 		}

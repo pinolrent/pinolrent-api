@@ -429,6 +429,15 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/reservations/$res4/
 check "re-record payment -> 200" "200" "$code"
 conf2=$(curl -s -X PATCH "$BASE/admin/reservations/$res4/confirm" -H "Authorization: Bearer $adminToken")
 check "admin confirm corrected -> confirmed" "confirmed" "$(printf '%s' "$conf2" | jq -r .status)"
+# Notifications: the buyer heard about the confirmation, can read it, and the
+# administrator sees the platform-wide trail.
+notes=$(curl -s "$BASE/notifications" -H "Authorization: Bearer $buyer")
+check "buyer notified of confirmation" "true" "$(printf '%s' "$notes" | jq -r '[.[] | select(.kind=="reservation.confirmed")] | length > 0')"
+nid=$(printf '%s' "$notes" | jq -r '[.[] | select(.read==false)][0].id')
+readn=$(curl -s -X PATCH "$BASE/notifications/$nid/read" -H "Authorization: Bearer $buyer" | jq -r .read)
+check "mark notification read" "true" "$readn"
+code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/admin/notifications?kind=reservation.requested" -H "Authorization: Bearer $adminToken")
+check "admin notifications -> 200" "200" "$code"
 # The suspension pair above always writes two rows. Compared inside a
 # substitution so a regression reports FAIL instead of tripping `set -e`.
 audits=$(curl -s "$BASE/admin/audit" -H "Authorization: Bearer $adminToken" | jq -r '.total')
