@@ -274,7 +274,7 @@ func (a *API) AdminPatchUserRoles(w http.ResponseWriter, r *http.Request) {
 		}
 		if *in.Seller {
 			res, err := conn.ExecContext(ctx,
-				`INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, 'seller')`, id)
+				`INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, ?)`, id, db.RoleSeller)
 			if err != nil {
 				serverError(w, err)
 				return db.ErrTxHandled
@@ -292,7 +292,7 @@ func (a *API) AdminPatchUserRoles(w http.ResponseWriter, r *http.Request) {
 			}
 		} else {
 			res, err := conn.ExecContext(ctx,
-				`DELETE FROM user_roles WHERE user_id = ? AND role = 'seller'`, id)
+				`DELETE FROM user_roles WHERE user_id = ? AND role = ?`, id, db.RoleSeller)
 			if err != nil {
 				serverError(w, err)
 				return db.ErrTxHandled

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/pinolrent/pinolrent-api/internal/auth"
+	"github.com/pinolrent/pinolrent-api/internal/db"
 	"github.com/pinolrent/pinolrent-api/internal/models"
 )
 
@@ -70,7 +71,7 @@ func (a *API) UpdateMe(w http.ResponseWriter, r *http.Request) {
 	// Same rule as registration: a seller without a phone cannot be contacted.
 	// Saving a phone here never grants the seller role; only become-seller
 	// does that.
-	if u.HasRole("seller") && phone == "" {
+	if u.HasRole(db.RoleSeller) && phone == "" {
 		writeError(w, http.StatusBadRequest, "phone is required for sellers")
 		return
 	}
@@ -170,16 +171,16 @@ func (a *API) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	roles := []string{"buyer"}
+	roles := []string{db.RoleBuyer}
 	if phone != "" {
-		roles = append(roles, "seller")
+		roles = append(roles, db.RoleSeller)
 	}
 	// An address on ADMIN_EMAILS registers as an administrator right away, so
 	// a new admin account does not need a restart to become usable. The role
 	// is additive: the account stays a working buyer, and only the allow-list
 	// ever grants it.
 	if a.isAdminEmail(in.Email) {
-		roles = append(roles, "admin")
+		roles = append(roles, db.RoleAdmin)
 	}
 
 	// The response intentionally omits the user id: returning id=0 for a
@@ -249,7 +250,7 @@ func (a *API) BecomeSeller(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !u.HasRole("seller") {
+	if !u.HasRole(db.RoleSeller) {
 		tx, err := a.DB.BeginTx(r.Context(), nil)
 		if err != nil {
 			serverError(w, err)
@@ -267,7 +268,7 @@ func (a *API) BecomeSeller(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if _, err := tx.ExecContext(r.Context(),
-			`INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, 'seller')`, u.ID); err != nil {
+			`INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, ?)`, u.ID, db.RoleSeller); err != nil {
 			serverError(w, err)
 			return
 		}
@@ -277,7 +278,7 @@ func (a *API) BecomeSeller(w http.ResponseWriter, r *http.Request) {
 		}
 		committed = true
 		u.Phone = phone
-		u.Roles = append(u.Roles, "seller")
+		u.Roles = append(u.Roles, db.RoleSeller)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
