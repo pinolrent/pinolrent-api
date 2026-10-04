@@ -23,20 +23,17 @@ func (a *API) AdminListUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	clauses := []string{"1=1"}
-	args := []any{}
+	var f filter
 	if q != "" {
-		clauses = append(clauses, "(lower(u.email) LIKE ? OR CAST(u.id AS TEXT) = ?)")
-		args = append(args, "%"+q+"%", q)
+		f.add("(lower(u.email) LIKE ? OR CAST(u.id AS TEXT) = ?)", "%"+q+"%", q)
 	}
 	if role != "" {
-		clauses = append(clauses, "EXISTS (SELECT 1 FROM user_roles r WHERE r.user_id = u.id AND r.role = ?)")
-		args = append(args, role)
+		f.add("EXISTS (SELECT 1 FROM user_roles r WHERE r.user_id = u.id AND r.role = ?)", role)
 	}
 
 	var total int64
 	if err := a.DB.QueryRowContext(r.Context(),
-		`SELECT COUNT(DISTINCT u.id) FROM users u WHERE `+strings.Join(clauses, " AND "), args...).Scan(&total); err != nil {
+		`SELECT COUNT(DISTINCT u.id) FROM users u WHERE `+f.where(), f.params()...).Scan(&total); err != nil {
 		serverError(w, err)
 		return
 	}
@@ -47,10 +44,10 @@ func (a *API) AdminListUsers(w http.ResponseWriter, r *http.Request) {
 		`SELECT u.id, u.email, u.phone, u.suspended_at, GROUP_CONCAT(ur.role) as roles
 		 FROM users u
 		 LEFT JOIN user_roles ur ON ur.user_id = u.id
-		 WHERE `+strings.Join(clauses, " AND ")+`
+		 WHERE `+f.where()+`
 		 GROUP BY u.id, u.email, u.phone, u.suspended_at
 		 ORDER BY u.id ASC
-		 LIMIT ? OFFSET ?`, append(args, limit, offset)...)
+		 LIMIT ? OFFSET ?`, f.page(limit, offset)...)
 	if err != nil {
 		serverError(w, err)
 		return

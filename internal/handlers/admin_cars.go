@@ -21,11 +21,9 @@ func (a *API) AdminListCars(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	clauses := []string{"1=1"}
-	args := []any{}
+	var f filter
 	if s := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q"))); s != "" {
-		clauses = append(clauses, "(lower(c.name) LIKE ? OR CAST(c.id AS TEXT)=?)")
-		args = append(args, "%"+s+"%", s)
+		f.add("(lower(c.name) LIKE ? OR CAST(c.id AS TEXT)=?)", "%"+s+"%", s)
 	}
 	if s := r.URL.Query().Get("owner_id"); s != "" {
 		oid, err := strconv.ParseInt(s, 10, 64)
@@ -33,8 +31,7 @@ func (a *API) AdminListCars(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "invalid owner_id")
 			return
 		}
-		clauses = append(clauses, "c.owner_id = ?")
-		args = append(args, oid)
+		f.add("c.owner_id = ?", oid)
 	}
 	if s := r.URL.Query().Get("active"); s != "" {
 		v := strings.ToLower(s)
@@ -46,15 +43,14 @@ func (a *API) AdminListCars(w http.ResponseWriter, r *http.Request) {
 		if v == "true" {
 			active = 1
 		}
-		clauses = append(clauses, "c.active = ?")
-		args = append(args, active)
+		f.add("c.active = ?", active)
 	}
 
 	var total int64
 	// #nosec G202 -- clauses are built here from fixed fragments with placeholders;
 	// every value from the query string is bound as a parameter.
 	if err := a.DB.QueryRowContext(r.Context(),
-		`SELECT COUNT(*) FROM cars c WHERE `+strings.Join(clauses, " AND "), args...).Scan(&total); err != nil {
+		`SELECT COUNT(*) FROM cars c WHERE `+f.where(), f.params()...).Scan(&total); err != nil {
 		serverError(w, err)
 		return
 	}
@@ -64,9 +60,9 @@ func (a *API) AdminListCars(w http.ResponseWriter, r *http.Request) {
 		`SELECT `+carColumnsQualified+`, u.email
 		 FROM cars c
 		 LEFT JOIN users u ON u.id = c.owner_id
-		 WHERE `+strings.Join(clauses, " AND ")+`
+		 WHERE `+f.where()+`
 		 ORDER BY c.id ASC
-		 LIMIT ? OFFSET ?`, append(args, limit, offset)...)
+		 LIMIT ? OFFSET ?`, f.page(limit, offset)...)
 	if err != nil {
 		serverError(w, err)
 		return
