@@ -116,6 +116,37 @@ stateDiagram-v2
 
 - If you try to read or touch something that is not yours, the API answers `404` as if it did not exist. Registration answers `201` whether the email exists or not, to avoid revealing which addresses are registered.
 
+## Module map
+
+Separation rule: `handlers` speaks HTTP (request parsing, status codes, JSON
+shape), `db` owns SQL execution and transactions, `httpx` owns the error
+envelope. Anything that does not touch `http.ResponseWriter` lives outside the
+handler file for its domain.
+
+`internal/handlers/` layout:
+
+- `api.go` — the `API` dependencies struct and constructor.
+- `routes.go` / `router.go` / `cors.go` / `middleware.go` — the route table
+  (single source of truth), the production chain, CORS and middlewares.
+- `http_json.go` — JSON envelope, body size limit and strict decoding.
+- `pagination.go` — `limit`/`offset` parsing and defaults.
+- `validate.go` — field caps, `lenBetween`, URL and `/uploads/` path checks.
+- `dbhelpers.go` — the shared `rowScanner` shape and SQLite error codes.
+- `dates.go` — `YYYY-MM-DD` parsing, today bound and the rental length cap.
+- `auth.go` (+ `phone.go`) — registration, login, tokens, profile.
+- `cars.go` + `cars_validate.go` + `cars_query.go` — catalog endpoints,
+  field validators and row scanning.
+- `reservations.go` + `reservations_query.go` — booking endpoints, the
+  reservation view and its scan helper.
+- `payments.go` + `payments_validate.go` — payment endpoints and their checks.
+- `uploads.go` + `uploads_files.go` — upload/serve/cleanup endpoints plus
+  image re-encoding and disk-usage helpers.
+- `admin_*.go` — one file per admin domain: `audit` (log + helper),
+  `users`, `cars`, `reservations`, `payments`, `stats`.
+
+`internal/db/tx.go` exposes `WithImmediateTx` (and `ErrTxHandled` for the
+"response already sent" rollback); handlers never open transactions by hand.
+
 ## Server and logs
 
 - Timeouts: header 5 s, read 10 s, write 120 s (generous so a 5 MB upload gets through from a slow link), idle 60 s. Max header 1 MB.
