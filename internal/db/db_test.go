@@ -52,6 +52,7 @@ func TestIndexesExist(t *testing.T) {
 		"idx_cars_owner":             false,
 		"idx_reservations_user":      false,
 		"idx_reservations_car_dates": false,
+		"idx_reservations_status":    false,
 	}
 	for _, table := range []string{"cars", "reservations"} {
 		rows, err := d.QueryContext(context.Background(),

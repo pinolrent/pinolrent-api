@@ -76,7 +76,7 @@ func (a *API) CreateReservation(w http.ResponseWriter, r *http.Request) {
 		var overlap int
 		if err := conn.QueryRowContext(ctx, `
 			SELECT COUNT(*) FROM reservations r
-			WHERE r.car_id = ? AND r.status != 'cancelled'
+			WHERE r.car_id = ? AND r.status NOT IN ('cancelled', 'rejected')
 				AND `+db.OverlapPredicate, in.CarID, in.EndDate, in.StartDate).Scan(&overlap); err != nil {
 			serverError(w, err)
 			return db.ErrTxHandled

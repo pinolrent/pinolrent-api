@@ -228,8 +228,8 @@ cannot delete`.
 Lists every reservation, with `buyer_email` and `car_name` resolved so there is
 no need to chain calls.
 
-**Query:** `status` (`pending`, `confirmed`, `cancelled`), `user_id`,
-`car_id`, `limit`, `offset`.
+**Query:** `status` (`pending`, `accepted`, `confirmed`, `rejected`,
+`cancelled`), `user_id`, `car_id`, `limit`, `offset`.
 
 ```json
 {
@@ -276,14 +276,15 @@ Platform metrics, in a single call. Read only, no pagination.
 {
   "users": {"total": 12, "sellers": 4, "admins": 1, "suspended": 1},
   "cars": {"active": 9},
-  "reservations": {"pending": 3, "confirmed": 5, "cancelled": 2},
+  "reservations": {"pending": 3, "accepted": 1, "confirmed": 5, "rejected": 0, "cancelled": 2},
   "payments": {"pending": 1, "approved": 4, "rejected": 1, "approved_total": 540000}
 }
 ```
 
-A reservation has no `paid` state: the CHECK on the table only admits `pending`,
-`confirmed` and `cancelled`. That a reservation is paid is inferred from its
-payment being `approved`, and that is what `payments.approved` counts.
+A reservation has no `paid` state: the CHECK on the table admits `pending`,
+`accepted`, `confirmed`, `rejected` and `cancelled`. That a reservation is paid
+is inferred from its payment being `approved`, and that is what
+`payments.approved` counts.
 
 `approved_total` adds up `price_per_day` × days of every reservation with an
 approved payment. Beware: reservations store dates, not price, so the figure

@@ -141,6 +141,44 @@ func TestCreateReservationAllowsCancelled(t *testing.T) {
 	}
 }
 
+func TestCreateReservationRejectedFreesDates(t *testing.T) {
+	a := newTestAPI(t)
+	car := seedCar(t, a)
+	token := registerBuyer(t, a, "user@example.com", "secret123")
+
+	if _, err := a.DB.ExecContext(context.Background(),
+		`INSERT INTO reservations (user_id, car_id, start_date, end_date, status) VALUES (1, ?, ?, ?, 'rejected')`, car.ID, futureDate(10), futureDate(12),
+	); err != nil {
+		t.Fatalf("seed rejected: %v", err)
+	}
+
+	rec := doJSON(t, a, "POST", "/reservations", token, map[string]any{
+		"car_id": car.ID, "start_date": futureDate(10), "end_date": futureDate(12),
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201 (body %s)", rec.Code, rec.Body.String())
+	}
+}
+
+func TestCreateReservationAcceptedBlocksDates(t *testing.T) {
+	a := newTestAPI(t)
+	car := seedCar(t, a)
+	token := registerBuyer(t, a, "user@example.com", "secret123")
+
+	if _, err := a.DB.ExecContext(context.Background(),
+		`INSERT INTO reservations (user_id, car_id, start_date, end_date, status) VALUES (1, ?, ?, ?, 'accepted')`, car.ID, futureDate(10), futureDate(12),
+	); err != nil {
+		t.Fatalf("seed accepted: %v", err)
+	}
+
+	rec := doJSON(t, a, "POST", "/reservations", token, map[string]any{
+		"car_id": car.ID, "start_date": futureDate(10), "end_date": futureDate(12),
+	})
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409 (body %s)", rec.Code, rec.Body.String())
+	}
+}
+
 func TestCreateReservationMaxDays(t *testing.T) {
 	a := newTestAPI(t)
 	car := seedCar(t, a)

@@ -31,12 +31,20 @@ func (a *API) AdminStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var pendingRes, confirmedRes, cancelledRes int64
+	var pendingRes, acceptedRes, confirmedRes, rejectedRes, cancelledRes int64
 	if err := a.DB.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM reservations WHERE status='pending'`).Scan(&pendingRes); err != nil {
 		serverError(w, err)
 		return
 	}
+	if err := a.DB.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM reservations WHERE status='accepted'`).Scan(&acceptedRes); err != nil {
+		serverError(w, err)
+		return
+	}
 	if err := a.DB.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM reservations WHERE status='confirmed'`).Scan(&confirmedRes); err != nil {
+		serverError(w, err)
+		return
+	}
+	if err := a.DB.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM reservations WHERE status='rejected'`).Scan(&rejectedRes); err != nil {
 		serverError(w, err)
 		return
 	}
@@ -81,7 +89,9 @@ func (a *API) AdminStats(w http.ResponseWriter, r *http.Request) {
 		},
 		"reservations": map[string]int64{
 			"pending":   pendingRes,
+			"accepted":  acceptedRes,
 			"confirmed": confirmedRes,
+			"rejected":  rejectedRes,
 			"cancelled": cancelledRes,
 		},
 		"payments": map[string]any{

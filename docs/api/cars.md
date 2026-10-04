@@ -14,7 +14,7 @@ Lists the **active** cars of every seller. You can filter by seller and by dates
 | `limit` | number | `1..200`, default `50` |
 | `offset` | number | `>= 0`, default `0` |
 
-It only shows cars with `active=1` and without a `pending`/`confirmed` reservation that collides with `[start_date, end_date]`. `cancelled` ones do not block.
+It only shows cars with `active=1` and without a `pending`/`accepted`/`confirmed` reservation that collides with `[start_date, end_date]`. `rejected` and `cancelled` ones do not block.
 
 **Answers** `200`:
 
@@ -185,4 +185,4 @@ Deletes a car that **never had reservations** (in any state). Requires `seller` 
 
 ---
 
-> Turning a car off does not delete its old reservations, it only stops showing up in `GET /cars` and stops accepting new reservations (`409 car is not active`). If it has future reservations (`pending`/`confirmed`) it cannot be deactivated (`409`). If it never had reservations, `DELETE` removes it for good.
+> Turning a car off does not delete its old reservations, it only stops showing up in `GET /cars` and stops accepting new reservations (`409 car is not active`). If it has future reservations (`pending`/`accepted`/`confirmed`) it cannot be deactivated (`409`). If it never had reservations, `DELETE` removes it for good.

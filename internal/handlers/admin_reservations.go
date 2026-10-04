@@ -26,9 +26,10 @@ func (a *API) AdminListReservations(w http.ResponseWriter, r *http.Request) {
 	clauses := []string{"1=1"}
 	args := []any{}
 	if s := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("status"))); s != "" {
-		// The reservations CHECK only allows these three. A reservation is
-		// paid when its payment row is approved, not through its own status.
-		if s != "pending" && s != "confirmed" && s != "cancelled" {
+		// The reservations CHECK admits pending, accepted, confirmed,
+		// rejected and cancelled. A reservation is paid when its payment row
+		// is approved, not through its own status.
+		if s != "pending" && s != "accepted" && s != "confirmed" && s != "rejected" && s != "cancelled" {
 			writeError(w, http.StatusBadRequest, "invalid status")
 			return
 		}

@@ -91,7 +91,7 @@ func (a *API) ListCars(w http.ResponseWriter, r *http.Request) {
 			AND NOT EXISTS (
 				SELECT 1 FROM reservations r
 				WHERE r.car_id = c.id
-					AND r.status != 'cancelled'
+					AND r.status NOT IN ('cancelled', 'rejected')
 					AND `+db.OverlapPredicate+`
 			)
 			ORDER BY c.id LIMIT ? OFFSET ?`, args...)
@@ -331,7 +331,7 @@ func (a *API) PatchCar(w http.ResponseWriter, r *http.Request) {
 		if in.Active != nil && !*in.Active {
 			var hasFuture int
 			if err := conn.QueryRowContext(ctx,
-				`SELECT COUNT(*) FROM reservations WHERE car_id = ? AND status != 'cancelled' AND end_date >= date('now')`, id).Scan(&hasFuture); err != nil {
+				`SELECT COUNT(*) FROM reservations WHERE car_id = ? AND status NOT IN ('cancelled', 'rejected') AND end_date >= date('now')`, id).Scan(&hasFuture); err != nil {
 				serverError(w, err)
 				return db.ErrTxHandled
 			}
