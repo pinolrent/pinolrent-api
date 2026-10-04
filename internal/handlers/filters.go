@@ -38,19 +38,19 @@ func (f filter) page(limit, offset int) []any {
 	return append(append(out, f.args...), limit, offset)
 }
 
-// unread appends the read filter shared by the notification listings. It
-// reports whether raw was a valid value: "" (no filter), "true" (unread
-// only) or "false" (read only).
-func (f *filter) unread(raw string) bool {
+// unread appends the read filter shared by the notification listings. Like
+// paginate, it returns "" when the value is valid and an error message when
+// it is not: "" (no filter), "true" (unread only) or "false" (read only).
+func (f *filter) unread(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "":
-		return true
+		return ""
 	case "true":
 		f.add("read_at IS NULL")
-		return true
+		return ""
 	case "false":
 		f.add("read_at IS NOT NULL")
-		return true
+		return ""
 	}
-	return false
+	return "invalid unread"
 }

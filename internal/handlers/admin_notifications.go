@@ -33,8 +33,8 @@ func (a *API) AdminListNotifications(w http.ResponseWriter, r *http.Request) {
 		}
 		f.add("kind = ?", s)
 	}
-	if !f.unread(r.URL.Query().Get("unread")) {
-		writeError(w, http.StatusBadRequest, "invalid unread")
+	if errMsg := f.unread(r.URL.Query().Get("unread")); errMsg != "" {
+		writeError(w, http.StatusBadRequest, errMsg)
 		return
 	}
 

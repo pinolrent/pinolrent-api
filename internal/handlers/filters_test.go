@@ -30,18 +30,18 @@ func TestFilterWhere(t *testing.T) {
 
 func TestFilterUnread(t *testing.T) {
 	var f filter
-	if !f.unread("") || len(f.params()) != 0 {
-		t.Fatal("empty unread must be a no-op")
+	if msg := f.unread(""); msg != "" || len(f.params()) != 0 {
+		t.Fatalf("empty unread must be a no-op, got %q", msg)
 	}
-	if !f.unread("true") || f.where() != "read_at IS NULL" {
-		t.Fatalf("where() = %q", f.where())
+	if msg := f.unread("true"); msg != "" || f.where() != "read_at IS NULL" {
+		t.Fatalf("where() = %q msg = %q", f.where(), msg)
 	}
 	var g filter
-	if !g.unread("FALSE") || g.where() != "read_at IS NOT NULL" {
-		t.Fatalf("where() = %q", g.where())
+	if msg := g.unread("FALSE"); msg != "" || g.where() != "read_at IS NOT NULL" {
+		t.Fatalf("where() = %q msg = %q", g.where(), msg)
 	}
 	var bad filter
-	if bad.unread("maybe") {
+	if msg := bad.unread("maybe"); msg == "" {
 		t.Fatal("unread(maybe) must be invalid")
 	}
 }

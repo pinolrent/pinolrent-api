@@ -89,8 +89,8 @@ func (a *API) ListNotifications(w http.ResponseWriter, r *http.Request) {
 
 	var f filter
 	f.add("user_id = ?", u.ID)
-	if !f.unread(r.URL.Query().Get("unread")) {
-		writeError(w, http.StatusBadRequest, "invalid unread")
+	if errMsg := f.unread(r.URL.Query().Get("unread")); errMsg != "" {
+		writeError(w, http.StatusBadRequest, errMsg)
 		return
 	}
 
