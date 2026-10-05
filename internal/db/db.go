@@ -15,7 +15,6 @@ import (
 	sqlite "modernc.org/sqlite"
 	sqlite3 "modernc.org/sqlite/lib"
 
-	"github.com/cenkalti/backoff/v4"
 	"github.com/pressly/goose/v3"
 )
 
@@ -74,18 +73,20 @@ func migrate(d *sql.DB) error {
 	defer cancel()
 
 	var applied []*goose.MigrationResult
-	op := func() error {
-		var opErr error
-		applied, opErr = prov.Up(ctx)
-		if opErr != nil && IsBusyError(opErr) {
-			return opErr
+	var upErr error
+	// Another instance may be migrating concurrently (SQLite reports busy):
+	// retry a few times with a growing sleep. Any other error is final.
+	sleep := 100 * time.Millisecond
+	for attempt := 0; attempt < 5; attempt++ {
+		applied, upErr = prov.Up(ctx)
+		if upErr == nil || !IsBusyError(upErr) || attempt == 4 {
+			break
 		}
-		return backoff.Permanent(opErr)
+		time.Sleep(sleep)
+		sleep *= 2
 	}
-	exp := backoff.NewExponentialBackOff()
-	exp.InitialInterval = 100 * time.Millisecond
-	if err := backoff.Retry(op, backoff.WithContext(backoff.WithMaxRetries(exp, 5), ctx)); err != nil {
-		return fmt.Errorf("migrate: %w", err)
+	if upErr != nil {
+		return fmt.Errorf("migrate: %w", upErr)
 	}
 	for _, m := range applied {
 		slog.Info("migration applied", "version", m.Source.Version, "path", m.Source.Path)
