@@ -26,11 +26,6 @@ func (f filter) where() string {
 	return strings.Join(f.clauses, " AND ")
 }
 
-// params returns the bound arguments in clause order.
-func (f filter) params() []any {
-	return f.args
-}
-
 // page returns the bound arguments with limit/offset appended, copying so
 // the filter stays reusable after paving.
 func (f filter) page(limit, offset int) []any {

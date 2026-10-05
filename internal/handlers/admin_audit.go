@@ -49,45 +49,6 @@ func (a *API) auditAction(ctx context.Context, conn *sql.Conn, actorID int64, ac
 
 // AdminListAudit returns the audit log for administrator actions.
 func (a *API) AdminListAudit(w http.ResponseWriter, r *http.Request) {
-	limit, offset, errMsg := paginate(r)
-	if errMsg != "" {
-		writeError(w, http.StatusBadRequest, errMsg)
-		return
-	}
-
-	var f filter
-	if aid, present, errMsg := queryID(r, "actor_id"); errMsg != "" {
-		writeError(w, http.StatusBadRequest, errMsg)
-		return
-	} else if present {
-		f.add("a.actor_id = ?", aid)
-	}
-	if s := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("action"))); s != "" {
-		f.add("lower(a.action) = ?", s)
-	}
-
-	var total int64
-	if err := a.DB.QueryRowContext(r.Context(),
-		`SELECT COUNT(*) FROM admin_audit_log a WHERE `+f.where(), f.params()...).Scan(&total); err != nil {
-		serverError(w, err)
-		return
-	}
-
-	// #nosec G202 -- clauses are built here from fixed fragments with placeholders;
-	// every value from the query string is bound as a parameter.
-	rows, err := a.DB.QueryContext(r.Context(),
-		`SELECT a.id, a.actor_id, a.action, a.target_type, a.target_id, a.detail, a.created_at, u.email
-		 FROM admin_audit_log a
-		 LEFT JOIN users u ON u.id = a.actor_id
-		 WHERE `+f.where()+`
-		 ORDER BY a.id DESC
-		 LIMIT ? OFFSET ?`, f.page(limit, offset)...)
-	if err != nil {
-		serverError(w, err)
-		return
-	}
-	defer func() { _ = rows.Close() }()
-
 	type outAudit struct {
 		ID         int64  `json:"id"`
 		ActorID    int64  `json:"actor_id"`
@@ -98,29 +59,32 @@ func (a *API) AdminListAudit(w http.ResponseWriter, r *http.Request) {
 		Detail     string `json:"detail,omitempty"`
 		CreatedAt  string `json:"created_at"`
 	}
-	out := make([]outAudit, 0, limit)
-	for rows.Next() {
-		var id, actorID, targetID int64
-		var action, ttype, detail, created string
-		var actorEmail sql.NullString
-		if err := rows.Scan(&id, &actorID, &action, &ttype, &targetID, &detail, &created, &actorEmail); err != nil {
-			serverError(w, err)
-			return
-		}
-		oa := outAudit{ID: id, ActorID: actorID, Action: action, TargetType: ttype, TargetID: targetID, Detail: detail, CreatedAt: created}
-		if actorEmail.Valid {
-			oa.ActorEmail = actorEmail.String
-		}
-		out = append(out, oa)
-	}
-	if err := rows.Err(); err != nil {
-		serverError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"items":  out,
-		"total":  total,
-		"limit":  limit,
-		"offset": offset,
-	})
+	listPage(a, w, r,
+		`SELECT COUNT(*) FROM admin_audit_log a`,
+		`SELECT a.id, a.actor_id, a.action, a.target_type, a.target_id, a.detail, a.created_at, u.email
+		 FROM admin_audit_log a
+		 LEFT JOIN users u ON u.id = a.actor_id`,
+		`ORDER BY a.id DESC`,
+		func(f *filter) string {
+			if aid, present, errMsg := queryID(r, "actor_id"); errMsg != "" {
+				return errMsg
+			} else if present {
+				f.add("a.actor_id = ?", aid)
+			}
+			if s := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("action"))); s != "" {
+				f.add("lower(a.action) = ?", s)
+			}
+			return ""
+		},
+		func(row rowScanner) (outAudit, error) {
+			var oa outAudit
+			var actorEmail sql.NullString
+			if err := row.Scan(&oa.ID, &oa.ActorID, &oa.Action, &oa.TargetType, &oa.TargetID, &oa.Detail, &oa.CreatedAt, &actorEmail); err != nil {
+				return oa, err
+			}
+			if actorEmail.Valid {
+				oa.ActorEmail = actorEmail.String
+			}
+			return oa, nil
+		})
 }
