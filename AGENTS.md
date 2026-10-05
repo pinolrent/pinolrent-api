@@ -87,7 +87,7 @@ in sync.
 - Helpers in `internal/handlers/helpers_test.go`: `newTestAPI`, `doJSON`, `newSeller`, `registerBuyer`, `futureDate`.
   Use `futureDate(n)` for reservation dates — never hardcode calendar dates (they go stale).
 - `internal/handlers/middleware_test.go` covers security headers, panic recovery, and edge cases.
-- Test harnesses build the API with `auth.WithPasswordCost(bcrypt.MinCost)` (`newTestAPI`,
+- Test harnesses build the API and set `a.Cost = bcrypt.MinCost` (`newTestAPI`,
   `hardening_test.go`): bcrypt at `DefaultCost` under `-race` is what used to blow the 300s budget.
   Production keeps `bcrypt.DefaultCost`; `auth_test.go` pins both sides of that.
 - `scripts/demo.sh` is the E2E smoke — exercises the full buyer/seller flow with `curl`+`jq`.
