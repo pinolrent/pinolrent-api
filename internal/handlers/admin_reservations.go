@@ -19,79 +19,43 @@ LEFT JOIN cars c ON c.id = r.car_id
 
 // AdminListReservations returns all reservations on the platform.
 func (a *API) AdminListReservations(w http.ResponseWriter, r *http.Request) {
-	limit, offset, errMsg := paginate(r)
-	if errMsg != "" {
-		writeError(w, http.StatusBadRequest, errMsg)
-		return
-	}
-
-	var f filter
-	if s := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("status"))); s != "" {
-		// A reservation is paid when its payment row is approved, not through
-		// its own status.
-		if !db.ValidReservationStatus(s) {
-			writeError(w, http.StatusBadRequest, "invalid status")
-			return
-		}
-		f.add("r.status = ?", s)
-	}
-	if uid, present, errMsg := queryID(r, "user_id"); errMsg != "" {
-		writeError(w, http.StatusBadRequest, errMsg)
-		return
-	} else if present {
-		f.add("r.user_id = ?", uid)
-	}
-	if cid, present, errMsg := queryID(r, "car_id"); errMsg != "" {
-		writeError(w, http.StatusBadRequest, errMsg)
-		return
-	} else if present {
-		f.add("r.car_id = ?", cid)
-	}
-
-	var total int64
-	if err := a.DB.QueryRowContext(r.Context(),
-		`SELECT COUNT(*) FROM reservations r WHERE `+f.where(), f.params()...).Scan(&total); err != nil {
-		serverError(w, err)
-		return
-	}
-
-	rows, err := a.DB.QueryContext(r.Context(),
-		adminReservationSelect+`
-		 WHERE `+f.where()+`
-		 ORDER BY r.id ASC
-		 LIMIT ? OFFSET ?`, f.page(limit, offset)...)
-	if err != nil {
-		serverError(w, err)
-		return
-	}
-	defer func() { _ = rows.Close() }()
-
-	out := make([]adminReservationOut, 0, limit)
-	for rows.Next() {
-		var r adminReservationOut
-		var buyerEmail, carName sql.NullString
-		if err := rows.Scan(&r.ID, &r.UserID, &r.CarID, &r.StartDate, &r.EndDate, &r.Status, &buyerEmail, &carName); err != nil {
-			serverError(w, err)
-			return
-		}
-		if buyerEmail.Valid {
-			r.BuyerEmail = buyerEmail.String
-		}
-		if carName.Valid {
-			r.CarName = carName.String
-		}
-		out = append(out, r)
-	}
-	if err := rows.Err(); err != nil {
-		serverError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"items":  out,
-		"total":  total,
-		"limit":  limit,
-		"offset": offset,
-	})
+	listPage(a, w, r,
+		`SELECT COUNT(*) FROM reservations r`,
+		adminReservationSelect,
+		`ORDER BY r.id ASC`,
+		func(f *filter) string {
+			if s := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("status"))); s != "" {
+				if !db.ValidReservationStatus(s) {
+					return "invalid status"
+				}
+				f.add("r.status = ?", s)
+			}
+			if uid, present, errMsg := queryID(r, "user_id"); errMsg != "" {
+				return errMsg
+			} else if present {
+				f.add("r.user_id = ?", uid)
+			}
+			if cid, present, errMsg := queryID(r, "car_id"); errMsg != "" {
+				return errMsg
+			} else if present {
+				f.add("r.car_id = ?", cid)
+			}
+			return ""
+		},
+		func(row rowScanner) (adminReservationOut, error) {
+			var res adminReservationOut
+			var buyerEmail, carName sql.NullString
+			if err := row.Scan(&res.ID, &res.UserID, &res.CarID, &res.StartDate, &res.EndDate, &res.Status, &buyerEmail, &carName); err != nil {
+				return res, err
+			}
+			if buyerEmail.Valid {
+				res.BuyerEmail = buyerEmail.String
+			}
+			if carName.Valid {
+				res.CarName = carName.String
+			}
+			return res, nil
+		})
 }
 
 type adminReservationOut struct {

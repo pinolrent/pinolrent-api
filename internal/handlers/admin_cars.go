@@ -15,89 +15,53 @@ import (
 // an administrative view: the ownership constraints that limit ListMyCars do
 // not apply.
 func (a *API) AdminListCars(w http.ResponseWriter, r *http.Request) {
-	limit, offset, errMsg := paginate(r)
-	if errMsg != "" {
-		writeError(w, http.StatusBadRequest, errMsg)
-		return
-	}
-
-	var f filter
-	if s := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q"))); s != "" {
-		f.add("(lower(c.name) LIKE ? OR CAST(c.id AS TEXT)=?)", "%"+s+"%", s)
-	}
-	if oid, present, errMsg := queryID(r, "owner_id"); errMsg != "" {
-		writeError(w, http.StatusBadRequest, errMsg)
-		return
-	} else if present {
-		f.add("c.owner_id = ?", oid)
-	}
-	if s := r.URL.Query().Get("active"); s != "" {
-		v := strings.ToLower(s)
-		if v != "true" && v != "false" {
-			writeError(w, http.StatusBadRequest, "invalid active")
-			return
-		}
-		active := 0
-		if v == "true" {
-			active = 1
-		}
-		f.add("c.active = ?", active)
-	}
-
-	var total int64
-	// #nosec G202 -- clauses are built here from fixed fragments with placeholders;
-	// every value from the query string is bound as a parameter.
-	if err := a.DB.QueryRowContext(r.Context(),
-		`SELECT COUNT(*) FROM cars c WHERE `+f.where(), f.params()...).Scan(&total); err != nil {
-		serverError(w, err)
-		return
-	}
-
-	// #nosec G202 -- same as the count above.
-	rows, err := a.DB.QueryContext(r.Context(),
-		`SELECT `+carColumnsQualified+`, u.email
-		 FROM cars c
-		 LEFT JOIN users u ON u.id = c.owner_id
-		 WHERE `+f.where()+`
-		 ORDER BY c.id ASC
-		 LIMIT ? OFFSET ?`, f.page(limit, offset)...)
-	if err != nil {
-		serverError(w, err)
-		return
-	}
-	defer func() { _ = rows.Close() }()
-
 	// outCar is the car with its owner's email: the embedded models.Car keeps
 	// the car shape in one place, the extra comes from the join.
 	type outCar struct {
 		models.Car
 		OwnerEmail string `json:"owner_email,omitempty"`
 	}
-	out := make([]outCar, 0, limit)
-	for rows.Next() {
-		var oc outCar
-		var active int
-		var ownerEmail sql.NullString
-		if err := rows.Scan(&oc.ID, &oc.OwnerID, &oc.Name, &oc.PhotoURL, &oc.PricePerDay, &active, &ownerEmail); err != nil {
-			serverError(w, err)
-			return
-		}
-		oc.Active = active == 1
-		if ownerEmail.Valid {
-			oc.OwnerEmail = ownerEmail.String
-		}
-		out = append(out, oc)
-	}
-	if err := rows.Err(); err != nil {
-		serverError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"items":  out,
-		"total":  total,
-		"limit":  limit,
-		"offset": offset,
-	})
+	listPage(a, w, r,
+		`SELECT COUNT(*) FROM cars c`,
+		`SELECT `+carColumnsQualified+`, u.email
+		 FROM cars c
+		 LEFT JOIN users u ON u.id = c.owner_id`,
+		`ORDER BY c.id ASC`,
+		func(f *filter) string {
+			if s := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q"))); s != "" {
+				f.add("(lower(c.name) LIKE ? OR CAST(c.id AS TEXT)=?)", "%"+s+"%", s)
+			}
+			if oid, present, errMsg := queryID(r, "owner_id"); errMsg != "" {
+				return errMsg
+			} else if present {
+				f.add("c.owner_id = ?", oid)
+			}
+			if s := r.URL.Query().Get("active"); s != "" {
+				v := strings.ToLower(s)
+				if v != "true" && v != "false" {
+					return "invalid active"
+				}
+				active := 0
+				if v == "true" {
+					active = 1
+				}
+				f.add("c.active = ?", active)
+			}
+			return ""
+		},
+		func(row rowScanner) (outCar, error) {
+			var oc outCar
+			var active int
+			var ownerEmail sql.NullString
+			if err := row.Scan(&oc.ID, &oc.OwnerID, &oc.Name, &oc.PhotoURL, &oc.PricePerDay, &active, &ownerEmail); err != nil {
+				return oc, err
+			}
+			oc.Active = active == 1
+			if ownerEmail.Valid {
+				oc.OwnerEmail = ownerEmail.String
+			}
+			return oc, nil
+		})
 }
 
 // AdminPatchCar updates any car in the system, without the ownership check

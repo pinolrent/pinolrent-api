@@ -15,22 +15,22 @@ func TestFilterWhere(t *testing.T) {
 	if got := f.where(); got != "user_id = ? AND read_at IS NULL" {
 		t.Fatalf("where() = %q", got)
 	}
-	if got := f.params(); !reflect.DeepEqual(got, []any{int64(7)}) {
-		t.Fatalf("params() = %v", got)
+	if got := f.args; !reflect.DeepEqual(got, []any{int64(7)}) {
+		t.Fatalf("args = %v", got)
 	}
 	paged := f.page(50, 10)
 	if !reflect.DeepEqual(paged, []any{int64(7), 50, 10}) {
 		t.Fatalf("page() = %v", paged)
 	}
 	// Paging must not mutate the filter: reusing it appends once.
-	if got := f.params(); !reflect.DeepEqual(got, []any{int64(7)}) {
-		t.Fatalf("params() after page() = %v", got)
+	if got := f.args; !reflect.DeepEqual(got, []any{int64(7)}) {
+		t.Fatalf("args after page() = %v", got)
 	}
 }
 
 func TestFilterUnread(t *testing.T) {
 	var f filter
-	if msg := f.unread(""); msg != "" || len(f.params()) != 0 {
+	if msg := f.unread(""); msg != "" || len(f.args) != 0 {
 		t.Fatalf("empty unread must be a no-op, got %q", msg)
 	}
 	if msg := f.unread("true"); msg != "" || f.where() != "read_at IS NULL" {

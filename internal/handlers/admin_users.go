@@ -17,43 +17,6 @@ func (a *API) AdminListUsers(w http.ResponseWriter, r *http.Request) {
 	q := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
 	role := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("role")))
 
-	limit, offset, errMsg := paginate(r)
-	if errMsg != "" {
-		writeError(w, http.StatusBadRequest, errMsg)
-		return
-	}
-
-	var f filter
-	if q != "" {
-		f.add("(lower(u.email) LIKE ? OR CAST(u.id AS TEXT) = ?)", "%"+q+"%", q)
-	}
-	if role != "" {
-		f.add("EXISTS (SELECT 1 FROM user_roles r WHERE r.user_id = u.id AND r.role = ?)", role)
-	}
-
-	var total int64
-	if err := a.DB.QueryRowContext(r.Context(),
-		`SELECT COUNT(DISTINCT u.id) FROM users u WHERE `+f.where(), f.params()...).Scan(&total); err != nil {
-		serverError(w, err)
-		return
-	}
-
-	// #nosec G202 -- clauses are built here from fixed fragments with placeholders;
-	// every value from the query string is bound as a parameter.
-	rows, err := a.DB.QueryContext(r.Context(),
-		`SELECT u.id, u.email, u.phone, u.suspended_at, GROUP_CONCAT(ur.role) as roles
-		 FROM users u
-		 LEFT JOIN user_roles ur ON ur.user_id = u.id
-		 WHERE `+f.where()+`
-		 GROUP BY u.id, u.email, u.phone, u.suspended_at
-		 ORDER BY u.id ASC
-		 LIMIT ? OFFSET ?`, f.page(limit, offset)...)
-	if err != nil {
-		serverError(w, err)
-		return
-	}
-	defer func() { _ = rows.Close() }()
-
 	// outUser is the account with its suspension instant: the embedded
 	// models.User keeps the account shape in one place. SuspendedAt shadows
 	// User.SuspendedAt (never serialized) with the serialized form.
@@ -61,33 +24,36 @@ func (a *API) AdminListUsers(w http.ResponseWriter, r *http.Request) {
 		models.User
 		SuspendedAt int64 `json:"suspended_at,omitempty"`
 	}
-	out := make([]outUser, 0, limit)
-	for rows.Next() {
-		var u outUser
-		var suspended sql.NullInt64
-		var rolesStr sql.NullString
-		if err := rows.Scan(&u.ID, &u.Email, &u.Phone, &suspended, &rolesStr); err != nil {
-			serverError(w, err)
-			return
-		}
-		if rolesStr.Valid && rolesStr.String != "" {
-			u.Roles = strings.Split(rolesStr.String, ",")
-		}
-		if suspended.Valid {
-			u.SuspendedAt = suspended.Int64
-		}
-		out = append(out, u)
-	}
-	if err := rows.Err(); err != nil {
-		serverError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"items":  out,
-		"total":  total,
-		"limit":  limit,
-		"offset": offset,
-	})
+	listPage(a, w, r,
+		`SELECT COUNT(DISTINCT u.id) FROM users u`,
+		`SELECT u.id, u.email, u.phone, u.suspended_at, GROUP_CONCAT(ur.role) as roles
+		 FROM users u
+		 LEFT JOIN user_roles ur ON ur.user_id = u.id`,
+		`GROUP BY u.id, u.email, u.phone, u.suspended_at ORDER BY u.id ASC`,
+		func(f *filter) string {
+			if q != "" {
+				f.add("(lower(u.email) LIKE ? OR CAST(u.id AS TEXT) = ?)", "%"+q+"%", q)
+			}
+			if role != "" {
+				f.add("EXISTS (SELECT 1 FROM user_roles r WHERE r.user_id = u.id AND r.role = ?)", role)
+			}
+			return ""
+		},
+		func(row rowScanner) (outUser, error) {
+			var u outUser
+			var suspended sql.NullInt64
+			var rolesStr sql.NullString
+			if err := row.Scan(&u.ID, &u.Email, &u.Phone, &suspended, &rolesStr); err != nil {
+				return u, err
+			}
+			if rolesStr.Valid && rolesStr.String != "" {
+				u.Roles = strings.Split(rolesStr.String, ",")
+			}
+			if suspended.Valid {
+				u.SuspendedAt = suspended.Int64
+			}
+			return u, nil
+		})
 }
 
 // AdminGetUser returns the profile of a single user.
