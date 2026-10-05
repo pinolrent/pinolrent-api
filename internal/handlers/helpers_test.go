@@ -26,7 +26,8 @@ func newTestAPI(t *testing.T) *API {
 	}
 	t.Cleanup(func() { _ = d.Close() })
 
-	a := auth.New("test-secret-32-bytes-minimum-okay", d, auth.WithPasswordCost(bcrypt.MinCost))
+	a := auth.New("test-secret-32-bytes-minimum-okay", d)
+	a.Cost = bcrypt.MinCost
 	return New(d, a)
 }
 
