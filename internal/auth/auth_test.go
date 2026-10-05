@@ -91,8 +91,8 @@ func TestHashPasswordIsBcrypt(t *testing.T) {
 	}
 }
 
-// TestNewDefaultsToDefaultCost pins the production default: New without
-// options must hash at bcrypt.DefaultCost no matter what cost tests use.
+// TestNewDefaultsToDefaultCost pins the production default: New always
+// starts at bcrypt.DefaultCost, whatever tests later set on Auth.Cost.
 func TestNewDefaultsToDefaultCost(t *testing.T) {
 	a := newTestAuth(t)
 	hash, err := a.HashPassword("x")
@@ -108,10 +108,11 @@ func TestNewDefaultsToDefaultCost(t *testing.T) {
 	}
 }
 
-// TestWithPasswordCostIsHonored covers the knob test harnesses use to keep
-// the race-detector suite inside its timeout.
-func TestWithPasswordCostIsHonored(t *testing.T) {
-	a := New(testSecret, nil, WithPasswordCost(bcrypt.MinCost))
+// TestPasswordCostIsHonored covers the Cost field test harnesses use to
+// keep the race-detector suite inside its timeout.
+func TestPasswordCostIsHonored(t *testing.T) {
+	a := New(testSecret, nil)
+	a.Cost = bcrypt.MinCost
 	hash, err := a.HashPassword("x")
 	if err != nil {
 		t.Fatalf("hash: %v", err)

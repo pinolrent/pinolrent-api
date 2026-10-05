@@ -26,7 +26,8 @@ func TestCreateReservationConcurrent(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = d.Close() })
 
-	a := auth.New("test-secret-32-bytes-minimum-okay", d, auth.WithPasswordCost(bcrypt.MinCost))
+	a := auth.New("test-secret-32-bytes-minimum-okay", d)
+	a.Cost = bcrypt.MinCost
 	api := New(d, a)
 	car := createCar(t, api, newSeller(t, api), map[string]any{"name": "Toyota Yaris", "price_per_day": 100})
 	token := registerBuyer(t, api, "user@example.com", "secret123")
