@@ -13,10 +13,6 @@ import (
 	"golang.org/x/time/rate"
 )
 
-func writeJSONError(w http.ResponseWriter, status int, msg string) {
-	httpx.WriteError(w, status, msg)
-}
-
 type entry struct {
 	limiter *rate.Limiter
 	last    time.Time
@@ -86,7 +82,7 @@ func (l *Limiter) Handler(next http.Handler) http.Handler {
 		l.maybeGC()
 		if !l.Allow(clientIP(r, l.trustedFor)) {
 			w.Header().Set("Retry-After", "60")
-			writeJSONError(w, http.StatusTooManyRequests, "too many requests")
+			httpx.WriteError(w, http.StatusTooManyRequests, "too many requests")
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -102,7 +98,7 @@ func (l *Limiter) Middleware(next http.Handler, limitPaths ...string) http.Handl
 
 			if !l.Allow(clientIP(r, l.trustedFor)) {
 				w.Header().Set("Retry-After", "60")
-				writeJSONError(w, http.StatusTooManyRequests, "too many requests")
+				httpx.WriteError(w, http.StatusTooManyRequests, "too many requests")
 				return
 			}
 		}
