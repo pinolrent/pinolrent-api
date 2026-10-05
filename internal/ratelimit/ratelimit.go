@@ -13,10 +13,6 @@ import (
 	"golang.org/x/time/rate"
 )
 
-func writeJSONError(w http.ResponseWriter, status int, msg string) {
-	httpx.WriteError(w, status, msg)
-}
-
 type entry struct {
 	limiter *rate.Limiter
 	last    time.Time
@@ -86,7 +82,7 @@ func (l *Limiter) Handler(next http.Handler) http.Handler {
 		l.maybeGC()
 		if !l.Allow(clientIP(r, l.trustedFor)) {
 			w.Header().Set("Retry-After", "60")
-			writeJSONError(w, http.StatusTooManyRequests, "too many requests")
+			httpx.WriteError(w, http.StatusTooManyRequests, "too many requests")
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -94,17 +90,15 @@ func (l *Limiter) Handler(next http.Handler) http.Handler {
 }
 
 // Middleware wraps a handler and rate-limits requests whose path starts with
-// any of the given prefixes, returning 429 when over the limit. Each prefix
-// may optionally be prefixed with a method like "POST /path" to limit only
-// that method; a plain "/path" limits all methods.
+// any of the given prefixes, returning 429 when over the limit.
 func (l *Limiter) Middleware(next http.Handler, limitPaths ...string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if matchesRequest(r, limitPaths) {
+		if matchesPrefix(r.URL.Path, limitPaths) {
 			l.maybeGC()
 
 			if !l.Allow(clientIP(r, l.trustedFor)) {
 				w.Header().Set("Retry-After", "60")
-				writeJSONError(w, http.StatusTooManyRequests, "too many requests")
+				httpx.WriteError(w, http.StatusTooManyRequests, "too many requests")
 				return
 			}
 		}
@@ -178,23 +172,6 @@ func isTrustedProxy(host string, trustedProxies []*net.IPNet) bool {
 func matchesPrefix(path string, prefixes []string) bool {
 	for _, p := range prefixes {
 		if strings.HasPrefix(path, p) {
-			return true
-		}
-	}
-	return false
-}
-
-func matchesRequest(r *http.Request, prefixes []string) bool {
-	for _, p := range prefixes {
-		method, prefix, hasMethod := strings.Cut(p, " ")
-		if hasMethod {
-			if r.Method != method {
-				continue
-			}
-			if strings.HasPrefix(r.URL.Path, prefix) {
-				return true
-			}
-		} else if strings.HasPrefix(r.URL.Path, p) {
 			return true
 		}
 	}

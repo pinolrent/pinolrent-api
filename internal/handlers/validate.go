@@ -61,9 +61,17 @@ func queryID(r *http.Request, key string) (id int64, present bool, errMsg string
 	return id, true, ""
 }
 
-// uploadExtensions are the file extensions served from /uploads/, kept in
-// sync with uploadExtByType in uploads.go.
-var uploadExtensions = map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".webp": true}
+// uploadExtensions are the file extensions served from /uploads/, derived
+// from uploadExtByType (uploads_files.go) plus ".jpeg": the sniffer maps
+// image/jpeg to ".jpg", while ".jpeg" stays an accepted alias in URLs and
+// query filters.
+var uploadExtensions = func() map[string]bool {
+	m := map[string]bool{".jpeg": true}
+	for _, ext := range uploadExtByType {
+		m[ext] = true
+	}
+	return m
+}()
 
 // validURL accepts absolute http(s) URLs and local /uploads/ paths. Local
 // paths must be a bare basename with an image extension; anything else
