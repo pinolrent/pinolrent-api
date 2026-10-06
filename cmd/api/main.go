@@ -11,7 +11,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/joho/godotenv"
 	"github.com/pinolrent/pinolrent-api/internal/auth"
 	"github.com/pinolrent/pinolrent-api/internal/config"
 	"github.com/pinolrent/pinolrent-api/internal/db"
@@ -27,7 +26,7 @@ func main() {
 
 	// Load .env if present. Values already set in the environment win over it.
 	// A malformed .env is not silently ignored — fail fast so typos are caught.
-	if err := godotenv.Load(); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err := config.LoadDotenv(".env"); err != nil {
 		slog.Error("invalid .env file", "error", err)
 		os.Exit(1)
 	}
