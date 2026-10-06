@@ -5,11 +5,10 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
-
-	"github.com/caarlos0/env/v11"
 )
 
 // Config holds all runtime settings for the server.
@@ -32,11 +31,43 @@ type Config struct {
 }
 
 // Load reads the configuration from the environment, applying defaults for
-// optional values. Malformed values surface in Validate where that matters.
+// optional values. An empty variable falls back to its default instead of
+// clearing it. Malformed values surface in Validate where that matters.
 func Load() Config {
-	cfg := Config{}
-	_ = env.Parse(&cfg)
-	return cfg
+	return Config{
+		Port:               getenv("PORT", "8080"),
+		DatabaseURL:        getenv("DATABASE_URL", "pinolrent.db"),
+		JWTSecret:          getenv("JWT_SECRET", ""),
+		CORSAllowedOrigins: getenv("CORS_ALLOWED_ORIGINS", "*"),
+		Env:                getenv("ENV", "dev"),
+		UploadDir:          getenv("UPLOAD_DIR", "uploads"),
+		UploadMaxTotalMB:   getenvInt("UPLOAD_MAX_TOTAL_MB", 1024),
+		TrustedProxyCIDRs:  getenv("TRUSTED_PROXY_CIDRS", ""),
+		AdminEmails:        getenv("ADMIN_EMAILS", ""),
+	}
+}
+
+// getenv returns the variable's value, or def when it is unset or empty.
+func getenv(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
+
+// getenvInt is getenv for numeric variables. A value that does not parse
+// yields 0 — a parse error never reaches Validate, same as before this was
+// hand-written, so 0 (unlimited) is what a typo leaves behind.
+func getenvInt(key string, def int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return 0
+	}
+	return n
 }
 
 // Validate returns an error when a required setting is missing or malformed.
@@ -139,7 +170,8 @@ const MaxEmailLen = 254
 
 // CORSOrigins parses the comma-separated allow-list for cross-origin requests.
 // Each entry must be "*" (any origin) or a full origin like
-// "https://app.example.com". An empty value disables CORS entirely.
+// "https://app.example.com". Empty entries are skipped; Load never leaves the
+// field empty (an empty variable falls back to the "*" default).
 func (c Config) CORSOrigins() ([]string, error) {
 	var origins []string
 	for _, o := range strings.Split(c.CORSAllowedOrigins, ",") {

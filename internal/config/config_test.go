@@ -258,3 +258,24 @@ func TestValidateRejectsBadAdminEmails(t *testing.T) {
 		t.Fatalf("valid ADMIN_EMAILS rejected: %v", err)
 	}
 }
+
+// TestLoadEmptyFallsBackToDefault pins the precedence rule: an empty
+// variable behaves like an unset one and takes the default.
+func TestLoadEmptyFallsBackToDefault(t *testing.T) {
+	t.Setenv("PORT", "")
+	t.Setenv("CORS_ALLOWED_ORIGINS", "")
+	t.Setenv("UPLOAD_DIR", "")
+	cfg := Load()
+	if cfg.Port != "8080" || cfg.CORSAllowedOrigins != "*" || cfg.UploadDir != "uploads" {
+		t.Fatalf("empty values did not fall back to defaults: %+v", cfg)
+	}
+}
+
+// TestLoadMalformedUploadMax pins the parse-error behavior: a non-numeric
+// value becomes 0 (unlimited) because Validate never sees the raw string.
+func TestLoadMalformedUploadMax(t *testing.T) {
+	t.Setenv("UPLOAD_MAX_TOTAL_MB", "abc")
+	if got := Load().UploadMaxTotalMB; got != 0 {
+		t.Fatalf("UPLOAD_MAX_TOTAL_MB = %d, want 0", got)
+	}
+}

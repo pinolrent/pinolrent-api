@@ -3,7 +3,6 @@ module github.com/pinolrent/pinolrent-api
 go 1.26.6
 
 require (
-	github.com/caarlos0/env/v11 v11.4.1
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/pressly/goose/v3 v3.27.3
 	github.com/rs/cors v1.11.1
