@@ -14,10 +14,8 @@
 | `TRUSTED_PROXY_CIDRS` | — (empty) | no | Networks whose `X-Forwarded-For`/`X-Real-IP` are believed, comma-separated (e.g. `172.18.0.0/16`). Empty = only a loopback proxy is trusted |
 | `ADMIN_EMAILS` | — (empty) | no | Allow-list of accounts with the `admin` role, comma-separated (e.g. `admin@pinolrent.cl`). Empty = the installation has no administrator. A malformed entry prevents startup |
 
-The priority order is: **shell variables > `.env` > default values**. An empty variable is
-not ignored: it overrides the default with `""` and usually fails `Validate`
-(the only exception is `scripts/dev.sh`, which treats empty values as unset
-before starting the server).
+The priority order is: **shell variables > `.env` > default values**. An empty variable
+falls back to its default instead of clearing it (`PORT=` listens on 8080).
 
 ### If the secret is missing, it does not start
 
@@ -88,7 +86,7 @@ What happens on startup:
 
 1. Reads `.env` if it exists (whatever is already in the shell wins). If it is malformed, it shuts down.
 2. Validates `JWT_SECRET` — if it is missing or short, it shuts down. Validates `PORT` and `CORS_ALLOWED_ORIGINS`/`ENV`.
-3. Opens SQLite with WAL and applies the pending migrations (they are recorded in `goose_db_version`, they never delete data). For `:memory:` it uses a single connection, otherwise up to 8 (with `MaxIdleTime` 5 min / `MaxLifetime` 30 min). If the database is busy, it retries with backoff.
+3. Opens SQLite with WAL and applies the pending migrations (they are recorded in `goose_db_version`, they never delete data). For `:memory:` it uses a single connection, otherwise up to 8 (with `MaxIdleTime` 5 min / `MaxLifetime` 30 min). If the database is busy, it retries a few times with a growing sleep.
 4. Syncs the `admin` role against `ADMIN_EMAILS` (if it comes empty, it revokes every administrator).
 5. Starts the HTTP server and waits for `SIGINT`/`SIGTERM` to shut down cleanly (up to 10 s).
 
