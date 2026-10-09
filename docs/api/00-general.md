@@ -5,7 +5,7 @@ In development the API lives at `http://localhost:8080` (change it with `PORT`).
 ## Format
 
 - Everything is **JSON** (`Content-Type: application/json`).
-- Dates as `YYYY-MM-DD` text (compared in UTC).
+- Dates as `YYYY-MM-DD` text. "Today" is the calendar day in the business time zone (`BUSINESS_TIMEZONE`, default `America/Managua`).
 - `price_per_day` is an integer in **cents**.
 
 ## How to authenticate

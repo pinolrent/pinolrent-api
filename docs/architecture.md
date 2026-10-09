@@ -112,7 +112,7 @@ There is no other edge: no `pending → confirmed`, no `accepted → rejected/ca
 Blocking has three deliberate strictness levels for three different questions:
 
 - **Booking / availability:** `pending`, `accepted` and `confirmed` block dates (`NOT IN (cancelled, rejected)`, shared `db.OverlapPredicate`).
-- **Deactivation:** same blocking set, but only reservations ending today or later (`end_date >= date('now')`); history never blocks deactivation. The admin override skips this guard on purpose.
+- **Deactivation:** same blocking set, but only reservations ending today or later (`end_date >= today` in the business time zone, `BUSINESS_TIMEZONE`); history never blocks deactivation. The admin override skips this guard on purpose.
 - **Deletion:** any reservation in history blocks it (seller and admin alike); only a car that never had reservations can be deleted.
 
 ## Business rules
@@ -121,7 +121,7 @@ Blocking has three deliberate strictness levels for three different questions:
 
 - Only cars with `active = 1` count.
 - Two reservations collide if `r.start_date <= end AND r.end_date >= start`, as long as neither is `cancelled` nor `rejected`.
-- `start_date` cannot be before today (in UTC) and `end_date >= start_date`.
+- `start_date` cannot be before today (in the business time zone, `BUSINESS_TIMEZONE`, default `America/Managua`) and `end_date >= start_date`.
 - A reservation cannot last more than **30 days**.
 - Listings are plain arrays and can be paginated with `limit`/`offset`.
 

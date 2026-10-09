@@ -11,7 +11,7 @@ Books a car. Requires login.
 | Field | Type | Required? | Rules |
 |-------|------|-----------|-------|
 | `car_id` | number | yes | must exist and be active |
-| `start_date` | `YYYY-MM-DD` | yes | cannot be before today (UTC) |
+| `start_date` | `YYYY-MM-DD` | yes | cannot be before today (in the business time zone, `BUSINESS_TIMEZONE`) |
 | `end_date` | `YYYY-MM-DD` | yes | `>= start_date`, at most a 30-day range |
 
 ```json
