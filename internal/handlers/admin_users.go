@@ -244,6 +244,22 @@ func (a *API) AdminPatchUserRoles(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		} else {
+			// Revoking seller removes every seller route from the owner:
+			// accepting, rejecting and deactivating their cars. A car with
+			// future reservations would be stranded until its buyers cancel,
+			// so the dates must be resolved first. Same rule as deactivating
+			// a car with bookings (PatchCar).
+			var hasFuture int
+			if err := conn.QueryRowContext(ctx,
+				`SELECT COUNT(*) FROM reservations r
+				 JOIN cars c ON c.id = r.car_id
+				 WHERE c.owner_id = ? AND r.status NOT IN (?, ?) AND r.end_date >= ?`,
+				id, db.ReservationCancelled, db.ReservationRejected, a.todayStr()).Scan(&hasFuture); err != nil {
+				return err
+			}
+			if hasFuture > 0 {
+				return &statusError{http.StatusConflict, "user has future reservations, cannot revoke seller"}
+			}
 			res, err := conn.ExecContext(ctx,
 				`DELETE FROM user_roles WHERE user_id = ? AND role = ?`, id, db.RoleSeller)
 			if err != nil {

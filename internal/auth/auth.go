@@ -214,12 +214,6 @@ func (a *Auth) RevokeFromRequest(r *http.Request) (status int, msg string) {
 	if err != nil {
 		return http.StatusUnauthorized, "invalid or expired token"
 	}
-	if claims.JTI() == "" {
-		// Tokens issued before the jti migration (or with a custom
-		// parser) cannot be revoked individually; treat as bad
-		// request so the operator knows to rotate the secret instead.
-		return http.StatusBadRequest, "token cannot be revoked"
-	}
 	if err := a.Revoke(r.Context(), claims.UserID, claims.JTI(), claims.ExpiresAtUnix()); err != nil {
 		return http.StatusInternalServerError, "server error"
 	}
@@ -308,14 +302,19 @@ func tokenSuperseded(u *models.User, claims *Claims) bool {
 func (a *Auth) RotateRefresh(ctx context.Context, token string) (access, refresh string, err error) {
 	claims, err := a.parseRefreshToken(strings.TrimSpace(token))
 	if err != nil {
-		return "", "", err
+		return "", "", errors.Join(ErrInvalidToken, err)
 	}
 	u, err := a.userByID(ctx, claims.UserID)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// The account is gone; the token is dead, like RequireAuth
+			// reports it. A database failure stays a server error.
+			return "", "", errors.Join(ErrInvalidToken, err)
+		}
 		return "", "", err
 	}
 	if tokenSuperseded(&u, claims) {
-		return "", "", errTokenSuperseded
+		return "", "", errors.Join(ErrInvalidToken, errTokenSuperseded)
 	}
 	// A suspended account holds no valid session: like Login and RequireAuth,
 	// rotation refuses to mint new tokens for it.
@@ -343,7 +342,7 @@ func (a *Auth) RotateRefresh(ctx context.Context, token string) (access, refresh
 		if err := a.InvalidateUserTokens(ctx, claims.UserID, stamp); err != nil {
 			slog.Error("revoke sessions on refresh replay", "user_id", claims.UserID, "error", err)
 		}
-		return "", "", errRefreshReused
+		return "", "", errors.Join(ErrInvalidToken, errRefreshReused)
 	}
 	access, err = a.SignToken(&u)
 	if err != nil {
@@ -355,6 +354,11 @@ func (a *Auth) RotateRefresh(ctx context.Context, token string) (access, refresh
 	}
 	return access, refresh, nil
 }
+
+// ErrInvalidToken marks every outcome where this token is dead: it failed to
+// parse, it was already consumed, or it predates a revocation stamp. Callers
+// map it to 401; anything else from RotateRefresh is a server-side failure.
+var ErrInvalidToken = errors.New("invalid or expired token")
 
 var errRefreshReused = errors.New("refresh token already used")
 
