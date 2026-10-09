@@ -55,7 +55,7 @@ Lists the accounts of the platform. Supports filters and pagination.
 ```json
 {
   "items": [
-    {"id": 1, "email": "admin@example.com", "roles": ["admin", "buyer"], "phone": ""},
+    {"id": 1, "email": "admin@example.com", "roles": ["admin", "buyer"]},
     {"id": 2, "email": "seller@example.com", "phone": "+50581234567", "roles": ["buyer", "seller"]},
     {"id": 3, "email": "suspended@example.com", "roles": ["buyer"], "suspended_at": 1730000000}
   ],
@@ -65,7 +65,8 @@ Lists the accounts of the platform. Supports filters and pagination.
 }
 ```
 
-`phone` comes back empty if the account has none. `suspended_at` (Unix) only
+`phone` is omitted when the account has none (the detail endpoint below
+always includes it). `suspended_at` (Unix) only
 shows up on suspended accounts. `roles` always comes back alphabetically sorted.
 
 **Errors:**
@@ -80,7 +81,8 @@ shows up on suspended accounts. `roles` always comes back alphabetically sorted.
 ## `GET /admin/users/{id}`
 
 Detail of an account: id, email, phone, roles and `suspended_at` when it is
-suspended. Same shape as an item of the listing.
+suspended. Same shape as an item of the listing, except that `phone` is always
+present here (empty string when the account has none).
 
 **Errors:**
 
@@ -145,7 +147,10 @@ above).
 someone who is already a seller returns `200` without writing.
 
 Revoking the `seller` role does not delete the cars or the reservations of the
-account: it only takes away access to `/seller/*`.
+account: it only takes away access to `/seller/*`. It is blocked with `409`
+while the account still has future reservations (`pending`, `accepted` or
+`confirmed` ending today or later), because its buyers would be left with no
+one to accept or reject: resolve those dates first.
 
 **Errors:**
 
@@ -154,6 +159,8 @@ account: it only takes away access to `/seller/*`.
 | `400` | `invalid user id` | `{id}` is not an integer |
 | `400` | `seller is required` | `seller` is missing from the body |
 | `404` | `user not found` | The account does not exist |
+| `409` | `user has no phone number` | Granting seller to an account without a phone (the role promises buyers a contact number) |
+| `409` | `user has future reservations, cannot revoke seller` | Revoking while the account has reservations ending today or later |
 
 ---
 
@@ -296,8 +303,8 @@ what each account was told.
 
 **Query:** `user_id`, `kind` (one of `reservation.requested`,
 `reservation.accepted`, `reservation.rejected`, `reservation.confirmed`,
-`reservation.correction_requested`), `unread` (`true`/`false`), `limit`,
-`offset`.
+`reservation.correction_requested`, `reservation.cancelled`), `unread`
+(`true`/`false`), `limit`, `offset`.
 
 **Answers** `200`: `{"items": [...], "total": N, "limit": 50, "offset": 0}`,
 where each item is a [notification](notifications.md).
@@ -362,8 +369,9 @@ an approximation to size the platform, not a revenue ledger.
 
 History of human decisions on the platform — admin operations plus the
 seller/buyer decisions that move a reservation. Each row says who did what, to
-whom, and when. The indexes are on `actor_id` and on `action`, and the order
-is from most recent to oldest.
+whom, and when. The indexes are on `created_at` and on (`actor_id`,
+`created_at`); filtering by `action` scans the log, so keep that in mind on
+large installations. The order is from most recent to oldest.
 
 **Query:** `actor_id`, `action`, `limit`, `offset`.
 

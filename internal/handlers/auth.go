@@ -285,7 +285,7 @@ func (a *API) Logout(w http.ResponseWriter, r *http.Request) {
 	switch status {
 	case http.StatusOK:
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-	case http.StatusUnauthorized, http.StatusBadRequest:
+	case http.StatusUnauthorized:
 		writeError(w, status, msg)
 	default:
 		serverError(w, nil)

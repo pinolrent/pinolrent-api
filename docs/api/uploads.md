@@ -35,9 +35,13 @@ The directory also has a **total quota** (`UPLOAD_MAX_TOTAL_MB`, default 1 GB, s
 
 ---
 
-## `GET /uploads/{name}`
+## `GET /uploads/{file}`
 
-Returns the image. Requires no login. Answers `404 {"error":"upload not found"}` if it does not exist, is a directory, or the extension is not an image. With `Cache-Control: public, max-age=31536000, immutable`.
+Returns the image. The route is registered as the subtree `GET /uploads/`:
+what follows must be a bare filename (a separator or a directory answers
+`404`). Requires no login. Answers `404 {"error":"upload not found"}` if it
+does not exist, is a directory, or the extension is not an image. With
+`Cache-Control: public, max-age=31536000, immutable`.
 
 Flow example:
 

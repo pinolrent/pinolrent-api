@@ -5,7 +5,7 @@ In development the API lives at `http://localhost:8080` (change it with `PORT`).
 ## Format
 
 - Everything is **JSON** (`Content-Type: application/json`).
-- Dates as `YYYY-MM-DD` text (compared in UTC).
+- Dates as `YYYY-MM-DD` text. "Today" is the calendar day in the business time zone (`BUSINESS_TIMEZONE`, default `America/Managua`).
 - `price_per_day` is an integer in **cents**.
 
 ## How to authenticate
@@ -100,7 +100,7 @@ The admin listings (`/admin/users`, `/admin/cars`, `/admin/reservations`, `/admi
 | PATCH | `/seller/reservations/{id}/accept` | seller | [payments](payments.md) |
 | PATCH | `/seller/reservations/{id}/reject` | seller | [payments](payments.md) |
 | POST | `/uploads` | yes | [uploads](uploads.md) |
-| GET | `/uploads/{name}` | no | [uploads](uploads.md) |
+| GET | `/uploads/` | no | [uploads](uploads.md) |
 | GET | `/admin/users` | admin | [admin](admin.md) |
 | GET | `/admin/users/{id}` | admin | [admin](admin.md) |
 | PATCH | `/admin/users/{id}` | admin | [admin](admin.md) |

@@ -139,7 +139,6 @@ Requires login. No body.
 |--------|---------|------|
 | `401` | `missing bearer token` | No header |
 | `401` | `invalid or expired token` | Forged, expired or already revoked token |
-| `400` | `token cannot be revoked` | Token without `jti` (cannot happen with tokens of this version) |
 | `500` | `server error` | Database error while saving |
 
 The rows delete themselves every 10 minutes once the token would have expired anyway.

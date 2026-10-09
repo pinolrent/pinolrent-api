@@ -12,7 +12,7 @@ erDiagram
     }
     user_roles {
         int user_id PK_FK
-        text role PK "buyer | seller"
+        text role PK "buyer | seller | admin"
     }
     cars {
         int id PK
@@ -69,7 +69,7 @@ What matters about the schema (`internal/db/migrations/`):
 - Operations that touch several tables use `BEGIN IMMEDIATE` so two reservations cannot collide at the same time.
 - Contention is answered, not hidden: a write that still finds the database busy after the 5 s timeout answers `503` with `Retry-After` (retry the request), never `500`. Only `/health` has a degraded mode; writes just ask to come back.
 - `synchronous=NORMAL` (what SQLite recommends with WAL): if the process dies nothing is lost. If the database is busy while migrating, it retries with backoff (up to 5 times).
-- There are indexes on `cars(owner_id)`, `reservations(user_id)` and `reservations(car_id, start_date, end_date)` so lookups stay fast.
+- There are indexes on `cars(owner_id)`, `reservations(user_id)` and `reservations(car_id, start_date, end_date)` so lookups stay fast. Later migrations add more for the admin views and listings: `cars(active, id)`, `reservations(status, id)`, `payments(status, id)`, `notifications(user_id, id)` (migration 00011), and on the audit log `created_at` plus `(actor_id, created_at)` (migration 00009).
 
 ## Reservation states
 
@@ -112,7 +112,7 @@ There is no other edge: no `pending → confirmed`, no `accepted → rejected/ca
 Blocking has three deliberate strictness levels for three different questions:
 
 - **Booking / availability:** `pending`, `accepted` and `confirmed` block dates (`NOT IN (cancelled, rejected)`, shared `db.OverlapPredicate`).
-- **Deactivation:** same blocking set, but only reservations ending today or later (`end_date >= date('now')`); history never blocks deactivation. The admin override skips this guard on purpose.
+- **Deactivation:** same blocking set, but only reservations ending today or later (`end_date >= today` in the business time zone, `BUSINESS_TIMEZONE`); history never blocks deactivation. The admin override skips this guard on purpose.
 - **Deletion:** any reservation in history blocks it (seller and admin alike); only a car that never had reservations can be deleted.
 
 ## Business rules
@@ -121,7 +121,7 @@ Blocking has three deliberate strictness levels for three different questions:
 
 - Only cars with `active = 1` count.
 - Two reservations collide if `r.start_date <= end AND r.end_date >= start`, as long as neither is `cancelled` nor `rejected`.
-- `start_date` cannot be before today (in UTC) and `end_date >= start_date`.
+- `start_date` cannot be before today (in the business time zone, `BUSINESS_TIMEZONE`, default `America/Managua`) and `end_date >= start_date`.
 - A reservation cannot last more than **30 days**.
 - Listings are plain arrays and can be paginated with `limit`/`offset`.
 
