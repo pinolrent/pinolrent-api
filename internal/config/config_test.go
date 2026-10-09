@@ -288,6 +288,13 @@ func TestPhoneCountry(t *testing.T) {
 	cfg := Load()
 	if cfg.PhoneCountryPrefix != "505" || cfg.PhoneNationalLen != 8 {
 		t.Fatalf("defaults = %q/%d, want 505/8", cfg.PhoneCountryPrefix, cfg.PhoneNationalLen)
+// TestBusinessTimezone pins the default (Managua) and that a bad zone name
+// fails startup instead of silently counting days in UTC.
+func TestBusinessTimezone(t *testing.T) {
+	t.Setenv("BUSINESS_TIMEZONE", "")
+	cfg := Load()
+	if cfg.BusinessTimezone != "America/Managua" {
+		t.Fatalf("BusinessTimezone = %q, want America/Managua", cfg.BusinessTimezone)
 	}
 	cfg.JWTSecret = testJWTSecret
 	cfg.CORSAllowedOrigins = "https://app.example.com"
@@ -319,5 +326,19 @@ func TestPhoneCountry(t *testing.T) {
 		if !tc.valid && err == nil {
 			t.Errorf("prefix %q len %d accepted", tc.prefix, tc.natLen)
 		}
+		t.Fatalf("default timezone rejected: %v", err)
+	}
+
+	cfg.BusinessTimezone = "America/DoesNotExist"
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("invalid BUSINESS_TIMEZONE accepted")
+	}
+	cfg.BusinessTimezone = "UTC"
+	loc, err := cfg.BusinessLocation()
+	if err != nil {
+		t.Fatalf("load UTC: %v", err)
+	}
+	if loc.String() != "UTC" {
+		t.Fatalf("Location = %q, want UTC", loc.String())
 	}
 }

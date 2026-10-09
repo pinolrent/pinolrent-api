@@ -15,6 +15,7 @@
 | `ADMIN_EMAILS` | — (empty) | no | Allow-list of accounts with the `admin` role, comma-separated (e.g. `admin@pinolrent.cl`). Empty = the installation has no administrator. A malformed entry prevents startup |
 | `PHONE_COUNTRY_PREFIX` | `505` | no | Country code that completes a bare phone number, 1-3 digits not starting with 0 (default: Nicaragua). A malformed value prevents startup |
 | `PHONE_NATIONAL_LEN` | `8` | no | Digit count of a bare national phone number (default: Nicaragua). A malformed value prevents startup |
+| `BUSINESS_TIMEZONE` | `America/Managua` | no | IANA time zone that decides what calendar day it is for the API: the "start_date cannot be in the past" rule and the future-reservation guard. A malformed name prevents startup |
 
 The priority order is: **shell variables > `.env` > default values**. An empty variable
 falls back to its default instead of clearing it (`PORT=` listens on 8080).

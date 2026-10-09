@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/pinolrent/pinolrent-api/internal/auth"
 )
@@ -29,6 +30,10 @@ type API struct {
 	// cmd/api overwrites them from PHONE_COUNTRY_PREFIX / PHONE_NATIONAL_LEN.
 	PhoneCountryPrefix string
 	PhoneNationalLen   int
+	// Location is the business time zone: the calendar day for the past-date
+	// check and the future-reservation guard. Nil means UTC, which is what
+	// tests get from New.
+	Location *time.Location
 }
 
 // New returns an API bound to the given database pool and auth provider.

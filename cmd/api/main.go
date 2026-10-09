@@ -11,6 +11,11 @@ import (
 	"syscall"
 	"time"
 
+	// Embedded zone database: the final image (alpine) ships no zoneinfo,
+	// so BUSINESS_TIMEZONE would fail to load without it and the server
+	// would refuse to start.
+	_ "time/tzdata"
+
 	"github.com/pinolrent/pinolrent-api/internal/auth"
 	"github.com/pinolrent/pinolrent-api/internal/config"
 	"github.com/pinolrent/pinolrent-api/internal/db"
@@ -66,6 +71,14 @@ func main() {
 	// What a bare phone number means (E.164 completion).
 	h.PhoneCountryPrefix = cfg.PhoneCountryPrefix
 	h.PhoneNationalLen = cfg.PhoneNationalLen
+
+	// The calendar day the API counts (past-date check, future-reservation
+	// guard) is the business zone's, not UTC's.
+	h.Location, err = cfg.BusinessLocation()
+	if err != nil {
+		slog.Error("invalid config", "error", err)
+		os.Exit(1)
+	}
 
 	adminEmails, err := cfg.AdminEmailList()
 	if err != nil {
