@@ -30,7 +30,6 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
-          go-version-file: go.mod
           cache: true
 
       - name: Verify modules
@@ -125,17 +124,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: docker/setup-buildx-action@v3
+      # Docker Hub rate-limits anonymous pulls from shared runner IPs: the
+      # last two main builds died on a 429 for alpine:3.22 and on an auth
+      # timeout pulling the buildkit image for setup-buildx. Route the
+      # daemon through Google's pull-through mirror so base-image pulls
+      # never hit registry-1.docker.io directly.
+      - name: Use pull-through mirror for Docker Hub
+        run: |
+          printf '{\n  "registry-mirrors": ["https://mirror.gcr.io"]\n}\n' | sudo tee /etc/docker/daemon.json >/dev/null
+          sudo systemctl restart docker
 
       # Build only: the deployed image is built from the repo at deploy time.
-      # This exists so a broken Dockerfile shows up in the PR.
-      - uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: false
-          build-args: VERSION=ci-${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      # This exists so a broken Dockerfile shows up in the PR. The default
+      # docker driver (no buildx setup): its pulls go through the daemon,
+      # and with them the mirror above. Retry kept for mirror blips.
+      - name: Build image
+        run: |
+          for attempt in 1 2 3; do
+            if docker build --build-arg VERSION=ci-${{ github.sha }} .; then
+              exit 0
+            fi
+            echo "build attempt $attempt failed, retrying in 30s"
+            sleep 30
+          done
+          exit 1
 
   bruno:
     name: bruno collection
@@ -170,9 +182,21 @@ jobs:
           done
           [ "$health_ok" = "1" ] || { echo 'server did not become healthy'; exit 1; }
 
+      # Retry: a fresh npx resolves @usebruno/cli's @aws-sdk deps to the
+      # latest published version, and runs landing inside an AWS SDK publish
+      # window hit npm metadata/tarball propagation lag (404 on
+      # @aws-sdk/credential-provider-http).
       - name: Run Bruno collection
         working-directory: bruno/pinolrent-api
-        run: npx --yes @usebruno/cli@4.1.0 run -r --env-var baseUrl=http://localhost:8132
+        run: |
+          for attempt in 1 2 3; do
+            if npx --yes @usebruno/cli@4.1.0 run -r --env-var baseUrl=http://localhost:8132; then
+              exit 0
+            fi
+            echo "bruno attempt $attempt failed, retrying in 60s"
+            sleep 60
+          done
+          exit 1
 
       - name: Stop server
         if: always()
