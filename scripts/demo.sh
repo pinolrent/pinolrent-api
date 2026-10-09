@@ -118,7 +118,7 @@ check "register buyer -> 201" "201" "$code"
 
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/auth/register" \
   -H 'Content-Type: application/json' \
-  -d '{"email":"seller@example.com","password":"secret123","phone":"+56912345678"}')
+  -d '{"email":"seller@example.com","password":"secret123","phone":"+50581234567"}')
 check "register seller -> 201" "201" "$code"
 
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/auth/register" \
@@ -255,7 +255,7 @@ check "invalid detail id -> 400" "400" "$code"
 
 echo "== seller contact =="
 wa=$(curl -s "$BASE/cars/$car/contact" -H "Authorization: Bearer $buyer" | jq -r .whatsapp_url)
-echo "$wa" | grep -q '^https://wa.me/56912345678'; cond "contact -> normalized wa.me link" $?
+echo "$wa" | grep -q '^https://wa.me/50581234567'; cond "contact -> normalized wa.me link" $?
 code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/cars/$car/contact")
 check "contact without token -> 401" "401" "$code"
 code=$(curl -s -o /dev/null -w '%{http_code}' "$BASE/cars/999999/contact" -H "Authorization: Bearer $buyer")
@@ -292,7 +292,7 @@ check "auth/me email" "seller@example.com" "$(printf '%s' "$me" | jq -r .email)"
 
 echo "== become-seller =="
 upgraded=$(curl -s -X POST "$BASE/auth/become-seller" -H "Authorization: Bearer $buyer" \
-  -H 'Content-Type: application/json' -d '{"phone":"+56987654321"}')
+  -H 'Content-Type: application/json' -d '{"phone":"+50587654321"}')
 check "become-seller -> buyer,seller" "buyer,seller" "$(printf '%s' "$upgraded" | jq -r '.roles | join(",")')"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/auth/become-seller" -H "Authorization: Bearer $buyer" \
   -H 'Content-Type: application/json' -d '{"phone":"bad"}')

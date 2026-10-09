@@ -35,6 +35,8 @@ make watch   # hot-reload via air (requires make tools)
 Required env: `JWT_SECRET` (min 32 bytes). Optional: `PORT` (default 8080, must be 1-65535),
 `DATABASE_URL` (default `pinolrent.db`, dev uses `dev.db`), `CORS_ALLOWED_ORIGINS` (default `*`),
 `ENV` (default `dev`; `prod`/`production` rejects `CORS_ALLOWED_ORIGINS=*`),
+`TRUSTED_PROXY_CIDRS` (default empty: only a loopback proxy is trusted for `X-Forwarded-For`).
+`PHONE_COUNTRY_PREFIX`/`PHONE_NATIONAL_LEN` (defaults `505`/`8`: what a bare phone number means).
 `TRUSTED_PROXY_CIDRS` (default empty: only a loopback proxy is trusted for `X-Forwarded-For`),
 `BUSINESS_TIMEZONE` (default `America/Managua`; the calendar day for date rules).
 

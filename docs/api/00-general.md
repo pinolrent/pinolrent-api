@@ -121,10 +121,10 @@ The admin listings (`/admin/users`, `/admin/cars`, `/admin/reservations`, `/admi
 **User (own profile):**
 
 ```json
-{"id":3,"email":"demo@example.com","roles":["buyer"],"phone":"+56912345678"}
+{"id":3,"email":"demo@example.com","roles":["buyer"],"phone":"+50581234567"}
 ```
 
-`phone` comes back empty if you did not set one. It is normalized to E.164 (`+56912345678`).
+`phone` comes back empty if you did not set one. It is normalized to E.164 (`+50581234567`).
 
 **Car:**
 

@@ -56,7 +56,7 @@ Lists the accounts of the platform. Supports filters and pagination.
 {
   "items": [
     {"id": 1, "email": "admin@example.com", "roles": ["admin", "buyer"], "phone": ""},
-    {"id": 2, "email": "seller@example.com", "phone": "+56912345678", "roles": ["buyer", "seller"]},
+    {"id": 2, "email": "seller@example.com", "phone": "+50581234567", "roles": ["buyer", "seller"]},
     {"id": 3, "email": "suspended@example.com", "roles": ["buyer"], "suspended_at": 1730000000}
   ],
   "total": 3,

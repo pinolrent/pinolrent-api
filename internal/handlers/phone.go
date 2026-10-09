@@ -15,13 +15,14 @@ const maxPhoneLen = 32
 var phoneRe = regexp.MustCompile(`^\+[1-9][0-9]{7,14}$`)
 
 // normalizePhone canonicalizes a phone number to E.164 so the stored value can
-// be turned into a wa.me link without guessing the country later. Chilean local
-// formats (9 digits, or the 56-prefixed 11-digit form) are completed with +56;
-// any other input must already be international. Empty input is valid and
+// be turned into a wa.me link without guessing the country later. A bare
+// national number (defaultCountryLen digits) is completed with +defaultCC;
+// a country code typed without "+" is accepted when it matches defaultCC;
+// anything else must already be international. Empty input is valid and
 // returns "" — callers decide whether the number is required. The second
 // return is the validation error message ("" when valid), like the other
 // normalize/validate helpers.
-func normalizePhone(raw string) (string, string) {
+func normalizePhone(raw, defaultCC string, defaultCountryLen int) (string, string) {
 	s := strings.TrimSpace(raw)
 	if s == "" {
 		return "", ""
@@ -49,9 +50,10 @@ func normalizePhone(raw string) (string, string) {
 	switch {
 	case strings.HasPrefix(s, "+"):
 		// already international
-	case len(s) == 9: // Chilean national number, e.g. 9 1234 5678
-		s = "+56" + s
-	case len(s) == 11 && strings.HasPrefix(s, "56"):
+	case len(s) == defaultCountryLen: // national number, e.g. 8123-4567 in Nicaragua
+		s = "+" + defaultCC + s
+	case len(s) == len(defaultCC)+defaultCountryLen && strings.HasPrefix(s, defaultCC):
+		// country code without "+", e.g. 50581234567
 		s = "+" + s
 	default:
 		return "", "invalid phone"

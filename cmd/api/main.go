@@ -68,6 +68,9 @@ func main() {
 		slog.Error("invalid config", "error", err)
 		os.Exit(1)
 	}
+	// What a bare phone number means (E.164 completion).
+	h.PhoneCountryPrefix = cfg.PhoneCountryPrefix
+	h.PhoneNationalLen = cfg.PhoneNationalLen
 
 	// The calendar day the API counts (past-date check, future-reservation
 	// guard) is the business zone's, not UTC's.

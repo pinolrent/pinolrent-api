@@ -280,6 +280,14 @@ func TestLoadMalformedUploadMax(t *testing.T) {
 	}
 }
 
+// TestPhoneCountry pins the defaults (Nicaragua) and that a malformed pair
+// fails startup instead of corrupting local numbers.
+func TestPhoneCountry(t *testing.T) {
+	t.Setenv("PHONE_COUNTRY_PREFIX", "")
+	t.Setenv("PHONE_NATIONAL_LEN", "")
+	cfg := Load()
+	if cfg.PhoneCountryPrefix != "505" || cfg.PhoneNationalLen != 8 {
+		t.Fatalf("defaults = %q/%d, want 505/8", cfg.PhoneCountryPrefix, cfg.PhoneNationalLen)
 // TestBusinessTimezone pins the default (Managua) and that a bad zone name
 // fails startup instead of silently counting days in UTC.
 func TestBusinessTimezone(t *testing.T) {
@@ -291,6 +299,33 @@ func TestBusinessTimezone(t *testing.T) {
 	cfg.JWTSecret = testJWTSecret
 	cfg.CORSAllowedOrigins = "https://app.example.com"
 	if err := cfg.Validate(); err != nil {
+		t.Fatalf("default phone country rejected: %v", err)
+	}
+
+	for _, tc := range []struct {
+		prefix string
+		natLen int
+		valid  bool
+	}{
+		{"", 8, false},     // missing prefix
+		{"56", 0, false},   // missing length
+		{"056", 8, false},  // country codes do not start with 0
+		{"50a", 8, false},  // not digits
+		{"5051", 8, false}, // too long
+		{"505", 2, false},  // too short
+		{"505", 99, false}, // too long
+		{"505", 8, true},   // defaults
+		{"56", 9, true},    // chile configuration
+	} {
+		cfg.PhoneCountryPrefix = tc.prefix
+		cfg.PhoneNationalLen = tc.natLen
+		err := cfg.Validate()
+		if tc.valid && err != nil {
+			t.Errorf("prefix %q len %d rejected: %v", tc.prefix, tc.natLen, err)
+		}
+		if !tc.valid && err == nil {
+			t.Errorf("prefix %q len %d accepted", tc.prefix, tc.natLen)
+		}
 		t.Fatalf("default timezone rejected: %v", err)
 	}
 

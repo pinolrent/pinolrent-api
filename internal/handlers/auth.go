@@ -58,7 +58,7 @@ func (a *API) UpdateMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	phone, msg := normalizePhone(in.Phone)
+	phone, msg := normalizePhone(in.Phone, a.PhoneCountryPrefix, a.PhoneNationalLen)
 	if msg != "" {
 		writeError(w, http.StatusBadRequest, msg)
 		return
@@ -154,7 +154,7 @@ func (a *API) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	phone, msg := normalizePhone(in.Phone)
+	phone, msg := normalizePhone(in.Phone, a.PhoneCountryPrefix, a.PhoneNationalLen)
 	if msg != "" {
 		writeError(w, http.StatusBadRequest, msg)
 		return
@@ -234,7 +234,7 @@ func (a *API) BecomeSeller(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	phone, msg := normalizePhone(in.Phone)
+	phone, msg := normalizePhone(in.Phone, a.PhoneCountryPrefix, a.PhoneNationalLen)
 	if msg != "" || phone == "" {
 		writeError(w, http.StatusBadRequest, "phone is required for sellers")
 		return
