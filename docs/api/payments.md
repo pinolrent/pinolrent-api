@@ -38,7 +38,7 @@ Rules: the reservation must exist and be yours, must still be `pending` or `acce
 | `400` | `proof_url is too long` | More than 2048 |
 | `400` | `invalid proof_url` | Malformed URL, neither `http(s)` nor a valid `/uploads/...` path |
 | `404` | `reservation not found` | It does not exist or it is not yours |
-| `409` | `reservation is not pending` | It is accepted, confirmed, rejected or cancelled |
+| `409` | `reservation is not pending` | It is confirmed, rejected or cancelled (`accepted` is allowed: it is the correction path) |
 | `409` | `payment already recorded` | It already has a payment |
 | `400` | `invalid JSON body` | Broken JSON or unknown fields |
 | `413` | `request body too large` | More than 1 MB |
