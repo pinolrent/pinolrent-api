@@ -18,6 +18,18 @@ import (
 	"github.com/pinolrent/pinolrent-api/internal/db"
 )
 
+// Routes builds a bare mux from the route table, without the production
+// middleware chain, so request helpers can call endpoints directly. It lives
+// in the test tree because only tests use it: NewRouter owns registration in
+// production code.
+func Routes(a *API) *http.ServeMux {
+	mux := http.NewServeMux()
+	for _, r := range a.routes() {
+		mux.Handle(r.method+" "+r.pattern, r.handler)
+	}
+	return mux
+}
+
 func newTestAPI(t *testing.T) *API {
 	t.Helper()
 	d, err := db.Open(":memory:")
