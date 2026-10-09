@@ -44,8 +44,18 @@ type Config struct {
 
 // Load reads the configuration from the environment, applying defaults for
 // optional values. An empty variable falls back to its default instead of
-// clearing it. Malformed values surface in Validate where that matters.
-func Load() Config {
+// clearing it. A numeric variable that does not parse is an error: it used to
+// become 0, which for UPLOAD_MAX_TOTAL_MB meant "no quota", so a typo could
+// disable the disk cap silently. Other malformed values surface in Validate.
+func Load() (Config, error) {
+	uploadMax, err := getenvInt("UPLOAD_MAX_TOTAL_MB", 1024)
+	if err != nil {
+		return Config{}, err
+	}
+	phoneLen, err := getenvInt("PHONE_NATIONAL_LEN", 8)
+	if err != nil {
+		return Config{}, err
+	}
 	return Config{
 		Port:               getenv("PORT", "8080"),
 		DatabaseURL:        getenv("DATABASE_URL", "pinolrent.db"),
@@ -53,13 +63,13 @@ func Load() Config {
 		CORSAllowedOrigins: getenv("CORS_ALLOWED_ORIGINS", "*"),
 		Env:                getenv("ENV", "dev"),
 		UploadDir:          getenv("UPLOAD_DIR", "uploads"),
-		UploadMaxTotalMB:   getenvInt("UPLOAD_MAX_TOTAL_MB", 1024),
+		UploadMaxTotalMB:   uploadMax,
 		TrustedProxyCIDRs:  getenv("TRUSTED_PROXY_CIDRS", ""),
 		AdminEmails:        getenv("ADMIN_EMAILS", ""),
 		PhoneCountryPrefix: getenv("PHONE_COUNTRY_PREFIX", "505"),
-		PhoneNationalLen:   getenvInt("PHONE_NATIONAL_LEN", 8),
+		PhoneNationalLen:   phoneLen,
 		BusinessTimezone:   getenv("BUSINESS_TIMEZONE", "America/Managua"),
-	}
+	}, nil
 }
 
 // getenv returns the variable's value, or def when it is unset or empty.
@@ -70,19 +80,19 @@ func getenv(key, def string) string {
 	return def
 }
 
-// getenvInt is getenv for numeric variables. A value that does not parse
-// yields 0 — a parse error never reaches Validate, same as before this was
-// hand-written, so 0 (unlimited) is what a typo leaves behind.
-func getenvInt(key string, def int) int {
+// getenvInt is getenv for numeric variables. An unparseable value is an
+// error naming the variable: Load used to turn it into 0, and 0 meant
+// "unlimited" for the upload quota.
+func getenvInt(key string, def int) (int, error) {
 	v := os.Getenv(key)
 	if v == "" {
-		return def
+		return def, nil
 	}
 	n, err := strconv.Atoi(v)
 	if err != nil {
-		return 0
+		return 0, fmt.Errorf("%s must be a number (got %q)", key, v)
 	}
-	return n
+	return n, nil
 }
 
 // Validate returns an error when a required setting is missing or malformed.

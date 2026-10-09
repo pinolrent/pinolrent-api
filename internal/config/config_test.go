@@ -9,9 +9,19 @@ import (
 //nolint:gosec // test-only JWT secret, never used in production
 const testJWTSecret = "test-secret-32-bytes-minimum-okay"
 
+// mustLoad is Load for tests that only care about the parsed values.
+func mustLoad(t *testing.T) Config {
+	t.Helper()
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	return cfg
+}
+
 func TestLoadDefaults(t *testing.T) {
 	t.Setenv("JWT_SECRET", testJWTSecret)
-	cfg := Load()
+	cfg := mustLoad(t)
 	if cfg.Port != "8080" || cfg.DatabaseURL != "pinolrent.db" || cfg.CORSAllowedOrigins != "*" || cfg.UploadDir != "uploads" {
 		t.Fatalf("defaults not applied: %+v", cfg)
 	}
@@ -23,7 +33,7 @@ func TestLoadOverrides(t *testing.T) {
 	t.Setenv("JWT_SECRET", testJWTSecret)
 	t.Setenv("CORS_ALLOWED_ORIGINS", "https://app.example.com")
 	t.Setenv("TRUSTED_PROXY_CIDRS", "172.18.0.0/16")
-	cfg := Load()
+	cfg := mustLoad(t)
 	if cfg.Port != "9999" || cfg.DatabaseURL != "custom.db" || cfg.CORSAllowedOrigins != "https://app.example.com" {
 		t.Fatalf("overrides not applied: %+v", cfg)
 	}
@@ -265,18 +275,24 @@ func TestLoadEmptyFallsBackToDefault(t *testing.T) {
 	t.Setenv("PORT", "")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "")
 	t.Setenv("UPLOAD_DIR", "")
-	cfg := Load()
+	cfg := mustLoad(t)
 	if cfg.Port != "8080" || cfg.CORSAllowedOrigins != "*" || cfg.UploadDir != "uploads" {
 		t.Fatalf("empty values did not fall back to defaults: %+v", cfg)
 	}
 }
 
 // TestLoadMalformedUploadMax pins the parse-error behavior: a non-numeric
-// value becomes 0 (unlimited) because Validate never sees the raw string.
+// value fails instead of becoming 0 (unlimited), which would silently
+// disable the disk quota.
 func TestLoadMalformedUploadMax(t *testing.T) {
-	t.Setenv("UPLOAD_MAX_TOTAL_MB", "abc")
-	if got := Load().UploadMaxTotalMB; got != 0 {
-		t.Fatalf("UPLOAD_MAX_TOTAL_MB = %d, want 0", got)
+	t.Setenv("UPLOAD_MAX_TOTAL_MB", "1O24") // letter O, the classic typo
+	if _, err := Load(); err == nil {
+		t.Fatal("malformed UPLOAD_MAX_TOTAL_MB accepted")
+	}
+	t.Setenv("UPLOAD_MAX_TOTAL_MB", "")
+	t.Setenv("PHONE_NATIONAL_LEN", "ocho")
+	if _, err := Load(); err == nil {
+		t.Fatal("malformed PHONE_NATIONAL_LEN accepted")
 	}
 }
 
@@ -285,7 +301,7 @@ func TestLoadMalformedUploadMax(t *testing.T) {
 func TestPhoneCountry(t *testing.T) {
 	t.Setenv("PHONE_COUNTRY_PREFIX", "")
 	t.Setenv("PHONE_NATIONAL_LEN", "")
-	cfg := Load()
+	cfg := mustLoad(t)
 	if cfg.PhoneCountryPrefix != "505" || cfg.PhoneNationalLen != 8 {
 		t.Fatalf("defaults = %q/%d, want 505/8", cfg.PhoneCountryPrefix, cfg.PhoneNationalLen)
 	}
@@ -326,7 +342,7 @@ func TestPhoneCountry(t *testing.T) {
 // fails startup instead of silently counting days in UTC.
 func TestBusinessTimezone(t *testing.T) {
 	t.Setenv("BUSINESS_TIMEZONE", "")
-	cfg := Load()
+	cfg := mustLoad(t)
 	if cfg.BusinessTimezone != "America/Managua" {
 		t.Fatalf("BusinessTimezone = %q, want America/Managua", cfg.BusinessTimezone)
 	}
