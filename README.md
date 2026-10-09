@@ -69,7 +69,7 @@ If you try to read or touch something that is not yours, the API answers `404` a
 
 ## Stack and basic rules
 
-- **Go 1.26.6**, `net/http` without a framework, **SQLite** (`modernc.org/sqlite`) + `goose` migrations.
+- **Go 1.26.9**, `net/http` without a framework, **SQLite** (`modernc.org/sqlite`) + `goose` migrations.
 - Auth with **JWT HS256** (access 15 min + refresh 7 days with rotation) and **bcrypt** for passwords.
 - `price_per_day` is in **cents** (e.g. 45000 = $450). Dates as `YYYY-MM-DD`.
 - Every request with a body cannot exceed **1 MB**. JSON with unknown fields is an error.

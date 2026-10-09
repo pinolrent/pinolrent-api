@@ -1,7 +1,7 @@
 # Deployment image for the API. The binary is static (modernc.org/sqlite is
 # pure Go, no cgo), so the runtime needs no toolchain and no extra libc.
 
-FROM golang:1.26.6-alpine AS build
+FROM golang:1.26.9-alpine AS build
 # git only in the build stage: git describe uses it to version the binary.
 RUN apk add --no-cache git
 WORKDIR /src
