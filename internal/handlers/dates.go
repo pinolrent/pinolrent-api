@@ -21,7 +21,22 @@ func parseDate(s string) (time.Time, error) {
 	return t, nil
 }
 
-func todayStart() time.Time {
-	now := time.Now().UTC()
-	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+// todayStr returns the current day as YYYY-MM-DD in the business time zone
+// (API.Location, wired from BUSINESS_TIMEZONE). Taking it from the UTC clock
+// would move the day boundary: in Managua (UTC-6) the UTC date rolls over at
+// 18:00 local, and every booking for "today" made after that would be
+// rejected as past. Callers compare it as a string against dates that
+// parseDate already validated as canonical YYYY-MM-DD, which sorts
+// chronologically. A nil Location means UTC, for tests that build the API
+// without config.
+func (a *API) todayStr() string {
+	loc := a.Location
+	if loc == nil {
+		loc = time.UTC
+	}
+	return timeNow().In(loc).Format(dateLayout)
 }
+
+// timeNow is the wall clock, swapped by tests to pin the calendar day (the
+// package's tests never run in parallel).
+var timeNow = time.Now

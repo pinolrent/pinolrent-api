@@ -13,6 +13,7 @@
 | `UPLOAD_MAX_TOTAL_MB` | `1024` | no | Total cap for `UPLOAD_DIR` in MB; `0` = no limit. Once exceeded, `POST /uploads` answers `507` |
 | `TRUSTED_PROXY_CIDRS` | — (empty) | no | Networks whose `X-Forwarded-For`/`X-Real-IP` are believed, comma-separated (e.g. `172.18.0.0/16`). Empty = only a loopback proxy is trusted |
 | `ADMIN_EMAILS` | — (empty) | no | Allow-list of accounts with the `admin` role, comma-separated (e.g. `admin@pinolrent.cl`). Empty = the installation has no administrator. A malformed entry prevents startup |
+| `BUSINESS_TIMEZONE` | `America/Managua` | no | IANA time zone that decides what calendar day it is for the API: the "start_date cannot be in the past" rule and the future-reservation guard. A malformed name prevents startup |
 
 The priority order is: **shell variables > `.env` > default values**. An empty variable
 falls back to its default instead of clearing it (`PORT=` listens on 8080).
