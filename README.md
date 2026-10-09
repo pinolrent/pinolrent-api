@@ -73,6 +73,6 @@ If you try to read or touch something that is not yours, the API answers `404` a
 - Auth with **JWT HS256** (access 15 min + refresh 7 days with rotation) and **bcrypt** for passwords.
 - `price_per_day` is in **cents** (e.g. 45000 = $450). Dates as `YYYY-MM-DD`.
 - Every request with a body cannot exceed **1 MB**. JSON with unknown fields is an error.
-- Login and registration limited to **30 attempts per minute per IP**; writes (`POST`, `PATCH` and `DELETE` outside `/auth/`) to **120 per minute** (burst 60). CORS open by default (can be closed with `CORS_ALLOWED_ORIGINS`; with `ENV=prod` it does not allow `*`).
+- Everything under `/auth/` plus `GET /cars/{id}/contact` limited to **30 attempts per minute per IP**; writes (`POST`, `PATCH` and `DELETE` outside `/auth/`) to **120 per minute** (burst 60). CORS open by default (can be closed with `CORS_ALLOWED_ORIGINS`; with `ENV=prod` it does not allow `*`).
 - Listings paginated with `limit`/`offset` (default 50, max 200, `offset` max 10000). Reservations of at most **30 days**.
 - `GET /health` reports the version of the binary (`make build` injects it).
