@@ -145,7 +145,10 @@ above).
 someone who is already a seller returns `200` without writing.
 
 Revoking the `seller` role does not delete the cars or the reservations of the
-account: it only takes away access to `/seller/*`.
+account: it only takes away access to `/seller/*`. It is blocked with `409`
+while the account still has future reservations (`pending`, `accepted` or
+`confirmed` ending today or later), because its buyers would be left with no
+one to accept or reject: resolve those dates first.
 
 **Errors:**
 
@@ -154,6 +157,8 @@ account: it only takes away access to `/seller/*`.
 | `400` | `invalid user id` | `{id}` is not an integer |
 | `400` | `seller is required` | `seller` is missing from the body |
 | `404` | `user not found` | The account does not exist |
+| `409` | `user has no phone number` | Granting seller to an account without a phone (the role promises buyers a contact number) |
+| `409` | `user has future reservations, cannot revoke seller` | Revoking while the account has reservations ending today or later |
 
 ---
 
