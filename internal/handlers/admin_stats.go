@@ -17,7 +17,9 @@ func (a *API) AdminStats(w http.ResponseWriter, r *http.Request) {
 
 	// One round trip: every metric is a scalar subquery, so the whole
 	// dashboard reads in a single statement. Statuses and roles travel as
-	// bound params from the db constants, in SELECT order.
+	// bound params from the db constants, in SELECT order. Rental dates are
+	// inclusive, so the day count adds 1: end_date - start_date alone bills
+	// a same-day rental at zero.
 	err := a.DB.QueryRowContext(r.Context(),
 		`SELECT
 			(SELECT COUNT(*) FROM users),
@@ -33,7 +35,7 @@ func (a *API) AdminStats(w http.ResponseWriter, r *http.Request) {
 			(SELECT COUNT(*) FROM payments WHERE status = ?),
 			(SELECT COUNT(*) FROM payments WHERE status = ?),
 			(SELECT COUNT(*) FROM payments WHERE status = ?),
-			(SELECT COALESCE(SUM(c.price_per_day * (julianday(r.end_date) - julianday(r.start_date))), 0)
+			(SELECT COALESCE(SUM(c.price_per_day * (julianday(r.end_date) - julianday(r.start_date) + 1)), 0)
 			 FROM payments p
 			 JOIN reservations r ON r.id = p.reservation_id
 			 JOIN cars c ON c.id = r.car_id
