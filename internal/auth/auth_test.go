@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -214,6 +215,48 @@ func TestRotateRefreshSingleUse(t *testing.T) {
 	}
 	if _, _, err := a.RotateRefresh(context.Background(), rt); err == nil {
 		t.Fatal("reused refresh token accepted")
+	}
+}
+
+// TestRotateRefreshConcurrentSingleWinner fires many rotations of the same
+// refresh token at once. At most one may mint a pair. The others fail as reuse
+// (or as superseded, once the replay has stamped the user's sessions), so a
+// stolen token racing the legitimate client cannot mint a second pair.
+func TestRotateRefreshConcurrentSingleWinner(t *testing.T) {
+	a := newTestAuth(t)
+	uid := seedUser(t, a, "race@example.com", "buyer")
+
+	rt, err := a.SignRefreshToken(&models.User{ID: uid, Roles: []string{"buyer"}})
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+
+	const workers = 16
+	var wins int64
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			if _, _, err := a.RotateRefresh(context.Background(), rt); err == nil {
+				mu.Lock()
+				wins++
+				mu.Unlock()
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	if wins > 1 {
+		t.Fatalf("concurrent rotations succeeded %d times, want at most 1", wins)
+	}
+	// The race is over: the token stays dead for any later attempt.
+	if _, _, err := a.RotateRefresh(context.Background(), rt); err == nil {
+		t.Fatal("token accepted after the concurrent race")
 	}
 }
 

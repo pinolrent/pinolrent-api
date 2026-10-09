@@ -17,6 +17,8 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
+	sqlite "modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 
 	"github.com/pinolrent/pinolrent-api/internal/httpx"
 	"github.com/pinolrent/pinolrent-api/internal/models"
@@ -300,18 +302,33 @@ func tokenSuperseded(u *models.User, claims *Claims) bool {
 }
 
 // RotateRefresh validates a single-use refresh token and swaps it for a
-// fresh access+refresh pair. The presented token is revoked so it cannot be
-// replayed; a reuse attempt fails with errRefreshReused.
+// fresh access+refresh pair. Consuming the token is an atomic insert of its
+// jti, so concurrent presentations yield at most one pair; a reuse attempt
+// fails with errRefreshReused and revokes every session of the user.
 func (a *Auth) RotateRefresh(ctx context.Context, token string) (access, refresh string, err error) {
 	claims, err := a.parseRefreshToken(strings.TrimSpace(token))
 	if err != nil {
 		return "", "", err
 	}
-	revoked, err := a.IsRevoked(ctx, claims.JTI())
+	u, err := a.userByID(ctx, claims.UserID)
 	if err != nil {
 		return "", "", err
 	}
-	if revoked {
+	if tokenSuperseded(&u, claims) {
+		return "", "", errTokenSuperseded
+	}
+	// A suspended account holds no valid session: like Login and RequireAuth,
+	// rotation refuses to mint new tokens for it.
+	if u.SuspendedAt > 0 {
+		return "", "", ErrAccountSuspended
+	}
+	// The replay check below is the one-time gate: a token is consumed by its
+	// jti insert, and of several concurrent presentations exactly one inserts.
+	// The rest hit the primary key and take the replay path.
+	if err := a.claimJTI(ctx, claims.UserID, claims.JTI(), claims.ExpiresAtUnix()); err != nil {
+		if !errors.Is(err, errJTIClaimed) {
+			return "", "", err
+		}
 		// A replay is either a stolen refresh or a buggy client, and the
 		// server cannot tell which side holds the valid copy — so every
 		// session of this user dies and both sides must log in again.
@@ -328,21 +345,6 @@ func (a *Auth) RotateRefresh(ctx context.Context, token string) (access, refresh
 		}
 		return "", "", errRefreshReused
 	}
-	u, err := a.userByID(ctx, claims.UserID)
-	if err != nil {
-		return "", "", err
-	}
-	if tokenSuperseded(&u, claims) {
-		return "", "", errTokenSuperseded
-	}
-	// A suspended account holds no valid session: like Login and RequireAuth,
-	// rotation refuses to mint new tokens for it.
-	if u.SuspendedAt > 0 {
-		return "", "", ErrAccountSuspended
-	}
-	if err := a.Revoke(ctx, claims.UserID, claims.JTI(), claims.ExpiresAtUnix()); err != nil {
-		return "", "", err
-	}
 	access, err = a.SignToken(&u)
 	if err != nil {
 		return "", "", err
@@ -355,6 +357,24 @@ func (a *Auth) RotateRefresh(ctx context.Context, token string) (access, refresh
 }
 
 var errRefreshReused = errors.New("refresh token already used")
+
+// errJTIClaimed reports that the jti is already in revoked_tokens.
+var errJTIClaimed = errors.New("jti already claimed")
+
+// claimJTI inserts the jti as revoked in one statement. A duplicate key means
+// another request already consumed this token and yields errJTIClaimed.
+func (a *Auth) claimJTI(ctx context.Context, userID int64, jti string, expiresAtUnix int64) error {
+	_, err := a.db.ExecContext(ctx,
+		`INSERT INTO revoked_tokens (jti, user_id, expires_at) VALUES (?, ?, ?)`,
+		jti, userID, expiresAtUnix)
+	if err != nil {
+		var sqliteErr *sqlite.Error
+		if errors.As(err, &sqliteErr) && sqliteErr.Code() == sqlite3.SQLITE_CONSTRAINT_PRIMARYKEY {
+			return errJTIClaimed
+		}
+	}
+	return err
+}
 
 // ErrAccountSuspended marks a token that is cryptographically fine but belongs
 // to a suspended account. Handlers map it to 403, unlike the 401 of dead
