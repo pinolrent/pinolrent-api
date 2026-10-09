@@ -100,7 +100,7 @@ The admin listings (`/admin/users`, `/admin/cars`, `/admin/reservations`, `/admi
 | PATCH | `/seller/reservations/{id}/accept` | seller | [payments](payments.md) |
 | PATCH | `/seller/reservations/{id}/reject` | seller | [payments](payments.md) |
 | POST | `/uploads` | yes | [uploads](uploads.md) |
-| GET | `/uploads/{name}` | no | [uploads](uploads.md) |
+| GET | `/uploads/` | no | [uploads](uploads.md) |
 | GET | `/admin/users` | admin | [admin](admin.md) |
 | GET | `/admin/users/{id}` | admin | [admin](admin.md) |
 | PATCH | `/admin/users/{id}` | admin | [admin](admin.md) |
