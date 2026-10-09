@@ -124,8 +124,9 @@ auth and this router.
   admin views compose `models.*` via embedding plus join extras. Do not invent new error signals,
   `WHERE` builders or re-declared entities.
 - A new endpoint is one `routes()` entry plus a test, a Bruno request (`seq` gapless) and its
-  `docs/api/` section. `docs/api/` is the reference; the README summarizes and links, it never
-  duplicates endpoint tables.
+  `docs/api/` section. `docs/api/` is the reference; the README may carry only a
+  condensed overview table (short descriptions, linking to the detail), never a
+  second full reference to keep in sync.
 - `admin` is granted from `ADMIN_EMAILS` only (no endpoint grants it); `seller` requires a valid
   phone on every path that grants it. Notifications and audit rows are written in the same
   transaction as the transition they describe, or the omission is documented.
