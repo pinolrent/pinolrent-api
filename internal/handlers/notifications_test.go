@@ -230,3 +230,41 @@ func TestAdminListNotifications(t *testing.T) {
 		t.Fatalf("buyer: status = %d, want 403", rec.Code)
 	}
 }
+
+// TestNotificationsNoDuplicateForAdminOwner covers the overlap in the fan-out:
+// an administrator who owns the car is both admin and owner of the recipient
+// list, and used to get two copies of the same note.
+func TestNotificationsNoDuplicateForAdminOwner(t *testing.T) {
+	a := newTestAPI(t)
+	_, adminID := newAdmin(t, a)
+	if _, err := a.DB.ExecContext(context.Background(),
+		`UPDATE users SET phone = '+50581234567' WHERE id = ?`, adminID); err != nil {
+		t.Fatalf("phone: %v", err)
+	}
+	if _, err := a.DB.ExecContext(context.Background(),
+		`INSERT OR IGNORE INTO user_roles (user_id, role) VALUES (?, 'seller')`, adminID); err != nil {
+		t.Fatalf("grant seller: %v", err)
+	}
+	var email string
+	if err := a.DB.QueryRowContext(context.Background(),
+		`SELECT email FROM users WHERE id = ?`, adminID).Scan(&email); err != nil {
+		t.Fatalf("email: %v", err)
+	}
+	admin := login(t, a, email, "secret123")
+
+	car := createCar(t, a, admin, map[string]any{"name": "Nissan March", "price_per_day": 30000})
+	buyer := registerBuyer(t, a, "dupe@example.com", "secret123")
+	v := createReservation(t, a, buyer, map[string]any{
+		"car_id": car.ID, "start_date": futureDate(10), "end_date": futureDate(12),
+	})
+
+	var n int
+	if err := a.DB.QueryRowContext(context.Background(),
+		`SELECT COUNT(*) FROM notifications WHERE user_id = ? AND kind = 'reservation.requested' AND reservation_id = ?`,
+		adminID, v.ID).Scan(&n); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("notifications for admin owner = %d, want 1", n)
+	}
+}

@@ -33,8 +33,16 @@ func validNotifyKind(s string) bool {
 
 // notifyUsers records one notification per user inside the caller's
 // transaction, so the note and the transition it announces commit together.
+// Callers fan out to a computed recipient list (administrators plus the
+// owner or the buyer), where one account can appear twice — an administrator
+// who owns the car — so duplicates are dropped here instead of at each site.
 func notifyUsers(ctx context.Context, conn *sql.Conn, userIDs []int64, kind string, reservationID int64) error {
+	seen := make(map[int64]bool, len(userIDs))
 	for _, uid := range userIDs {
+		if seen[uid] {
+			continue
+		}
+		seen[uid] = true
 		if _, err := conn.ExecContext(ctx,
 			`INSERT INTO notifications (user_id, kind, reservation_id) VALUES (?, ?, ?)`,
 			uid, kind, reservationID); err != nil {
