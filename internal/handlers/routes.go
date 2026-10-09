@@ -82,14 +82,3 @@ func (a *API) routes() []route {
 		{http.MethodGet, "/admin/audit", a.Auth.RequireRole(db.RoleAdmin, a.AdminListAudit), limitNone},
 	}
 }
-
-// Routes returns the HTTP mux with all endpoints registered and no rate
-// limiting. NewRouter builds the production mux, where every route carries the
-// limiter its table entry declares.
-func Routes(a *API) *http.ServeMux {
-	mux := http.NewServeMux()
-	for _, r := range a.routes() {
-		mux.Handle(r.method+" "+r.pattern, r.handler)
-	}
-	return mux
-}

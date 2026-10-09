@@ -386,7 +386,15 @@ func (a *API) Refresh(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusForbidden, "account suspended")
 			return
 		}
-		writeError(w, http.StatusUnauthorized, "invalid or expired token")
+		// Only a dead token answers 401. A failure inside the rotation
+		// (database down, signing error) is a 500: answering 401 there
+		// tells the client its credentials are bad and makes it log in
+		// again against a server that is failing anyway.
+		if errors.Is(err, auth.ErrInvalidToken) {
+			writeError(w, http.StatusUnauthorized, "invalid or expired token")
+			return
+		}
+		serverError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"token": access, "refresh_token": refresh})
