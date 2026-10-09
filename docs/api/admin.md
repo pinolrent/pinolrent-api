@@ -367,8 +367,9 @@ an approximation to size the platform, not a revenue ledger.
 
 History of human decisions on the platform — admin operations plus the
 seller/buyer decisions that move a reservation. Each row says who did what, to
-whom, and when. The indexes are on `actor_id` and on `action`, and the order
-is from most recent to oldest.
+whom, and when. The indexes are on `created_at` and on (`actor_id`,
+`created_at`); filtering by `action` scans the log, so keep that in mind on
+large installations. The order is from most recent to oldest.
 
 **Query:** `actor_id`, `action`, `limit`, `offset`.
 
