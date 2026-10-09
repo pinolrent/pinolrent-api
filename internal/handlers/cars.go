@@ -315,9 +315,13 @@ func (a *API) PatchCar(w http.ResponseWriter, r *http.Request) {
 		// The guard only gates the transition to inactive; editing content or
 		// reactivating must not be blocked by existing bookings.
 		if in.Active != nil && !*in.Active {
+			// The end bound is today in the business time zone (todayStr),
+			// not SQLite's date('now'): a reservation ending on the user's
+			// today must block the transition there, not on UTC's date.
 			var hasFuture int
 			if err := conn.QueryRowContext(ctx,
-				`SELECT COUNT(*) FROM reservations WHERE car_id = ? AND status NOT IN (?, ?) AND end_date >= date('now')`, id, db.ReservationCancelled, db.ReservationRejected).Scan(&hasFuture); err != nil {
+				`SELECT COUNT(*) FROM reservations WHERE car_id = ? AND status NOT IN (?, ?) AND end_date >= ?`,
+				id, db.ReservationCancelled, db.ReservationRejected, a.todayStr()).Scan(&hasFuture); err != nil {
 				return err
 			}
 			if hasFuture > 0 {

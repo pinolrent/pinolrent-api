@@ -46,7 +46,10 @@ func (a *API) CreateReservation(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "reservation cannot be longer than "+strconv.Itoa(maxRentalDays)+" days")
 		return
 	}
-	if start.Before(todayStart()) {
+	// String comparison, not time comparison: dates are canonical YYYY-MM-DD
+	// (parseDate round-trips them), which sorts chronologically, and mixing a
+	// UTC-parsed midnight with a local-zone midnight would compare instants.
+	if in.StartDate < a.todayStr() {
 		writeError(w, http.StatusBadRequest, "start_date cannot be in the past")
 		return
 	}

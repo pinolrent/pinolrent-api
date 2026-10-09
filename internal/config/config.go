@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Config holds all runtime settings for the server.
@@ -28,6 +29,11 @@ type Config struct {
 	// Empty (the default) means the deployment has no administrator, which
 	// is a valid state: every route still works, only /admin is unreachable.
 	AdminEmails string `env:"ADMIN_EMAILS"`
+	// BusinessTimezone is the zone that decides what day it is for the API:
+	// the past-date check and the future-reservation guard count days in it.
+	// In a Managua deployment users book in Managua time, while the UTC clock
+	// rolls the day over at 18:00 local.
+	BusinessTimezone string `env:"BUSINESS_TIMEZONE" envDefault:"America/Managua"`
 }
 
 // Load reads the configuration from the environment, applying defaults for
@@ -44,6 +50,7 @@ func Load() Config {
 		UploadMaxTotalMB:   getenvInt("UPLOAD_MAX_TOTAL_MB", 1024),
 		TrustedProxyCIDRs:  getenv("TRUSTED_PROXY_CIDRS", ""),
 		AdminEmails:        getenv("ADMIN_EMAILS", ""),
+		BusinessTimezone:   getenv("BUSINESS_TIMEZONE", "America/Managua"),
 	}
 }
 
@@ -103,7 +110,21 @@ func (c Config) Validate() error {
 	if _, err := c.AdminEmailList(); err != nil {
 		return err
 	}
+	if _, err := c.BusinessLocation(); err != nil {
+		return err
+	}
 	return nil
+}
+
+// BusinessLocation loads the time zone whose calendar day the API counts.
+// Zone names come from the embedded time/tzdata (see cmd/api), so an unknown
+// name is a typo that must fail startup rather than silently fall back to UTC.
+func (c Config) BusinessLocation() (*time.Location, error) {
+	loc, err := time.LoadLocation(c.BusinessTimezone)
+	if err != nil {
+		return nil, fmt.Errorf("invalid BUSINESS_TIMEZONE %q: want an IANA name like America/Managua", c.BusinessTimezone)
+	}
+	return loc, nil
 }
 
 // TrustedProxies parses the comma-separated list of networks whose forwarding
