@@ -860,3 +860,49 @@ func TestAdminListsUsers(t *testing.T) {
 		t.Fatalf("bad id: status = %d, want 400", rec.Code)
 	}
 }
+
+// TestAdminCannotRevokeSellerWithFutureReservations pins the guard: taking
+// the seller role away from an account that still has bookings would strand
+// them, since accept/reject/deactivate all live behind that role. The
+// administrator has to resolve the dates first (the same rule the seller
+// hits when deactivating a car).
+func TestAdminCannotRevokeSellerWithFutureReservations(t *testing.T) {
+	a := newTestAPI(t)
+	admin, _ := newAdmin(t, a)
+	sellerToken := newSeller(t, a)
+	rec := doJSON(t, a, "GET", "/auth/me", sellerToken, nil)
+	var me struct {
+		ID    int64  `json:"id"`
+		Email string `json:"email"`
+	}
+	decodeJSON(t, rec, &me)
+	sellerID := me.ID
+
+	car := createCar(t, a, sellerToken, map[string]any{"name": "Hyundai Accent", "price_per_day": 40000})
+	buyer := registerBuyer(t, a, "pending@example.com", "secret123")
+	createReservation(t, a, buyer, map[string]any{
+		"car_id": car.ID, "start_date": futureDate(10), "end_date": futureDate(12),
+	})
+
+	path := fmt.Sprintf("/admin/users/%d/roles", sellerID)
+	if rec := doJSON(t, a, "PATCH", path, admin, map[string]any{"seller": false}); rec.Code != http.StatusConflict {
+		t.Fatalf("revoke with future reservations: status = %d, want 409 body %s", rec.Code, rec.Body.String())
+	}
+	if roles := userRoles(t, a, sellerID); len(roles) != 2 {
+		t.Fatalf("roles changed despite the guard: %v", roles)
+	}
+
+	// Cancelling the reservation frees the dates, then the revoke goes
+	// through: nothing else is holding the role.
+	var resID int64
+	if err := a.DB.QueryRowContext(context.Background(),
+		`SELECT r.id FROM reservations r JOIN cars c ON c.id = r.car_id WHERE c.owner_id = ?`, sellerID).Scan(&resID); err != nil {
+		t.Fatalf("reservation id: %v", err)
+	}
+	if rec := doJSON(t, a, "PATCH", fmt.Sprintf("/reservations/%d/cancel", resID), buyer, nil); rec.Code != http.StatusOK {
+		t.Fatalf("cancel: status = %d body %s", rec.Code, rec.Body.String())
+	}
+	if rec := doJSON(t, a, "PATCH", path, admin, map[string]any{"seller": false}); rec.Code != http.StatusOK {
+		t.Fatalf("revoke after cancel: status = %d body %s", rec.Code, rec.Body.String())
+	}
+}
