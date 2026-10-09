@@ -63,6 +63,9 @@ func main() {
 		slog.Error("invalid config", "error", err)
 		os.Exit(1)
 	}
+	// What a bare phone number means (E.164 completion).
+	h.PhoneCountryPrefix = cfg.PhoneCountryPrefix
+	h.PhoneNationalLen = cfg.PhoneNationalLen
 
 	adminEmails, err := cfg.AdminEmailList()
 	if err != nil {

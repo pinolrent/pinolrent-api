@@ -215,7 +215,7 @@ func TestBecomeSellerReplayUpdatesPhone(t *testing.T) {
 	token := newSeller(t, a)
 
 	rec := doJSON(t, a, "POST", "/auth/become-seller", token, map[string]any{
-		"phone": "+56987654321",
+		"phone": "+50587654321",
 	})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("replay: status = %d (body %s)", rec.Code, rec.Body.String())
@@ -225,13 +225,13 @@ func TestBecomeSellerReplayUpdatesPhone(t *testing.T) {
 		Roles []string `json:"roles"`
 	}
 	decodeJSON(t, rec, &out)
-	if out.Phone != "+56987654321" {
+	if out.Phone != "+50587654321" {
 		t.Fatalf("phone = %q, want the new number", out.Phone)
 	}
 
 	rec = doJSON(t, a, "GET", "/auth/me", token, nil)
 	decodeJSON(t, rec, &out)
-	if out.Phone != "+56987654321" {
+	if out.Phone != "+50587654321" {
 		t.Fatalf("persisted phone = %q, want the new number", out.Phone)
 	}
 }
@@ -338,7 +338,7 @@ func TestRegisterBuyerPhoneIsOptional(t *testing.T) {
 	}
 
 	rec = doJSON(t, a, "POST", "/auth/register", "", map[string]any{
-		"email": "buyer2@example.com", "password": "secret123", "phone": "9 1234 5678",
+		"email": "buyer2@example.com", "password": "secret123", "phone": "8123-4567",
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("with phone: status = %d, want 201 (body %s)", rec.Code, rec.Body.String())
@@ -348,9 +348,9 @@ func TestRegisterBuyerPhoneIsOptional(t *testing.T) {
 func TestRegisterNormalizesPhone(t *testing.T) {
 	a := newTestAPI(t)
 	for _, tc := range []struct{ email, in string }{
-		{"a@example.com", "9 1234 5678"},
-		{"b@example.com", "56912345678"},
-		{"c@example.com", "+56 9-1234-5678"},
+		{"a@example.com", "8123-4567"},
+		{"b@example.com", "50581234567"},
+		{"c@example.com", "+505 8123-4567"},
 	} {
 		rec := doJSON(t, a, "POST", "/auth/register", "", map[string]any{
 			"email": tc.email, "password": "secret123", "phone": tc.in,
@@ -365,8 +365,8 @@ func TestRegisterNormalizesPhone(t *testing.T) {
 			Phone string `json:"phone"`
 		}
 		decodeJSON(t, rec, &out)
-		if out.Phone != "+56912345678" {
-			t.Fatalf("phone %q stored as %q, want +56912345678", tc.in, out.Phone)
+		if out.Phone != "+50581234567" {
+			t.Fatalf("phone %q stored as %q, want +50581234567", tc.in, out.Phone)
 		}
 	}
 }
@@ -427,7 +427,7 @@ func TestRegisterAllowListCombinesWithSellerRole(t *testing.T) {
 	a.AdminEmails = map[string]bool{"boss@example.com": true}
 
 	rec := doJSON(t, a, "POST", "/auth/register", "", map[string]any{
-		"email": "boss@example.com", "password": "secret123", "phone": "+56912345678",
+		"email": "boss@example.com", "password": "secret123", "phone": "+50581234567",
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("register: status = %d (body %s)", rec.Code, rec.Body.String())
@@ -485,7 +485,7 @@ func TestRegisterRolesByPhone(t *testing.T) {
 	}
 
 	rec = doJSON(t, a, "POST", "/auth/register", "", map[string]any{
-		"email": "dual@example.com", "password": "secret123", "phone": "+56912345678",
+		"email": "dual@example.com", "password": "secret123", "phone": "+50581234567",
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("register with phone: status = %d (body %s)", rec.Code, rec.Body.String())
@@ -512,12 +512,12 @@ func TestBecomeSeller(t *testing.T) {
 		}
 	}
 	if rec := doJSON(t, a, "POST", "/auth/become-seller", "", map[string]any{
-		"phone": "+56912345678",
+		"phone": "+50581234567",
 	}); rec.Code != http.StatusUnauthorized {
 		t.Fatalf("no token: status = %d, want 401", rec.Code)
 	}
 
-	rec := doJSON(t, a, "POST", "/auth/become-seller", token, map[string]any{"phone": "9 1234 5678"})
+	rec := doJSON(t, a, "POST", "/auth/become-seller", token, map[string]any{"phone": "8123-4567"})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("become seller: status = %d (body %s)", rec.Code, rec.Body.String())
 	}
@@ -529,8 +529,8 @@ func TestBecomeSeller(t *testing.T) {
 	if len(out.Roles) != 2 || out.Roles[0] != "buyer" || out.Roles[1] != "seller" {
 		t.Fatalf("roles = %v, want [buyer seller]", out.Roles)
 	}
-	if out.Phone != "+56912345678" {
-		t.Fatalf("phone = %q, want +56912345678", out.Phone)
+	if out.Phone != "+50581234567" {
+		t.Fatalf("phone = %q, want +50581234567", out.Phone)
 	}
 
 	if rec := doJSON(t, a, "POST", "/seller/cars", token, map[string]any{
@@ -539,7 +539,7 @@ func TestBecomeSeller(t *testing.T) {
 		t.Fatalf("seller route after upgrade: status = %d, want 201 (body %s)", rec.Code, rec.Body.String())
 	}
 
-	rec = doJSON(t, a, "POST", "/auth/become-seller", token, map[string]any{"phone": "+56912345678"})
+	rec = doJSON(t, a, "POST", "/auth/become-seller", token, map[string]any{"phone": "+50581234567"})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("idempotent retry: status = %d (body %s)", rec.Code, rec.Body.String())
 	}

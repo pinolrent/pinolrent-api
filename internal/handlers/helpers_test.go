@@ -82,7 +82,7 @@ func loginBuyer(t *testing.T, a *API, email, password string) string {
 func registerSeller(t *testing.T, a *API, email, password string) string {
 	t.Helper()
 	rec := doJSON(t, a, "POST", "/auth/register", "", map[string]any{
-		"email": email, "password": password, "phone": "+56912345678",
+		"email": email, "password": password, "phone": "+50581234567",
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("register seller: status %d body %s", rec.Code, rec.Body.String())

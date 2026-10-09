@@ -9,7 +9,7 @@ func TestUpdateMePhone(t *testing.T) {
 	a := newTestAPI(t)
 	token := registerBuyer(t, a, "buyer@example.com", "secret123")
 
-	rec := doJSON(t, a, "PATCH", "/auth/me", token, map[string]any{"phone": "9 8765 4321"})
+	rec := doJSON(t, a, "PATCH", "/auth/me", token, map[string]any{"phone": "8765-4321"})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
 	}
@@ -17,13 +17,13 @@ func TestUpdateMePhone(t *testing.T) {
 		Phone string `json:"phone"`
 	}
 	decodeJSON(t, rec, &out)
-	if out.Phone != "+56987654321" {
-		t.Fatalf("phone = %q, want +56987654321", out.Phone)
+	if out.Phone != "+50587654321" {
+		t.Fatalf("phone = %q, want +50587654321", out.Phone)
 	}
 
 	rec = doJSON(t, a, "GET", "/auth/me", token, nil)
 	decodeJSON(t, rec, &out)
-	if out.Phone != "+56987654321" {
+	if out.Phone != "+50587654321" {
 		t.Fatalf("phone did not persist: %q", out.Phone)
 	}
 }
@@ -52,7 +52,7 @@ func TestUpdateMeValidatesPhone(t *testing.T) {
 
 func TestUpdateMeRequiresAuth(t *testing.T) {
 	a := newTestAPI(t)
-	rec := doJSON(t, a, "PATCH", "/auth/me", "", map[string]any{"phone": "912345678"})
+	rec := doJSON(t, a, "PATCH", "/auth/me", "", map[string]any{"phone": "81234567"})
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", rec.Code)
 	}
@@ -80,7 +80,7 @@ func TestUpdateMePhoneDoesNotGrantSeller(t *testing.T) {
 	a := newTestAPI(t)
 	token := registerBuyer(t, a, "buyer@example.com", "secret123")
 
-	rec := doJSON(t, a, "PATCH", "/auth/me", token, map[string]any{"phone": "+56912345678"})
+	rec := doJSON(t, a, "PATCH", "/auth/me", token, map[string]any{"phone": "+50581234567"})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("save phone: status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
 	}

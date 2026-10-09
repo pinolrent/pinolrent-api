@@ -243,7 +243,7 @@ func TestAdminGrantsAndRevokesSellerRole(t *testing.T) {
 	// one first (phone is not unique, sharing it here is fine).
 	for _, tok := range []string{admin, buyer} {
 		if rec := doJSON(t, a, "PATCH", "/auth/me", tok,
-			map[string]any{"phone": "+56912345678"}); rec.Code != http.StatusOK {
+			map[string]any{"phone": "+50581234567"}); rec.Code != http.StatusOK {
 			t.Fatalf("set phone: %d body %s", rec.Code, rec.Body.String())
 		}
 	}

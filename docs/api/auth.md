@@ -23,7 +23,7 @@ Creates an account. One account per email: without `phone` it is only a buyer (`
 | `phone` | text | no | contact phone; when present it is normalized to E.164 (see below) and the account is also born a seller |
 
 ```json
-{"email":"demo@example.com","password":"secret123","phone":"+56912345678"}
+{"email":"demo@example.com","password":"secret123","phone":"+50581234567"}
 ```
 
 **Answers** `201`:
@@ -45,7 +45,7 @@ Creates an account. One account per email: without `phone` it is only a buyer (`
 
 > If the email already exists, it answers the same `201 {"email":"..."}` to avoid revealing which emails are registered.
 
-**`phone` formats:** Chilean local formats are accepted (`912345678`, `9 1234 5678`), with a country code without `+` (`56912345678`) or fully international (`+56912345678`, `+14155552671`). They are always stored in E.164 (`+56912345678`), which is what the WhatsApp links need.
+**`phone` formats:** Local Nicaraguan numbers are accepted (`81234567`, `8123-4567`), with a country code without `+` (`50581234567`) or fully international (`+50581234567`, `+14155552671`). They are always stored in E.164 (`+50581234567`), which is what the WhatsApp links need. The default country comes from `PHONE_COUNTRY_PREFIX` / `PHONE_NATIONAL_LEN` (see [configuration](../configuration.md)).
 
 ---
 
@@ -60,7 +60,7 @@ Turns your buyer account into a buyer + seller. Requires login. It is the upgrad
 | `phone` | text | yes | E.164 contact phone (same rules as on registration) |
 
 ```json
-{"phone":"+56912345678"}
+{"phone":"+50581234567"}
 ```
 
 **Answers** `200` with your updated profile, same as `GET /auth/me`.
@@ -157,7 +157,7 @@ Authorization: Bearer <token>
 **Answers** `200`:
 
 ```json
-{"id":3,"email":"demo@example.com","roles":["buyer"],"phone":"+56912345678"}
+{"id":3,"email":"demo@example.com","roles":["buyer"],"phone":"+50581234567"}
 ```
 
 `phone` comes back empty (`""`) if you did not set one; sellers always have it. `roles` is `["buyer"]` or `["buyer","seller"]`, or `["admin","buyer"]` if the account is on the `ADMIN_EMAILS` allow-list. See [`admin.md`](admin.md).

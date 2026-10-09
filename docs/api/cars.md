@@ -68,7 +68,7 @@ Authorization: Bearer <token>
 **Answers** `200`:
 
 ```json
-{"whatsapp_url":"https://wa.me/56912345678?text=Hi%2C%20I%20saw%20your%20Toyota%20Yaris%20on%20PinolRent"}
+{"whatsapp_url":"https://wa.me/50581234567?text=Hi%2C%20I%20saw%20your%20Toyota%20Yaris%20on%20PinolRent"}
 ```
 
 The message comes prefilled with the car name, and the number uses the international format without `+`, as `wa.me` requires.

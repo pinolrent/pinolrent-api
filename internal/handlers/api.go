@@ -23,11 +23,17 @@ type API struct {
 	// Registration consults it so an administrator account created after the
 	// last startup already carries the role.
 	AdminEmails map[string]bool
+	// PhoneCountryPrefix and PhoneNationalLen say what a bare phone number
+	// means: it is completed with +PhoneCountryPrefix and must have
+	// PhoneNationalLen digits. New defaults them to Nicaragua (+505, 8);
+	// cmd/api overwrites them from PHONE_COUNTRY_PREFIX / PHONE_NATIONAL_LEN.
+	PhoneCountryPrefix string
+	PhoneNationalLen   int
 }
 
 // New returns an API bound to the given database pool and auth provider.
 func New(db *sql.DB, a *auth.Auth) *API {
-	return &API{DB: db, Auth: a}
+	return &API{DB: db, Auth: a, PhoneCountryPrefix: "505", PhoneNationalLen: 8}
 }
 
 // isAdminEmail reports whether the address is on the administrator

@@ -28,6 +28,12 @@ type Config struct {
 	// Empty (the default) means the deployment has no administrator, which
 	// is a valid state: every route still works, only /admin is unreachable.
 	AdminEmails string `env:"ADMIN_EMAILS"`
+	// PhoneCountryPrefix is the E.164 country code that completes a local
+	// phone number, and PhoneNationalLen its digit count: together they say
+	// what a bare number means. Defaults describe Nicaragua (+505, 8 digits);
+	// a Chilean deployment reconfigures both.
+	PhoneCountryPrefix string `env:"PHONE_COUNTRY_PREFIX" envDefault:"505"`
+	PhoneNationalLen   int    `env:"PHONE_NATIONAL_LEN" envDefault:"8"`
 }
 
 // Load reads the configuration from the environment, applying defaults for
@@ -44,6 +50,8 @@ func Load() Config {
 		UploadMaxTotalMB:   getenvInt("UPLOAD_MAX_TOTAL_MB", 1024),
 		TrustedProxyCIDRs:  getenv("TRUSTED_PROXY_CIDRS", ""),
 		AdminEmails:        getenv("ADMIN_EMAILS", ""),
+		PhoneCountryPrefix: getenv("PHONE_COUNTRY_PREFIX", "505"),
+		PhoneNationalLen:   getenvInt("PHONE_NATIONAL_LEN", 8),
 	}
 }
 
@@ -102,6 +110,37 @@ func (c Config) Validate() error {
 	}
 	if _, err := c.AdminEmailList(); err != nil {
 		return err
+	}
+	if err := c.validatePhoneCountry(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// validatePhoneCountry checks the pair the normalizer relies on: a digit-only
+// country code that does not start with 0 and a national length that fits.
+// Both bounds together keep the sum inside E.164 (3 + 12 <= 15 digits). A
+// typo here would silently corrupt every local number, so it fails startup.
+func (c Config) validatePhoneCountry() error {
+	// An unset pair (a Config built by hand, never through Load) has nothing
+	// to validate; Load always fills both defaults.
+	if c.PhoneCountryPrefix == "" && c.PhoneNationalLen == 0 {
+		return nil
+	}
+	p := c.PhoneCountryPrefix
+	if p == "" || len(p) > 3 {
+		return fmt.Errorf("invalid PHONE_COUNTRY_PREFIX %q: want 1-3 digits like 505", p)
+	}
+	for _, r := range p {
+		if r < '0' || r > '9' {
+			return fmt.Errorf("invalid PHONE_COUNTRY_PREFIX %q: want 1-3 digits like 505", p)
+		}
+	}
+	if p[0] == '0' {
+		return fmt.Errorf("invalid PHONE_COUNTRY_PREFIX %q: country codes do not start with 0", p)
+	}
+	if c.PhoneNationalLen < 4 || c.PhoneNationalLen > 12 {
+		return fmt.Errorf("invalid PHONE_NATIONAL_LEN %d: want 4-12 digits", c.PhoneNationalLen)
 	}
 	return nil
 }

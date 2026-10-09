@@ -41,8 +41,8 @@ func TestCarContactReturnsWhatsappLink(t *testing.T) {
 	if u.Host != "wa.me" {
 		t.Fatalf("host = %q, want wa.me", u.Host)
 	}
-	if got := strings.TrimPrefix(u.Path, "/"); got != "56912345678" {
-		t.Fatalf("number in link = %q, want 56912345678 (no leading +)", got)
+	if got := strings.TrimPrefix(u.Path, "/"); got != "50581234567" {
+		t.Fatalf("number in link = %q, want 50581234567 (no leading +)", got)
 	}
 	if msg := u.Query().Get("text"); !strings.Contains(msg, "Toyota Yaris") {
 		t.Fatalf("prefilled message %q should mention the car", msg)
@@ -113,7 +113,7 @@ func TestCarContactNotInPublicCatalog(t *testing.T) {
 			t.Fatalf("GET %s: status = %d", path, rec.Code)
 		}
 		body := rec.Body.String()
-		if strings.Contains(body, "whatsapp") || strings.Contains(body, "56912345678") {
+		if strings.Contains(body, "whatsapp") || strings.Contains(body, "50581234567") {
 			t.Fatalf("GET %s leaks the seller contact: %s", path, body)
 		}
 	}
