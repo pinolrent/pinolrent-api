@@ -69,5 +69,7 @@ A file-level copy of a database that is being written can come out inconsistent,
 
 - With a daily snapshot you can lose up to 24 h of data if the server dies; the off-site copy does not change that, it only avoids losing everything.
 - `uploads/` has a total quota (`UPLOAD_MAX_TOTAL_MB`, default 1 GB) and a sweep every 6 hours deletes orphan files older than 7 days; even so it is worth checking the disk every so often.
-- `WriteTimeout` is 120 s: a 5 MB upload survives from ~37 KB/s, but on truly miserable links it can still get cut.
+- `WriteTimeout` is 120 s: the whole request body is capped at 5.5 MB (5 MB of
+  image plus multipart overhead), so an upload needs a sustained ~48 KB/s to
+  land. Below that it can still get cut.
 - The rate limit is in memory and per process: with a single instance that is correct, but restarting the process resets it.
