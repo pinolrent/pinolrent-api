@@ -55,7 +55,7 @@ Lists the accounts of the platform. Supports filters and pagination.
 ```json
 {
   "items": [
-    {"id": 1, "email": "admin@example.com", "roles": ["admin", "buyer"], "phone": ""},
+    {"id": 1, "email": "admin@example.com", "roles": ["admin", "buyer"]},
     {"id": 2, "email": "seller@example.com", "phone": "+50581234567", "roles": ["buyer", "seller"]},
     {"id": 3, "email": "suspended@example.com", "roles": ["buyer"], "suspended_at": 1730000000}
   ],
@@ -65,7 +65,8 @@ Lists the accounts of the platform. Supports filters and pagination.
 }
 ```
 
-`phone` comes back empty if the account has none. `suspended_at` (Unix) only
+`phone` is omitted when the account has none (the detail endpoint below
+always includes it). `suspended_at` (Unix) only
 shows up on suspended accounts. `roles` always comes back alphabetically sorted.
 
 **Errors:**
@@ -80,7 +81,8 @@ shows up on suspended accounts. `roles` always comes back alphabetically sorted.
 ## `GET /admin/users/{id}`
 
 Detail of an account: id, email, phone, roles and `suspended_at` when it is
-suspended. Same shape as an item of the listing.
+suspended. Same shape as an item of the listing, except that `phone` is always
+present here (empty string when the account has none).
 
 **Errors:**
 
