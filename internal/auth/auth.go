@@ -214,12 +214,6 @@ func (a *Auth) RevokeFromRequest(r *http.Request) (status int, msg string) {
 	if err != nil {
 		return http.StatusUnauthorized, "invalid or expired token"
 	}
-	if claims.JTI() == "" {
-		// Tokens issued before the jti migration (or with a custom
-		// parser) cannot be revoked individually; treat as bad
-		// request so the operator knows to rotate the secret instead.
-		return http.StatusBadRequest, "token cannot be revoked"
-	}
 	if err := a.Revoke(r.Context(), claims.UserID, claims.JTI(), claims.ExpiresAtUnix()); err != nil {
 		return http.StatusInternalServerError, "server error"
 	}
