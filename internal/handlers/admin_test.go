@@ -648,10 +648,55 @@ func TestAdminStatsCountsPlatform(t *testing.T) {
 	if out.Payments.Approved != 1 {
 		t.Fatalf("payments.approved = %d, want 1", out.Payments.Approved)
 	}
-	// Two days at 45000, summed as an integer even though julianday yields
-	// a float.
-	if out.Payments.ApprovedTotal != 90000 {
-		t.Fatalf("payments.approved_total = %d, want 90000", out.Payments.ApprovedTotal)
+	// Three inclusive days (futureDate(5)..futureDate(7)) at 45000, summed
+	// as an integer even though julianday yields a float.
+	if out.Payments.ApprovedTotal != 135000 {
+		t.Fatalf("payments.approved_total = %d, want 135000", out.Payments.ApprovedTotal)
+	}
+}
+
+// TestAdminStatsBillsSameDayAsOneDay pins the inclusive day count: a
+// same-day rental is one day of revenue, not zero. end_date - start_date
+// alone reports it as nothing.
+func TestAdminStatsBillsSameDayAsOneDay(t *testing.T) {
+	a := newTestAPI(t)
+	admin, _ := newAdmin(t, a)
+	seller := newSeller(t, a)
+	buyer := registerBuyer(t, a, "sameday@example.com", "secret123")
+	car := createCar(t, a, seller, map[string]any{"name": "Kia Picanto", "price_per_day": 50000})
+
+	rec := doJSON(t, a, "POST", "/reservations", buyer, map[string]any{
+		"car_id": car.ID, "start_date": futureDate(3), "end_date": futureDate(3),
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("reserve: %d body %s", rec.Code, rec.Body.String())
+	}
+	var res struct {
+		ID int64 `json:"id"`
+	}
+	decodeJSON(t, rec, &res)
+
+	rec = doJSON(t, a, "POST", fmt.Sprintf("/reservations/%d/payment", res.ID), buyer, map[string]any{"method": "pos"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("pay: %d body %s", rec.Code, rec.Body.String())
+	}
+	if _, err := a.DB.ExecContext(context.Background(), `UPDATE payments SET status = 'approved'`); err != nil {
+		t.Fatalf("approve payment: %v", err)
+	}
+
+	rec = doJSON(t, a, "GET", "/admin/stats", admin, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("stats: status = %d body %s", rec.Code, rec.Body.String())
+	}
+	var out struct {
+		Payments struct {
+			ApprovedTotal int64 `json:"approved_total"`
+		} `json:"payments"`
+	}
+	decodeJSON(t, rec, &out)
+
+	if out.Payments.ApprovedTotal != 50000 {
+		t.Fatalf("payments.approved_total = %d, want 50000", out.Payments.ApprovedTotal)
 	}
 }
 
