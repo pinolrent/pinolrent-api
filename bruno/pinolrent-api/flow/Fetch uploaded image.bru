@@ -1,0 +1,14 @@
+meta {
+  name: Fetch uploaded image
+  type: http
+  seq: 65
+}
+
+get {
+  url: {{baseUrl}}{{uploadUrl}}
+  body: none
+}
+
+assert {
+  res.status: eq 200
+}

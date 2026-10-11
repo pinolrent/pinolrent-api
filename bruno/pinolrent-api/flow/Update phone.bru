@@ -1,0 +1,26 @@
+meta {
+  name: Update phone
+  type: http
+  seq: 63
+}
+
+patch {
+  url: {{baseUrl}}/auth/me
+  body: json
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{buyerToken}}
+}
+
+body:json {
+  {
+    "phone": "{{sellerPhone}}"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.phone: isDefined
+}

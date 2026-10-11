@@ -1,0 +1,26 @@
+meta {
+  name: Admin grant seller
+  type: http
+  seq: 64
+}
+
+patch {
+  url: {{baseUrl}}/admin/users/{{buyerUserId}}/roles
+  body: json
+}
+
+headers {
+  Content-Type: application/json
+  Authorization: Bearer {{adminToken}}
+}
+
+body:json {
+  {
+    "seller": true
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body.roles: isDefined
+}
