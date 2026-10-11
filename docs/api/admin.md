@@ -238,6 +238,9 @@ no need to chain calls.
 **Query:** `status` (`pending`, `accepted`, `confirmed`, `rejected`,
 `cancelled`), `user_id`, `car_id`, `limit`, `offset`.
 
+**Errors:** `400` with `invalid status`, `invalid user_id`, `invalid car_id`,
+`invalid limit` or `invalid offset`.
+
 ```json
 {
   "items": [
@@ -324,6 +327,9 @@ Lists every payment, with the reservation and buyer context.
 
 **Query:** `status` (`pending`, `approved`, `rejected`), `reservation_id`,
 `limit`, `offset`.
+
+**Errors:** `400` with `invalid status`, `invalid reservation_id`,
+`invalid limit` or `invalid offset`.
 
 ```json
 {
