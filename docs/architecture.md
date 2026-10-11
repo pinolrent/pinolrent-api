@@ -129,7 +129,7 @@ Blocking has three deliberate strictness levels for three different questions:
 
 - The body cannot exceed **1 MB**. Malformed JSON or fields that do not exist answer `400`. Going over the size answers `413`.
 - `price_per_day` between `0` and `100_000_000` cents. `name` up to 200 characters.
-- `photo_url` and `proof_url`, when present, must be `http(s)` URLs of up to 2048 characters.
+- `photo_url` and `proof_url`, when present, must be `http(s)` URLs or `/uploads/...` paths of up to 2048 characters.
 - Emails: lowercased and limited to 254 characters (format validated: no dots/hyphens on the edges, no consecutive `..`, TLD of at least 2 letters). Passwords: 8 to 72.
 
 **All or nothing:**

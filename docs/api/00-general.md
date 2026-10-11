@@ -58,7 +58,7 @@ Always like this:
 
 ## Pagination
 
-The listings (`GET /cars`, `GET /seller/cars`, `GET /reservations`, `GET /seller/reservations`) accept:
+The listings (`GET /cars`, `GET /seller/cars`, `GET /reservations`, `GET /seller/reservations`, `GET /notifications`) accept:
 
 | Parameter | Default | Rules |
 |-----------|---------|-------|
@@ -67,7 +67,7 @@ The listings (`GET /cars`, `GET /seller/cars`, `GET /reservations`, `GET /seller
 
 They return a **plain array**. To know whether there is more, ask for `limit+1` and see whether one extra item came back.
 
-The admin listings (`/admin/users`, `/admin/cars`, `/admin/reservations`, `/admin/payments`, `/admin/audit`) return an **object** with `items`, `total`, `limit` and `offset`.
+The admin listings (`/admin/users`, `/admin/cars`, `/admin/reservations`, `/admin/payments`, `/admin/notifications`, `/admin/audit`) return an **object** with `items`, `total`, `limit` and `offset`.
 
 ## Endpoints
 

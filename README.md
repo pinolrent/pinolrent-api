@@ -20,37 +20,37 @@ make watch   # starts with hot reload on edit (requires make tools)
 
 ## Endpoints
 
-| Method | Path | Needs login? | What it does |
-|--------|------|--------------|--------------|
-| GET | `/health` | no | See whether the server and the database are fine |
-| POST | `/auth/register` | no | Create an account (with a phone: also a seller) |
-| POST | `/auth/become-seller` | yes | Enable seller mode on your account |
-| POST | `/auth/login` | no | Log in and get access (15 min) + refresh (7 days) |
-| POST | `/auth/refresh` | no | Renew the pair with a single-use refresh token |
-| GET | `/auth/me` | yes | See your own profile |
-| PATCH | `/auth/me` | yes | Fix your contact phone |
-| PATCH | `/auth/password` | yes | Change your password (closes all your sessions) |
-| POST | `/auth/logout` | yes | Log out (invalidates your current token) |
-| GET | `/cars` | no | See available cars (you can filter by dates or seller) |
-| GET | `/cars/{id}` | no | See the detail of a car |
-| GET | `/cars/{id}/contact` | yes | Seller's WhatsApp link (to coordinate) |
-| GET · POST | `/seller/cars` | seller | See your cars and add a new one |
-| PATCH | `/seller/cars/{id}` | seller | Edit name, price or photo; activate/deactivate |
-| DELETE | `/seller/cars/{id}` | seller | Delete a car that never had reservations |
-| POST | `/reservations` | yes | Book a car |
-| GET | `/reservations` · `/reservations/{id}` | yes | See your reservations |
-| PATCH | `/reservations/{id}/cancel` | yes | Cancel one of your reservations (only if you have not paid yet) |
-| POST | `/reservations/{id}/payment` | yes | Pay for a reservation (`pos` or `cash`) |
-| GET | `/seller/reservations` | seller | See the reservations of your cars |
-| PATCH | `/seller/reservations/{id}/accept` | seller | Accept a pending reservation of your cars |
-| PATCH | `/seller/reservations/{id}/reject` | seller | Reject a pending reservation (its pending payment is rejected too) |
-| GET | `/notifications` | yes | See your own notifications |
-| PATCH | `/notifications/{id}/read` | yes | Mark one of your notifications as read |
-| PATCH | `/admin/reservations/{id}/confirm` | admin | Confirm an accepted reservation and approve its payment |
-| PATCH | `/admin/reservations/{id}/request-correction` | admin | Reject the payment so the buyer uploads a new proof |
-| GET | `/admin/users` · `/admin/cars` · `/admin/reservations` · `/admin/payments` · `/admin/notifications` · `/admin/stats` · `/admin/audit` | admin | Operate and inspect the platform (see the API reference for detail) |
-| POST | `/uploads` | yes | Upload an image (jpg/png/webp, 5 MB) and get its local URL; jpg/png are re-encoded without metadata |
-| GET | `/uploads/` | no | Serve an uploaded image (subtree, basename only) |
+| Method | Path | Needs login? | What it does | Doc |
+|--------|------|--------------|--------------|-----|
+| GET | `/health` | no | See whether the server and the database are fine | [auth](docs/api/auth.md) |
+| POST | `/auth/register` | no | Create an account (with a phone: also a seller) | [auth](docs/api/auth.md) |
+| POST | `/auth/become-seller` | yes | Enable seller mode on your account | [auth](docs/api/auth.md) |
+| POST | `/auth/login` | no | Log in and get access (15 min) + refresh (7 days) | [auth](docs/api/auth.md) |
+| POST | `/auth/refresh` | no | Renew the pair with a single-use refresh token | [auth](docs/api/auth.md) |
+| GET | `/auth/me` | yes | See your own profile | [auth](docs/api/auth.md) |
+| PATCH | `/auth/me` | yes | Fix your contact phone | [auth](docs/api/auth.md) |
+| PATCH | `/auth/password` | yes | Change your password (closes all your sessions) | [auth](docs/api/auth.md) |
+| POST | `/auth/logout` | yes | Log out (invalidates your current token) | [auth](docs/api/auth.md) |
+| GET | `/cars` | no | See available cars (you can filter by dates or seller) | [cars](docs/api/cars.md) |
+| GET | `/cars/{id}` | no | See the detail of a car | [cars](docs/api/cars.md) |
+| GET | `/cars/{id}/contact` | yes | Seller's WhatsApp link (to coordinate) | [cars](docs/api/cars.md) |
+| GET · POST | `/seller/cars` | seller | See your cars and add a new one | [cars](docs/api/cars.md) |
+| PATCH | `/seller/cars/{id}` | seller | Edit name, price or photo; activate/deactivate | [cars](docs/api/cars.md) |
+| DELETE | `/seller/cars/{id}` | seller | Delete a car that never had reservations | [cars](docs/api/cars.md) |
+| POST | `/reservations` | yes | Book a car | [reservations](docs/api/reservations.md) |
+| GET | `/reservations` · `/reservations/{id}` | yes | See your reservations | [reservations](docs/api/reservations.md) |
+| PATCH | `/reservations/{id}/cancel` | yes | Cancel one of your reservations (only if you have not paid yet) | [reservations](docs/api/reservations.md) |
+| POST | `/reservations/{id}/payment` | yes | Pay for a reservation (`pos` or `cash`) | [payments](docs/api/payments.md) |
+| GET | `/seller/reservations` | seller | See the reservations of your cars | [payments](docs/api/payments.md) |
+| PATCH | `/seller/reservations/{id}/accept` | seller | Accept a pending reservation of your cars | [payments](docs/api/payments.md) |
+| PATCH | `/seller/reservations/{id}/reject` | seller | Reject a pending reservation (its pending payment is rejected too) | [payments](docs/api/payments.md) |
+| GET | `/notifications` | yes | See your own notifications | [notifications](docs/api/notifications.md) |
+| PATCH | `/notifications/{id}/read` | yes | Mark one of your notifications as read | [notifications](docs/api/notifications.md) |
+| PATCH | `/admin/reservations/{id}/confirm` | admin | Confirm an accepted reservation and approve its payment | [admin](docs/api/admin.md) |
+| PATCH | `/admin/reservations/{id}/request-correction` | admin | Reject the payment so the buyer uploads a new proof | [admin](docs/api/admin.md) |
+| GET | `/admin/users` · `/admin/cars` · `/admin/reservations` · `/admin/payments` · `/admin/notifications` · `/admin/stats` · `/admin/audit` | admin | Operate and inspect the platform | [admin](docs/api/admin.md) |
+| POST | `/uploads` | yes | Upload an image (jpg/png/webp, 5 MB) and get its local URL; jpg/png are re-encoded without metadata | [uploads](docs/api/uploads.md) |
+| GET | `/uploads/` | no | Serve an uploaded image (subtree, basename only) | [uploads](docs/api/uploads.md) |
 
 If you try to read or touch something that is not yours, the API answers `404` as if it did not exist.
 

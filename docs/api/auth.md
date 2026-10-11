@@ -179,13 +179,13 @@ Updates your phone. Requires login. It is the only editable field: the email ide
 
 | Field | Type | Required? | Rules |
 |-------|------|-----------|-------|
-| `phone` | text | yes | same rules as on registration (normalized to E.164) |
+| `phone` | text | no | same rules as on registration (normalized to E.164); empty clears it for buyers, sellers must keep one |
 
 ```json
-{"phone":"9 8765 4321"}
+{"phone":"+50581234567"}
 ```
 
-**Answers** `200` with the updated profile, same as `GET /auth/me`.
+**Answers** `200` with the updated profile, same as `GET /auth/me`. An empty phone clears it for buyers; a seller clearing it gets `400`.
 
 | Status | Message | When |
 |--------|---------|------|

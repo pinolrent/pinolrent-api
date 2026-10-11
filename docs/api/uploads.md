@@ -35,7 +35,7 @@ The directory also has a **total quota** (`UPLOAD_MAX_TOTAL_MB`, default 1 GB, s
 
 ---
 
-## `GET /uploads/{file}`
+## `GET /uploads/`
 
 Returns the image. The route is registered as the subtree `GET /uploads/`:
 what follows must be a bare filename (a separator or a directory answers
