@@ -2,6 +2,64 @@
 
 In development the API lives at `http://localhost:8080` (change it with `PORT`).
 
+## Docs map
+
+- [Auth](auth.md) — registration, login, refresh, logout, profile, password, JWT claims.
+- [Cars](cars.md) — public catalog plus the seller CRUD.
+- [Reservations](reservations.md) — booking, buyer views, cancel, seller listing.
+- [Payments](payments.md) — buyer payment plus the seller accept/reject step.
+- [Notifications](notifications.md) — in-app fan-out per transition, audit cross-table.
+- [Uploads](uploads.md) — image upload, re-encoding rules, quota, serve path.
+- [Admin](admin.md) — users, cars, reservations, payments, stats, audit.
+- [Configuration](../configuration.md) — environment variables and startup order.
+- [Architecture](../architecture.md) — schema, state machine, blocking levels.
+- [Deployment](../deployment.md) — single-instance constraints, backups, restore.
+
+The same flow is executable: `scripts/demo.sh` (`make demo`, ephemeral DB on
+`:8132`) and the chained Bruno requests in `bruno/pinolrent-api/flow/` (`seq`
+order, tokens and IDs via variables).
+
+## End-to-end flow
+
+```sh
+BASE=http://localhost:8080
+
+# 1. Seller account (phone grants the seller role) and login.
+curl -s -X POST "$BASE/auth/register" -H 'Content-Type: application/json' \
+  -d '{"email":"seller@example.com","password":"secret123","phone":"+50581234567"}'
+SELLER_TOKEN=$(curl -s -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
+  -d '{"email":"seller@example.com","password":"secret123"}' | jq -r .token)
+
+# 2. Buyer account and login.
+curl -s -X POST "$BASE/auth/register" -H 'Content-Type: application/json' \
+  -d '{"email":"buyer@example.com","password":"secret123"}'
+BUYER_TOKEN=$(curl -s -X POST "$BASE/auth/login" -H 'Content-Type: application/json' \
+  -d '{"email":"buyer@example.com","password":"secret123"}' | jq -r .token)
+
+# 3. Seller publishes a car.
+CAR_ID=$(curl -s -X POST "$BASE/seller/cars" -H "Authorization: Bearer $SELLER_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Toyota Yaris","price_per_day":45000}' | jq -r .id)
+
+# 4. Buyer books it.
+RES_ID=$(curl -s -X POST "$BASE/reservations" -H "Authorization: Bearer $BUYER_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d "{\"car_id\":$CAR_ID,\"start_date\":\"2026-11-01\",\"end_date\":\"2026-11-05\"}" | jq -r .id)
+
+# 5. Buyer records the payment.
+curl -s -X POST "$BASE/reservations/$RES_ID/payment" -H "Authorization: Bearer $BUYER_TOKEN" \
+  -H 'Content-Type: application/json' -d '{"method":"pos"}'
+
+# 6. Seller accepts; admin confirms (needs an ADMIN_EMAILS account).
+curl -s -X PATCH "$BASE/seller/reservations/$RES_ID/accept" \
+  -H "Authorization: Bearer $SELLER_TOKEN"
+curl -s -X PATCH "$BASE/admin/reservations/$RES_ID/confirm" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
+Roles come from `GET /auth/me` → `roles`: the frontend derives its Buy | Sell
+switch from there.
+
 ## Format
 
 - Everything is **JSON** (`Content-Type: application/json`).
@@ -55,6 +113,26 @@ Always like this:
 - **Max body 1 MB** (strict JSON: sending fields that do not exist or broken JSON → `400 {"error":"invalid JSON body"}`; going over the size → `413`). `POST /uploads` accepts up to **5 MB** per image (`jpg`/`png`/`webp`); `jpg`/`png` are re-encoded without metadata and cannot declare more than 50 megapixels.
 - **Per-IP limit**: `/auth/*` → **30 per minute** (burst 30); writes (`POST`, `PATCH` and `DELETE` outside `/auth/`, e.g. `POST /reservations`, `POST /seller/cars`, `POST /uploads`, `PATCH /reservations/*/cancel`) → **120 per minute** (burst 60). Going over → `429 {"error":"too many requests"}` with header `Retry-After: 60`. `X-Forwarded-For` / `X-Real-IP` are only taken into account when the connection comes from a trusted proxy (loopback, or the networks listed in `TRUSTED_PROXY_CIDRS`); otherwise the connection IP counts.
 - **CORS** open to everyone by default (`CORS_ALLOWED_ORIGINS=*`), rejected with `ENV=prod` or `production`. In production set your origins comma-separated, e.g. `CORS_ALLOWED_ORIGINS=https://app.example.com`. `OPTIONS` preflights answer `204`; if the origin is not allowed, the response carries no `Access-Control-Allow-Origin` and the browser blocks it. The allowed methods come from the routes that exist (`GET`, `POST`, `PATCH`, `DELETE` and `OPTIONS` today), and the headers are `Authorization` and `Content-Type`. A trailing `/` in the origin is tolerated.
+
+## Troubleshooting
+
+| Symptom | Likely cause | What to check |
+|---------|--------------|---------------|
+| `400 invalid JSON body` | Broken JSON or unknown fields (strict decoding) | Field names against the endpoint table; no trailing commas |
+| `401 missing bearer token` | No `Authorization: Bearer <token>` header | Header present, `Bearer` prefix, token not truncated |
+| `401 invalid or expired token` | Expired access token (15 min), rotated refresh token, logout, password change, reused refresh (kills all sessions) | Log in again; use the newest refresh token exactly once |
+| `403 insufficient permissions` | Valid token, missing role (`seller` for `/seller/*`, `admin` for `/admin/*`) | `GET /auth/me` → `roles` |
+| `403 account suspended` | Admin suspended the account | Admin reactivates via `PATCH /admin/users/{id}` |
+| `404` on something that exists | Privacy rule: not yours reads as missing | Buyer sees own reservations; seller sees own cars/reservations |
+| `409 car already reserved for the requested dates` | Overlapping `pending`/`accepted`/`confirmed` reservation | Change dates or pick another car |
+| `409 reservation is not pending` / `is not accepted` | Wrong state for the transition | State table in [Architecture](../architecture.md) |
+| `413` | JSON body over 1 MB, or image over 5 MB on `POST /uploads` | Shrink body; re-encode image |
+| `415` | Non-image or non-jpg/png/webp upload (sniffed by content) | Convert to jpg/png/webp |
+| `429 too many requests` | `/auth/*` over 30/min or writes over 120/min per IP; `Retry-After: 60` | Back off; behind a proxy check `TRUSTED_PROXY_CIDRS` in [Configuration](../configuration.md) |
+| `503` on `/health` or writes | Database busy (`503` + `Retry-After` on writes; `degraded` on health) | Retry; never treat as `500` |
+| `507 storage quota exceeded` | `UPLOAD_DIR` over `UPLOAD_MAX_TOTAL_MB` | Prune uploads or raise the quota |
+
+Send `X-Request-Id` to correlate a failing call with its server log line.
 
 ## Pagination
 
