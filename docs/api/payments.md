@@ -42,6 +42,7 @@ Rules: the reservation must exist and be yours, must still be `pending` or `acce
 | `409` | `payment already recorded` | It already has a payment |
 | `400` | `invalid JSON body` | Broken JSON or unknown fields |
 | `413` | `request body too large` | More than 1 MB |
+| `401` | see [00-general](00-general.md) | No token or invalid token |
 
 ---
 
@@ -71,6 +72,11 @@ The owner accepts the buyer's request: the first half of the two-step confirmati
 | `400` | `invalid reservation id` | `{id}` is not a number |
 | `404` | `reservation not found` | It does not exist or the car is not yours |
 | `409` | `reservation is not pending` | Already accepted, confirmed, rejected or cancelled |
+| `401` / `403` | see [00-general](00-general.md) | No token or no `seller` role |
+
+Accepting only moves `pending` → `accepted`. The administrator still has to
+validate the payment via `PATCH /admin/reservations/{id}/confirm` in
+[admin](admin.md).
 
 ---
 
@@ -100,3 +106,4 @@ The owner turns the buyer's request down, releasing the dates. It moves `reserva
 | `400` | `invalid reservation id` | `{id}` is not a number |
 | `404` | `reservation not found` | It does not exist or the car is not yours |
 | `409` | `reservation is not pending` | Already accepted, confirmed, rejected or cancelled |
+| `401` / `403` | see [00-general](00-general.md) | No token or no `seller` role |

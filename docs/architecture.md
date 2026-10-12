@@ -160,7 +160,8 @@ outside the handler file for its domain.
 - `dates.go` — `YYYY-MM-DD` parsing, today bound and the rental length cap.
 - `auth.go` (+ `phone.go`) — registration, login, tokens, profile.
 - `cars.go` + `cars_validate.go` + `cars_query.go` — catalog endpoints,
-  field validators and row scanning.
+  field validators and row scanning. The seller contact (`GetCarContact`,
+  `GET /cars/{id}/contact`) lives in `cars.go`.
 - `reservations.go` + `reservations_query.go` — booking endpoints, the
   reservation view and its scan helper.
 - `seller_review.go` — the owner's accept/reject of a request.
@@ -171,8 +172,10 @@ outside the handler file for its domain.
 - `uploads.go` + `uploads_files.go` — upload/serve/cleanup endpoints plus
   image re-encoding and disk-usage helpers.
 - `admin_*.go` — one file per admin domain: `audit` (log + helper),
-  `users`, `cars`, `reservations`, `payments`, `notifications`, `stats`
-  (the confirm/request-correction flow lives in `admin_confirm.go` above).
+  `users`, `cars`, `reservations`, `payments`, `notifications`, `stats`,
+  plus `admin_list.go` (shared listing envelope) and `admin_confirm.go`
+  above for the confirm/request-correction flow.
+- `internal/httpx` — the shared HTTP error envelope used by every handler.
 
 `internal/db/tx.go` exposes `WithImmediateTx`: callbacks return business-rule
 outcomes as errors and the handler maps them to HTTP once, outside the

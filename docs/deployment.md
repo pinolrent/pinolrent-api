@@ -29,6 +29,30 @@ See [Configuration](configuration.md) for how the `X-Forwarded-For` chain is wal
 
 The container must mount `/data` as a persistent volume: that is where the database lives (`pinolrent.db` with its `-wal`/`-shm`) along with `uploads/`. The healthcheck hits `GET /health` (port 8080). The image reports the version from the `VERSION` build-arg (CI passes `ci-<sha>`); without it the build falls back to `git describe`, which finds no `.git` in the build context (it is in `.dockerignore`) and answers `dev`.
 
+## Container image
+
+```sh
+docker build -t pinolrent-api:local .
+docker run --rm -p 8080:8080 \
+  -e JWT_SECRET="$(openssl rand -base64 32)" \
+  -e ENV=prod \
+  -e CORS_ALLOWED_ORIGINS=https://app.example.com \
+  -e TRUSTED_PROXY_CIDRS=10.0.0.0/16 \
+  -v pinolrent-data:/data \
+  pinolrent-api:local
+```
+
+The image is static (`modernc.org/sqlite` is pure Go, no cgo). At runtime it
+needs no toolchain: only `ca-certificates`, `sqlite` (for the snapshot job) and
+`su-exec`. `deploy/docker-entrypoint.sh` starts as root to fix the `/data`
+owner, then drops to the `app` user (uid 10001). Default runtime env inside the
+image: `DATABASE_URL=/data/pinolrent.db`, `UPLOAD_DIR=/data/uploads`, `PORT=8080`.
+Pass `VERSION` to bake a version string:
+
+```sh
+docker build --build-arg VERSION=v0.2.0 -t pinolrent-api:v0.2.0 .
+```
+
 ## Deploy and rollback
 
 1. Push to `main`: the deployment platform, with auto-deploy (webhook) connected to the repo, rebuilds the image and replaces the container. Migrations apply themselves on startup and are additive.
