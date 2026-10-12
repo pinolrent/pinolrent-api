@@ -95,8 +95,20 @@ What happens on startup:
 
 ## Development
 
-With `make dev` you do not need to create a `.env`: `scripts/dev.sh` sets the defaults (`JWT_SECRET=dev-secret-not-for-production-32b`, `DATABASE_URL=dev.db`) and starts with `go run`. If you run `make run` or `go run ./cmd/api` directly without variables, it does ask for the secret (that is the real production behaviour). `scripts/dev.sh` also rejects `CORS_ALLOWED_ORIGINS=*` when `ENV=prod`.
+With `make dev` you do not need to create a `.env`: when no `.env` exists,
+`scripts/dev.sh` exports dev defaults (`JWT_SECRET=dev-secret-not-for-production-32b`,
+`DATABASE_URL=dev.db`) and starts with `go run`. Shell variables already set win
+over those defaults. If you run `make run` or `go run ./cmd/api` directly
+without variables, it does ask for the secret (that is the real production
+behaviour). `scripts/dev.sh` also refuses a dev secret or `CORS_ALLOWED_ORIGINS=*`
+when `ENV=prod`.
 
-You can copy `.env.example` to `.env` to change those values.
+To override the defaults persistently, copy the example and edit it:
+
+```sh
+cp .env.example .env
+# set JWT_SECRET, ADMIN_EMAILS, TRUSTED_PROXY_CIDRS, ...
+make dev   # loads .env; shell variables still win over it
+```
 
 > `dev.db` and its files (`-wal`, `-shm`) are in `.gitignore`: do not commit them.
