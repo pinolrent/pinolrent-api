@@ -107,4 +107,16 @@ Cancelling makes those dates available again.
 
 Reservations for your cars as a seller, newest first. Requires `seller` membership. Accepts `limit`/`offset`.
 
+```
+Authorization: Bearer <token>
+```
+
 An array of reservations. No reservations → `[]`.
+
+| Status | Message | When |
+|--------|---------|------|
+| `400` | `invalid limit` / `invalid offset` | Bad pagination (`offset` max 10000) |
+| `401` | see [00-general](00-general.md) | No token or invalid token |
+| `403` | `insufficient permissions` | Valid token without the `seller` role |
+
+Deciding on a request happens in [payments](payments.md) (`accept` / `reject`); confirming it is the administrator's call in [admin](admin.md).
