@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -485,5 +486,50 @@ func TestLocalUploadURLAccepted(t *testing.T) {
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("photo_url %q: status = %d, want 400", u, rec.Code)
 		}
+	}
+}
+
+// TestDecodeSlotLimitsConcurrency pins the semaphore that keeps a burst of
+// uploads from decoding 60 images at once: once every slot is busy, one more
+// caller waits for a slot instead of entering.
+func TestDecodeSlotLimitsConcurrency(t *testing.T) {
+	if cap(decodeSlots) != decodeConcurrency {
+		t.Fatalf("decodeSlots capacity = %d, want %d", cap(decodeSlots), decodeConcurrency)
+	}
+	release := make(chan struct{})
+	entered := make(chan struct{}, decodeConcurrency)
+	var wg sync.WaitGroup
+	for i := 0; i < decodeConcurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _ = withDecodeSlot(context.Background(), func() ([]byte, error) {
+				entered <- struct{}{}
+				<-release
+				return nil, nil
+			})
+		}()
+	}
+	for i := 0; i < decodeConcurrency; i++ {
+		<-entered
+	}
+
+	waited := make(chan struct{})
+	go func() {
+		_, _ = withDecodeSlot(context.Background(), func() ([]byte, error) { return nil, nil })
+		close(waited)
+	}()
+	select {
+	case <-waited:
+		t.Fatal("withDecodeSlot did not wait while every slot was busy")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	close(release)
+	wg.Wait()
+	select {
+	case <-waited:
+	case <-time.After(time.Second):
+		t.Fatal("withDecodeSlot did not resume after a slot was freed")
 	}
 }

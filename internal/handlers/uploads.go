@@ -110,9 +110,14 @@ func (a *API) UploadFile(w http.ResponseWriter, r *http.Request) {
 	// ancillary chunks are dropped by construction. webp has no encoder in
 	// the stdlib, so it stays a passthrough and keeps whatever it carries.
 	if ext != ".webp" {
-		body, err = stripImageMetadata(data, ext)
+		body, err = withDecodeSlot(r.Context(), func() ([]byte, error) {
+			return stripImageMetadata(data, ext)
+		})
 		if err != nil {
 			switch {
+			case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+				// The client is gone; there is nobody to answer.
+				return
 			case errors.Is(err, errImageTooLarge):
 				writeError(w, http.StatusRequestEntityTooLarge, "image dimensions too large")
 			case errors.Is(err, errInvalidImageData):
