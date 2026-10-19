@@ -10,27 +10,6 @@ import (
 	"github.com/pinolrent/pinolrent-api/internal/models"
 )
 
-// Notification kinds fan out on every reservation transition: the owner learns
-// about new requests and about cancellations that free its dates, the buyer
-// about decisions, and the administrators about the requests that need their
-// review.
-const (
-	notifyRequested           = "reservation.requested"
-	notifyAccepted            = "reservation.accepted"
-	notifyRejected            = "reservation.rejected"
-	notifyConfirmed           = "reservation.confirmed"
-	notifyCorrectionRequested = "reservation.correction_requested"
-	notifyCancelled           = "reservation.cancelled"
-)
-
-func validNotifyKind(s string) bool {
-	switch s {
-	case notifyRequested, notifyAccepted, notifyRejected, notifyConfirmed, notifyCorrectionRequested, notifyCancelled:
-		return true
-	}
-	return false
-}
-
 // notifyUsers records one notification per user inside the caller's
 // transaction, so the note and the transition it announces commit together.
 // Callers fan out to a computed recipient list (administrators plus the

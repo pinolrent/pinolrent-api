@@ -184,6 +184,6 @@ responses from inside one.
 
 ## Server and logs
 
-- Timeouts: header 5 s, read 10 s, write 120 s (generous so a 5 MB upload gets through from a slow link), idle 60 s. Max header 1 MB.
-- Every request leaves a log line with method, path, status and duration; if the caller sends `X-Request-Id` it is included for correlation.
+- Timeouts: header 5 s, read 120 s (the budget for a 5 MB upload on a slow link), write 120 s, idle 60 s. Max header 1 MB.
+- Every request leaves a log line with method, client IP, path, status and duration; if the caller sends `X-Request-Id` it is included for correlation. The IP is the same one the rate limiter buckets by, so it honors `TRUSTED_PROXY_CIDRS`.
 - `GET /health` answers `{"status":"ok","version":"..."}` (or `503 degraded` if the database does not answer); the version is injected by `make build`. On `SIGINT`/`SIGTERM` it shuts down cleanly in up to 10 s.

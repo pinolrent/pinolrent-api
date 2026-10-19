@@ -46,7 +46,7 @@ func NewRouter(a *API, origins []string) http.Handler {
 	}
 
 	inner := strict.Middleware(mux, authNamespace)
-	return WithCORS(origins, a.allowedMethods())(WithSecurityHeaders(WithRequestLog(WithRecover(inner))))
+	return WithCORS(origins, a.allowedMethods())(WithSecurityHeaders(WithRequestLog(a.TrustedProxies)(WithRecover(inner))))
 }
 
 // limiterFor maps a route's kind to the limiter that enforces it, or to a

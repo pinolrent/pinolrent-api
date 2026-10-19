@@ -20,11 +20,23 @@ func WithImmediateTx(ctx context.Context, db *sql.DB, fn func(conn *sql.Conn) er
 		return err
 	}
 
+	committed := false
+	// Rollback runs on every exit that did not commit, including a panic in
+	// fn and a failed COMMIT. The connection returns to the pool either way,
+	// and an open transaction there would make the next BEGIN fail.
+	defer func() {
+		if !committed {
+			_, _ = conn.ExecContext(context.WithoutCancel(ctx), "ROLLBACK")
+		}
+	}()
+
 	if err := fn(conn); err != nil {
-		_, _ = conn.ExecContext(context.WithoutCancel(ctx), "ROLLBACK")
 		return err
 	}
 
-	_, err = conn.ExecContext(ctx, "COMMIT")
-	return err
+	if _, err := conn.ExecContext(ctx, "COMMIT"); err != nil {
+		return err
+	}
+	committed = true
+	return nil
 }

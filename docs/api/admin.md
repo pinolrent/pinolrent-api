@@ -109,7 +109,8 @@ Reactivating it restores access without logging in again.
 {"suspended": true}
 ```
 
-**Answers** `200` with the updated state of the account.
+**Answers** `200` with the updated state of the account, the same shape as
+`GET /admin/users/{id}`.
 
 The operation is idempotent: suspending an already suspended account returns
 `200` without writing anything, neither in the database nor in the audit trail.
@@ -306,7 +307,8 @@ what each account was told.
 
 **Query:** `user_id`, `kind` (one of `reservation.requested`,
 `reservation.accepted`, `reservation.rejected`, `reservation.confirmed`,
-`reservation.correction_requested`, `reservation.cancelled`), `unread`
+`reservation.correction_requested`, `reservation.cancelled`,
+`reservation.correction_submitted`), `unread`
 (`true`/`false`), `limit`, `offset`.
 
 **Answers** `200`: `{"items": [...], "total": N, "limit": 50, "offset": 0}`,

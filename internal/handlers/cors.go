@@ -16,7 +16,7 @@ func WithCORS(origins []string, methods []string) func(http.Handler) http.Handle
 	c := cors.New(cors.Options{
 		AllowedOrigins: origins,
 		AllowedMethods: methods,
-		AllowedHeaders: []string{"Authorization", "Content-Type"},
+		AllowedHeaders: []string{"Authorization", "Content-Type", "X-Request-Id"},
 		MaxAge:         86400,
 	})
 	return c.Handler

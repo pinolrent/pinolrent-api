@@ -147,13 +147,17 @@ func TestValidateBadPort(t *testing.T) {
 }
 
 func TestValidateCORSStarInProd(t *testing.T) {
-	cfg := Config{JWTSecret: testJWTSecret, CORSAllowedOrigins: "*", Env: "prod"}
-	if err := cfg.Validate(); err == nil {
-		t.Fatal("expected error for CORS=* in prod")
+	for _, env := range []string{"prod", "production", "PROD", " production "} {
+		cfg := Config{JWTSecret: testJWTSecret, CORSAllowedOrigins: "*", Env: env}
+		if err := cfg.Validate(); err == nil {
+			t.Fatalf("expected error for CORS=* with ENV=%q", env)
+		}
 	}
-	cfg.Env = "production"
+	// A wildcard hidden in a list is still a wildcard: rs/cors allows every
+	// origin when any entry is "*".
+	cfg := Config{JWTSecret: testJWTSecret, CORSAllowedOrigins: "*,https://app.example.com", Env: "prod"}
 	if err := cfg.Validate(); err == nil {
-		t.Fatal("expected error for CORS=* in production")
+		t.Fatal("expected error for a wildcard inside the CORS list in prod")
 	}
 }
 

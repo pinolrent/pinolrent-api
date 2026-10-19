@@ -110,9 +110,14 @@ func (a *API) UploadFile(w http.ResponseWriter, r *http.Request) {
 	// ancillary chunks are dropped by construction. webp has no encoder in
 	// the stdlib, so it stays a passthrough and keeps whatever it carries.
 	if ext != ".webp" {
-		body, err = stripImageMetadata(data, ext)
+		body, err = withDecodeSlot(r.Context(), func() ([]byte, error) {
+			return stripImageMetadata(data, ext)
+		})
 		if err != nil {
 			switch {
+			case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+				// The client is gone; there is nobody to answer.
+				return
 			case errors.Is(err, errImageTooLarge):
 				writeError(w, http.StatusRequestEntityTooLarge, "image dimensions too large")
 			case errors.Is(err, errInvalidImageData):
@@ -132,7 +137,7 @@ func (a *API) UploadFile(w http.ResponseWriter, r *http.Request) {
 	fname := hex.EncodeToString(raw[:]) + ext
 
 	// #nosec G301 -- the upload directory must be readable by the static file
-	// server and any reverse proxy user; uploaded files stay 0600.
+	// server and any reverse proxy user.
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		serverError(w, err)
 		return
@@ -181,7 +186,7 @@ func (a *API) CleanupOrphanUploads(ctx context.Context) error {
 		if err := rows.Scan(&u); err != nil {
 			return err
 		}
-		if base, ok := cutUploadPrefix(u); ok {
+		if base, ok := uploadRefBase(u); ok {
 			refs[base] = true
 		}
 	}

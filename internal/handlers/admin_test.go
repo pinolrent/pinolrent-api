@@ -180,6 +180,27 @@ func TestAdminSuspensionTakesEffectAtOnce(t *testing.T) {
 	}
 }
 
+// TestAdminPatchUserReturnsRoles pins the shared account view: the suspend
+// endpoint answers the same shape as the detail endpoint, roles included.
+func TestAdminPatchUserReturnsRoles(t *testing.T) {
+	a := newTestAPI(t)
+	admin, _ := newAdmin(t, a)
+	registerBuyer(t, a, "buyer@example.com", "secret123")
+	buyerID := userID(t, a, "buyer@example.com")
+
+	rec := doJSON(t, a, "PATCH", fmt.Sprintf("/admin/users/%d", buyerID), admin, map[string]any{"suspended": true})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d body %s", rec.Code, rec.Body.String())
+	}
+	var out struct {
+		Roles []string `json:"roles"`
+	}
+	decodeJSON(t, rec, &out)
+	if len(out.Roles) != 1 || out.Roles[0] != "buyer" {
+		t.Fatalf("roles = %v, want [buyer]", out.Roles)
+	}
+}
+
 // TestAdminSuspendIsIdempotentAndAuditedOnce covers the reason the handler
 // reads the current state first: repeating the call must not pile up audit
 // rows for a change that did not happen.
@@ -841,6 +862,11 @@ func TestAdminListsUsers(t *testing.T) {
 	decodeJSON(t, rec, &page)
 	if page.Total != 1 || page.Items[0].ID != adminID {
 		t.Fatalf("role=admin = %+v", page)
+	}
+	// The docs promise alphabetical roles and the smokes assert it; SQLite
+	// does not order GROUP_CONCAT without an explicit ORDER BY.
+	if got := strings.Join(page.Items[0].Roles, ","); got != "admin,buyer" {
+		t.Fatalf("roles = %q, want admin,buyer", got)
 	}
 	rec = doJSON(t, a, "GET", "/admin/users?role=seller", admin, nil)
 	decodeJSON(t, rec, &page)

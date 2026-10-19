@@ -66,7 +66,7 @@ func (a *API) AdminConfirmReservation(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		if err := notifyUsers(ctx, conn, append(admins, buyerID, ownerID), notifyConfirmed, id); err != nil {
+		if err := notifyUsers(ctx, conn, append(admins, buyerID, ownerID), db.NotifyConfirmed, id); err != nil {
 			return err
 		}
 		confirmed = true
@@ -126,7 +126,7 @@ func (a *API) AdminRequestCorrection(w http.ResponseWriter, r *http.Request) {
 		if err := a.auditAction(ctx, conn, u.ID, auditActionReservationRequestCorrection, targetReservations, id, ""); err != nil {
 			return err
 		}
-		if err := notifyUsers(ctx, conn, []int64{buyerID}, notifyCorrectionRequested, id); err != nil {
+		if err := notifyUsers(ctx, conn, []int64{buyerID}, db.NotifyCorrectionRequested, id); err != nil {
 			return err
 		}
 		corrected = true

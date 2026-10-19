@@ -116,6 +116,14 @@ func (l *Limiter) maybeGC() {
 	}
 }
 
+// ClientIP returns the address a request is attributed to: the direct peer,
+// or the first address in the forwarding chain that is not a trusted proxy.
+// It is the key the limiter buckets by, exported so the request log records
+// the same address the budget uses.
+func ClientIP(r *http.Request, trustedProxies []*net.IPNet) string {
+	return clientIP(r, trustedProxies)
+}
+
 // clientIP returns the client IP for rate limiting. Forwarding headers are
 // honored only when the direct peer is a trusted proxy (loopback or one of the
 // configured networks); otherwise any client could spoof a header and get a

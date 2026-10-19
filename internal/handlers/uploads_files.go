@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"image"
 	"image/jpeg"
@@ -32,6 +33,28 @@ var uploadExtByType = map[string]string{
 	"image/jpeg": ".jpg",
 	"image/png":  ".png",
 	"image/webp": ".webp",
+}
+
+// decodeConcurrency caps how many images decode at the same time. One 50 MP
+// image peaks near 200 MB and the write limiter admits a burst of 60
+// requests, so without a cap a burst could exhaust memory. Four slots keep
+// the peak bounded while real uploads queue for a few milliseconds.
+const decodeConcurrency = 4
+
+// decodeSlots is the semaphore behind withDecodeSlot.
+var decodeSlots = make(chan struct{}, decodeConcurrency)
+
+// withDecodeSlot runs fn holding one decode slot, so a burst of uploads
+// queues instead of decoding in parallel. The context cuts the wait short
+// when the client disconnects.
+func withDecodeSlot(ctx context.Context, fn func() ([]byte, error)) ([]byte, error) {
+	select {
+	case decodeSlots <- struct{}{}:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	defer func() { <-decodeSlots }()
+	return fn()
 }
 
 // stripImageMetadata re-encodes a jpeg or png from its decoded pixels. The

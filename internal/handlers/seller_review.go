@@ -52,7 +52,7 @@ func (a *API) AcceptReservation(w http.ResponseWriter, r *http.Request) {
 		if err := a.auditAction(ctx, conn, u.ID, auditActionReservationAccept, targetReservations, id, ""); err != nil {
 			return err
 		}
-		if err := notifyUsers(ctx, conn, []int64{buyerID}, notifyAccepted, id); err != nil {
+		if err := notifyUsers(ctx, conn, []int64{buyerID}, db.NotifyAccepted, id); err != nil {
 			return err
 		}
 		accepted = true
@@ -125,7 +125,7 @@ func (a *API) RejectReservation(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		if err := notifyUsers(ctx, conn, append(admins, buyerID), notifyRejected, id); err != nil {
+		if err := notifyUsers(ctx, conn, append(admins, buyerID), db.NotifyRejected, id); err != nil {
 			return err
 		}
 		rejected = true

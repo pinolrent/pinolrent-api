@@ -14,32 +14,32 @@ import (
 
 // Config holds all runtime settings for the server.
 type Config struct {
-	Port               string `env:"PORT" envDefault:"8080"`
-	DatabaseURL        string `env:"DATABASE_URL" envDefault:"pinolrent.db"`
-	JWTSecret          string `env:"JWT_SECRET"`
-	CORSAllowedOrigins string `env:"CORS_ALLOWED_ORIGINS" envDefault:"*"`
-	Env                string `env:"ENV" envDefault:"dev"`
-	UploadDir          string `env:"UPLOAD_DIR" envDefault:"uploads"`
+	Port               string
+	DatabaseURL        string
+	JWTSecret          string
+	CORSAllowedOrigins string
+	Env                string
+	UploadDir          string
 	// UploadMaxTotalMB caps the total size of UploadDir in MB; 0 disables
 	// the cap. Bounds disk usage against a client uploading at the rate
 	// limit forever.
-	UploadMaxTotalMB  int    `env:"UPLOAD_MAX_TOTAL_MB" envDefault:"1024"`
-	TrustedProxyCIDRs string `env:"TRUSTED_PROXY_CIDRS"`
+	UploadMaxTotalMB  int
+	TrustedProxyCIDRs string
 	// AdminEmails is the allow-list of accounts that hold the admin role.
 	// Empty (the default) means the deployment has no administrator, which
 	// is a valid state: every route still works, only /admin is unreachable.
-	AdminEmails string `env:"ADMIN_EMAILS"`
+	AdminEmails string
 	// PhoneCountryPrefix is the E.164 country code that completes a local
 	// phone number, and PhoneNationalLen its digit count: together they say
 	// what a bare number means. Defaults describe Nicaragua (+505, 8 digits);
 	// a Chilean deployment reconfigures both.
-	PhoneCountryPrefix string `env:"PHONE_COUNTRY_PREFIX" envDefault:"505"`
-	PhoneNationalLen   int    `env:"PHONE_NATIONAL_LEN" envDefault:"8"`
+	PhoneCountryPrefix string
+	PhoneNationalLen   int
 	// BusinessTimezone is the zone that decides what day it is for the API:
 	// the past-date check and the future-reservation guard count days in it.
 	// In a Managua deployment users book in Managua time, while the UTC clock
 	// rolls the day over at 18:00 local.
-	BusinessTimezone string `env:"BUSINESS_TIMEZONE" envDefault:"America/Managua"`
+	BusinessTimezone string
 }
 
 // Load reads the configuration from the environment, applying defaults for
@@ -110,11 +110,16 @@ func (c Config) Validate() error {
 	if _, err := parsePort(c.Port); err != nil {
 		return err
 	}
-	if _, err := c.CORSOrigins(); err != nil {
+	origins, err := c.CORSOrigins()
+	if err != nil {
 		return err
 	}
-	if (c.Env == "prod" || c.Env == "production") && c.CORSAllowedOrigins == "*" {
-		return fmt.Errorf("CORS_ALLOWED_ORIGINS=* not allowed when ENV=%s", c.Env)
+	if isProdEnv(c.Env) {
+		for _, o := range origins {
+			if o == "*" {
+				return fmt.Errorf("CORS_ALLOWED_ORIGINS=* not allowed when ENV=%s", c.Env)
+			}
+		}
 	}
 	if strings.TrimSpace(c.UploadDir) == "" {
 		return fmt.Errorf("UPLOAD_DIR must not be empty")
@@ -132,6 +137,16 @@ func (c Config) Validate() error {
 		return err
 	}
 	return nil
+}
+
+// isProdEnv reports whether ENV selects production. Case and surrounding
+// space are ignored so `ENV=PROD` cannot slip past the prod-only guards.
+func isProdEnv(env string) bool {
+	switch strings.ToLower(strings.TrimSpace(env)) {
+	case "prod", "production":
+		return true
+	}
+	return false
 }
 
 // validatePhoneCountry checks the pair the normalizer relies on: a digit-only

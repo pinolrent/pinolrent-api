@@ -8,7 +8,7 @@
 | `DATABASE_URL` | `pinolrent.db` | no | Where the SQLite file lives |
 | `JWT_SECRET` | — | **yes** | Secret used to sign the tokens (minimum 32 characters, with entropy: at least 16 distinct bytes) |
 | `CORS_ALLOWED_ORIGINS` | `*` | no | Which origins may call the API, comma-separated. `*` = all of them |
-| `ENV` | `dev` | no | Environment: `dev` (default) or `prod`/`production`. In prod `CORS_ALLOWED_ORIGINS=*` is rejected |
+| `ENV` | `dev` | no | Environment: `dev` (default) or `prod`/`production` (case-insensitive). In prod any `*` entry in `CORS_ALLOWED_ORIGINS` is rejected |
 | `UPLOAD_DIR` | `uploads` | no | Directory where `POST /uploads` stores the images. Created on startup; must not be empty |
 | `UPLOAD_MAX_TOTAL_MB` | `1024` | no | Total cap for `UPLOAD_DIR` in MB; `0` = no limit. Once exceeded, `POST /uploads` answers `507` |
 | `TRUSTED_PROXY_CIDRS` | — (empty) | no | Networks whose `X-Forwarded-For`/`X-Real-IP` are believed, comma-separated (e.g. `172.18.0.0/16`). Empty = only a loopback proxy is trusted |
@@ -54,7 +54,7 @@ go run ./cmd/api   # or the binary built with make build
 
 ### `ENV` and `PORT`
 
-- `ENV` defaults to `dev`. With `ENV=prod` or `ENV=production`, `CORS_ALLOWED_ORIGINS=*` is rejected.
+- `ENV` defaults to `dev`. With `ENV=prod` or `ENV=production` (case-insensitive), a `*` entry in `CORS_ALLOWED_ORIGINS` is rejected, alone or inside the list.
 - `PORT` must be `1..65535` or the server does not start.
 - A malformed `.env` (e.g. a line without `=`) prevents startup — the error is printed in the log.
 

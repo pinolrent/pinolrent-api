@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"net/http"
@@ -36,23 +37,7 @@ func (a *API) ListCars(w http.ResponseWriter, r *http.Request) {
 		f.add("c.owner_id = ?", oid)
 	}
 
-	var cars []models.Car
-	if startStr == "" {
-		// #nosec G202 -- the WHERE body comes from fixed filter fragments,
-		// not user input; owner_id is bound as a parameter.
-		rows, err := a.DB.QueryContext(r.Context(),
-			`SELECT `+carColumnsQualified+` FROM cars c WHERE `+f.where()+` ORDER BY c.id LIMIT ? OFFSET ?`,
-			f.page(limit, offset)...)
-		if err != nil {
-			serverError(w, err)
-			return
-		}
-		cars, err = scanCars(rows)
-		if err != nil {
-			serverError(w, err)
-			return
-		}
-	} else {
+	if startStr != "" {
 		start, err := parseDate(startStr)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid start_date, expected YYYY-MM-DD")
@@ -74,26 +59,22 @@ func (a *API) ListCars(w http.ResponseWriter, r *http.Request) {
 					AND r.status NOT IN (?, ?)
 					AND `+db.OverlapPredicate+`
 			)`, db.ReservationCancelled, db.ReservationRejected, endStr, startStr)
-
-		// #nosec G202 -- the WHERE body comes from fixed filter fragments
-		// (including db.OverlapPredicate), not user input; the values are
-		// bound params.
-		rows, err := a.DB.QueryContext(r.Context(), `
-			SELECT `+carColumnsQualified+`
-			FROM cars c
-			WHERE `+f.where()+`
-			ORDER BY c.id LIMIT ? OFFSET ?`, f.page(limit, offset)...)
-		if err != nil {
-			serverError(w, err)
-			return
-		}
-		cars, err = scanCars(rows)
-		if err != nil {
-			serverError(w, err)
-			return
-		}
 	}
 
+	// #nosec G202 -- the WHERE body comes from fixed filter fragments
+	// (including db.OverlapPredicate), not user input; every value is bound.
+	rows, err := a.DB.QueryContext(r.Context(),
+		`SELECT `+carColumnsQualified+` FROM cars c WHERE `+f.where()+` ORDER BY c.id LIMIT ? OFFSET ?`,
+		f.page(limit, offset)...)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	cars, err := scanCars(rows)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
 	if cars == nil {
 		cars = []models.Car{}
 	}
@@ -231,6 +212,124 @@ func (a *API) ListMyCars(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, cars)
 }
 
+// carPatch is the mutable part of a car. The seller and admin endpoints share
+// it, so both validate and apply the same fields in the same way.
+type carPatch struct {
+	Name        *string `json:"name"`
+	PhotoURL    *string `json:"photo_url"`
+	PricePerDay *int64  `json:"price_per_day"`
+	Active      *bool   `json:"active"`
+}
+
+// decodeCarPatch decodes and validates a car patch, writing the error response
+// itself and reporting false when the body is unusable. The returned patch has
+// the name already normalized.
+func decodeCarPatch(w http.ResponseWriter, r *http.Request) (carPatch, bool) {
+	var in carPatch
+	if err := decodeBody(w, r, &in); err != nil {
+		writeBodyErr(w, err)
+		return in, false
+	}
+	if in.Name == nil && in.PhotoURL == nil && in.PricePerDay == nil && in.Active == nil {
+		writeError(w, http.StatusBadRequest, "no fields to update")
+		return in, false
+	}
+	if in.Name != nil {
+		name, msg := normalizeCarName(*in.Name)
+		if msg != "" {
+			writeError(w, http.StatusBadRequest, msg)
+			return in, false
+		}
+		*in.Name = name
+	}
+	if in.PricePerDay != nil {
+		if msg := validateCarPrice(*in.PricePerDay); msg != "" {
+			writeError(w, http.StatusBadRequest, msg)
+			return in, false
+		}
+	}
+	if in.PhotoURL != nil {
+		if msg := validateCarPhotoURL(*in.PhotoURL); msg != "" {
+			writeError(w, http.StatusBadRequest, msg)
+			return in, false
+		}
+	}
+	return in, true
+}
+
+// applyCarPatch merges a validated patch into the car inside the caller's
+// transaction. A non-nil ownerID restricts the lookup to that seller; nil is
+// the administrator view, which edits any car. guardDeactivation blocks the
+// transition to inactive while reservations end today or later, a guard the
+// admin path deliberately skips. A missing row, or another owner's row, is the
+// same 404 statusError the endpoints report.
+func (a *API) applyCarPatch(ctx context.Context, conn *sql.Conn, id int64, in carPatch, ownerID *int64, guardDeactivation bool) error {
+	query := `SELECT name, photo_url, price_per_day, active FROM cars WHERE id = ?`
+	args := []any{id}
+	if ownerID != nil {
+		query += ` AND owner_id = ?`
+		args = append(args, *ownerID)
+	}
+
+	var curName, curPhoto string
+	var curPrice int64
+	var curActive int
+	if err := conn.QueryRowContext(ctx, query, args...).Scan(&curName, &curPhoto, &curPrice, &curActive); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return &statusError{http.StatusNotFound, "car not found"}
+		}
+		return err
+	}
+
+	if in.Name != nil {
+		curName = *in.Name
+	}
+	if in.PhotoURL != nil {
+		curPhoto = *in.PhotoURL
+	}
+	if in.PricePerDay != nil {
+		curPrice = *in.PricePerDay
+	}
+	if in.Active != nil {
+		curActive = 0
+		if *in.Active {
+			curActive = 1
+		}
+	}
+
+	// The guard only gates the transition to inactive; editing content or
+	// reactivating must not be blocked by existing bookings. The end bound is
+	// today in the business time zone (todayStr), not SQLite's date('now'): a
+	// reservation ending on the user's today must block the transition there,
+	// not on UTC's date.
+	if guardDeactivation && in.Active != nil && !*in.Active {
+		var hasFuture int
+		if err := conn.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM reservations WHERE car_id = ? AND status NOT IN (?, ?) AND end_date >= ?`,
+			id, db.ReservationCancelled, db.ReservationRejected, a.todayStr()).Scan(&hasFuture); err != nil {
+			return err
+		}
+		if hasFuture > 0 {
+			return &statusError{http.StatusConflict, "car has future reservations, cannot deactivate"}
+		}
+	}
+
+	update := `UPDATE cars SET name = ?, photo_url = ?, price_per_day = ?, active = ? WHERE id = ?`
+	updateArgs := []any{curName, curPhoto, curPrice, curActive, id}
+	if ownerID != nil {
+		update += ` AND owner_id = ?`
+		updateArgs = append(updateArgs, *ownerID)
+	}
+	res, err := conn.ExecContext(ctx, update, updateArgs...)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return &statusError{http.StatusNotFound, "car not found"}
+	}
+	return nil
+}
+
 // PatchCar updates the editable fields of a car owned by the authenticated
 // seller: name, photo, price and the active flag, in any combination. A new
 // price only applies to future reservations (the reservation row does not
@@ -244,99 +343,15 @@ func (a *API) PatchCar(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, errMsg)
 		return
 	}
-
-	var in struct {
-		Name        *string `json:"name"`
-		PhotoURL    *string `json:"photo_url"`
-		PricePerDay *int64  `json:"price_per_day"`
-		Active      *bool   `json:"active"`
-	}
-	if err := decodeBody(w, r, &in); err != nil {
-		writeBodyErr(w, err)
+	in, ok := decodeCarPatch(w, r)
+	if !ok {
 		return
 	}
-	if in.Name == nil && in.PhotoURL == nil && in.PricePerDay == nil && in.Active == nil {
-		writeError(w, http.StatusBadRequest, "no fields to update")
-		return
-	}
-	if in.Name != nil {
-		name, msg := normalizeCarName(*in.Name)
-		if msg != "" {
-			writeError(w, http.StatusBadRequest, msg)
-			return
-		}
-		*in.Name = name
-	}
-	if in.PricePerDay != nil {
-		if msg := validateCarPrice(*in.PricePerDay); msg != "" {
-			writeError(w, http.StatusBadRequest, msg)
-			return
-		}
-	}
-	if in.PhotoURL != nil {
-		if msg := validateCarPhotoURL(*in.PhotoURL); msg != "" {
-			writeError(w, http.StatusBadRequest, msg)
-			return
-		}
-	}
 
-	var updated bool
+	updated := false
 	err := db.WithImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
-		ctx := r.Context()
-
-		var curName, curPhoto string
-		var curPrice int64
-		var curActive int
-		if err := conn.QueryRowContext(ctx,
-			`SELECT name, photo_url, price_per_day, active FROM cars WHERE id = ? AND owner_id = ?`,
-			id, u.ID).Scan(&curName, &curPhoto, &curPrice, &curActive); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return &statusError{http.StatusNotFound, "car not found"}
-			}
+		if err := a.applyCarPatch(r.Context(), conn, id, in, &u.ID, true); err != nil {
 			return err
-		}
-
-		if in.Name != nil {
-			curName = *in.Name
-		}
-		if in.PhotoURL != nil {
-			curPhoto = *in.PhotoURL
-		}
-		if in.PricePerDay != nil {
-			curPrice = *in.PricePerDay
-		}
-		if in.Active != nil {
-			curActive = 0
-			if *in.Active {
-				curActive = 1
-			}
-		}
-
-		// The guard only gates the transition to inactive; editing content or
-		// reactivating must not be blocked by existing bookings.
-		if in.Active != nil && !*in.Active {
-			// The end bound is today in the business time zone (todayStr),
-			// not SQLite's date('now'): a reservation ending on the user's
-			// today must block the transition there, not on UTC's date.
-			var hasFuture int
-			if err := conn.QueryRowContext(ctx,
-				`SELECT COUNT(*) FROM reservations WHERE car_id = ? AND status NOT IN (?, ?) AND end_date >= ?`,
-				id, db.ReservationCancelled, db.ReservationRejected, a.todayStr()).Scan(&hasFuture); err != nil {
-				return err
-			}
-			if hasFuture > 0 {
-				return &statusError{http.StatusConflict, "car has future reservations, cannot deactivate"}
-			}
-		}
-
-		res, err := conn.ExecContext(ctx,
-			`UPDATE cars SET name = ?, photo_url = ?, price_per_day = ?, active = ? WHERE id = ? AND owner_id = ?`,
-			curName, curPhoto, curPrice, curActive, id, u.ID)
-		if err != nil {
-			return err
-		}
-		if n, _ := res.RowsAffected(); n == 0 {
-			return &statusError{http.StatusNotFound, "car not found"}
 		}
 		updated = true
 		return nil
