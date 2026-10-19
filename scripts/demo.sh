@@ -64,6 +64,27 @@ wait_for_health() {
   return 1
 }
 
+# future_date prints the UTC date N days from today as YYYY-MM-DD, so the
+# scenario never goes stale (the API rejects a start date in the past).
+# GNU date first, then the BSD/macOS -v form.
+future_date() {
+  date -u -d "+$1 days" +%F 2>/dev/null || date -u -v+"$1"d +%F
+}
+
+# Reservation windows, each one a pair (or a day inside) so overlaps and
+# re-booking stay consistent between the checks.
+start1=$(future_date 10)
+end1=$(future_date 12)
+start2=$(future_date 20)
+end2=$(future_date 22)
+start3=$(future_date 30)
+mid3=$(future_date 31)
+end3=$(future_date 32)
+start4=$(future_date 40)
+end4=$(future_date 70)
+start5=$(future_date 50)
+end5=$(future_date 52)
+
 cleanup() {
   if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
     kill -TERM "$PID" 2>/dev/null || true
@@ -171,12 +192,12 @@ curl -s -X PATCH "$BASE/seller/cars/$car" -H "Authorization: Bearer $seller" \
 echo "== reservations =="
 res=$(curl -s -X POST "$BASE/reservations" -H "Authorization: Bearer $buyer" \
   -H 'Content-Type: application/json' \
-  -d "{\"car_id\":$car,\"start_date\":\"2027-01-10\",\"end_date\":\"2027-01-12\"}" | jq -r .id)
+  -d "{\"car_id\":$car,\"start_date\":\"$start1\",\"end_date\":\"$end1\"}" | jq -r .id)
 check "create reservation" "number" "$([ "$res" != "null" ] && echo number)"
 
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/reservations" -H "Authorization: Bearer $buyer" \
   -H 'Content-Type: application/json' \
-  -d "{\"car_id\":$car,\"start_date\":\"2027-01-10\",\"end_date\":\"2027-01-12\"}")
+  -d "{\"car_id\":$car,\"start_date\":\"$start1\",\"end_date\":\"$end1\"}")
 check "overlap -> 409" "409" "$code"
 
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/reservations" -H "Authorization: Bearer $buyer" \
@@ -202,7 +223,7 @@ acceptedRes=$res
 echo "== cancellation =="
 res2=$(curl -s -X POST "$BASE/reservations" -H "Authorization: Bearer $buyer" \
   -H 'Content-Type: application/json' \
-  -d "{\"car_id\":$car,\"start_date\":\"2027-02-01\",\"end_date\":\"2027-02-03\"}" | jq -r .id)
+  -d "{\"car_id\":$car,\"start_date\":\"$start2\",\"end_date\":\"$end2\"}" | jq -r .id)
 check "reservation to cancel" "number" "$([ "$res2" != "null" ] && echo number)"
 status=$(curl -s -X PATCH "$BASE/reservations/$res2/cancel" -H "Authorization: Bearer $buyer" | jq -r .status)
 check "cancel -> cancelled" "cancelled" "$status"
@@ -210,13 +231,13 @@ code=$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BASE/reservations/$res2
 check "re-cancel -> 409" "409" "$code"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/reservations" -H "Authorization: Bearer $buyer" \
   -H 'Content-Type: application/json' \
-  -d "{\"car_id\":$car,\"start_date\":\"2027-02-01\",\"end_date\":\"2027-02-03\"}")
+  -d "{\"car_id\":$car,\"start_date\":\"$start2\",\"end_date\":\"$end2\"}")
 check "re-book released range -> 201" "201" "$code"
 
 echo "== rejection =="
 res3=$(curl -s -X POST "$BASE/reservations" -H "Authorization: Bearer $buyer" \
   -H 'Content-Type: application/json' \
-  -d "{\"car_id\":$car,\"start_date\":\"2027-02-10\",\"end_date\":\"2027-02-12\"}" | jq -r .id)
+  -d "{\"car_id\":$car,\"start_date\":\"$start3\",\"end_date\":\"$end3\"}" | jq -r .id)
 check "reservation to reject" "number" "$([ "$res3" != "null" ] && echo number)"
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/reservations/$res3/payment" \
   -H "Authorization: Bearer $buyer" -H 'Content-Type: application/json' -d '{"method":"cash"}')
@@ -224,13 +245,13 @@ check "payment to reject -> 201" "201" "$code"
 rej=$(curl -s -X PATCH "$BASE/seller/reservations/$res3/reject" -H "Authorization: Bearer $seller")
 check "reject -> rejected" "rejected" "$(printf '%s' "$rej" | jq -r .status)"
 check "payment rejected" "rejected" "$(printf '%s' "$rej" | jq -r .payment.status)"
-n=$(curl -s "$BASE/cars?start_date=2027-02-11&end_date=2027-02-11" | jq --argjson id "$car" '[.[] | select(.id == $id)] | length')
+n=$(curl -s "$BASE/cars?start_date=$mid3&end_date=$mid3" | jq --argjson id "$car" '[.[] | select(.id == $id)] | length')
 check "dates released after rejection" "1" "$n"
 
 echo "== day limit =="
 code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/reservations" -H "Authorization: Bearer $buyer" \
   -H 'Content-Type: application/json' \
-  -d "{\"car_id\":$car,\"start_date\":\"2027-03-01\",\"end_date\":\"2027-04-05\"}")
+  -d "{\"car_id\":$car,\"start_date\":\"$start4\",\"end_date\":\"$end4\"}")
 check "range > 30 days -> 400" "400" "$code"
 
 echo "== catalog: owner and pagination =="
@@ -416,7 +437,7 @@ check "admin confirm with buyer token -> 403" "403" "$code"
 # accepted, the buyer attaches a new proof and the admin confirms it.
 res4=$(curl -s -X POST "$BASE/reservations" -H "Authorization: Bearer $buyer" \
   -H 'Content-Type: application/json' \
-  -d "{\"car_id\":$car,\"start_date\":\"2027-03-10\",\"end_date\":\"2027-03-12\"}" | jq -r .id)
+  -d "{\"car_id\":$car,\"start_date\":\"$start5\",\"end_date\":\"$end5\"}" | jq -r .id)
 check "reservation to correct" "number" "$([ "$res4" != "null" ] && echo number)"
 curl -s -X POST "$BASE/reservations/$res4/payment" -H "Authorization: Bearer $buyer" \
   -H 'Content-Type: application/json' -d '{"method":"cash"}' > /dev/null
