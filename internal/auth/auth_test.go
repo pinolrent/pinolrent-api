@@ -437,6 +437,29 @@ func TestRequireAuthInvalidToken(t *testing.T) {
 	}
 }
 
+func TestRequireAuthDatabaseErrorIsServerError(t *testing.T) {
+	a := newTestAuth(t)
+	id := seedUser(t, a, "db-error@example.com", "buyer")
+	tok, err := a.SignToken(&models.User{ID: id, Roles: []string{"buyer"}})
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+
+	// Break only the user lookup: the jti check still answers, so the
+	// failure comes from userByID and must not be reported as a dead token.
+	if _, err := a.db.ExecContext(context.Background(), `DROP TABLE users`); err != nil {
+		t.Fatalf("drop users: %v", err)
+	}
+
+	rec, _ := runHandler(a.RequireAuth, "Bearer "+tok)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500 (body %s)", rec.Code, rec.Body.String())
+	}
+	if !contains(rec.Body.String(), "server error") {
+		t.Fatalf("body = %s, want the generic server error", rec.Body.String())
+	}
+}
+
 func TestRequireAuthUserNotFound(t *testing.T) {
 	a := newTestAuth(t)
 	// Sign a token for a user that does not exist in the DB.

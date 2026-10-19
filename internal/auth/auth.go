@@ -429,8 +429,15 @@ func (a *Auth) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 		}
 
 		u, err := a.userByID(r.Context(), claims.UserID)
-		if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
 			writeError(w, http.StatusUnauthorized, "user not found")
+			return
+		}
+		if err != nil {
+			// A database failure is not a dead token: answering 401 here
+			// makes every client discard a valid session because the
+			// server had a bad moment.
+			serverErrorFromAuth(w, err)
 			return
 		}
 		if tokenSuperseded(&u, claims) {
