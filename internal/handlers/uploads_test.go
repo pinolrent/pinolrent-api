@@ -422,13 +422,20 @@ func TestCleanupOrphanUploads(t *testing.T) {
 
 	carRef := put("car-ref.jpg", past)
 	payRef := put("pay-ref.jpg", past)
+	absRef := put("abs-ref.jpg", past)
 	orphan := put("orphan.jpg", past)
 	young := put("young.jpg", 0)
 	other := put("notes.txt", past)
 
-	// rows that reference two of the files
+	// rows that reference three of the files
 	createCar(t, a, seller, map[string]any{
 		"name": "With photo", "price_per_day": 100, "photo_url": "/uploads/car-ref.jpg",
+	})
+	// The client may store the API's absolute URL instead of the local path;
+	// the sweep must still see the reference.
+	createCar(t, a, seller, map[string]any{
+		"name": "Absolute photo", "price_per_day": 100,
+		"photo_url": "https://api.example.com/uploads/abs-ref.jpg",
 	})
 	buyer, _, v := seedReservation(t, a)
 	doJSON(t, a, "POST", "/reservations/"+itoa(v.ID)+"/payment", buyer, map[string]any{
@@ -448,6 +455,9 @@ func TestCleanupOrphanUploads(t *testing.T) {
 	}
 	if !exists(payRef) {
 		t.Fatal("file referenced by a payment proof was removed")
+	}
+	if !exists(absRef) {
+		t.Fatal("file referenced by an absolute /uploads/ URL was removed")
 	}
 	if exists(orphan) {
 		t.Fatal("orphan past the grace period was not removed")

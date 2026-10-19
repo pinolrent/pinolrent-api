@@ -186,7 +186,7 @@ func (a *API) CleanupOrphanUploads(ctx context.Context) error {
 		if err := rows.Scan(&u); err != nil {
 			return err
 		}
-		if base, ok := cutUploadPrefix(u); ok {
+		if base, ok := uploadRefBase(u); ok {
 			refs[base] = true
 		}
 	}

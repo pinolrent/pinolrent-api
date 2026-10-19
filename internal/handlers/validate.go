@@ -103,3 +103,14 @@ func cutUploadPrefix(s string) (string, bool) {
 	}
 	return s[len(prefix):], true
 }
+
+// uploadRefBase returns the stored basename of a reference to /uploads/: the
+// local form ("<basename>") or an absolute URL whose path points at this
+// service ("https://host/uploads/<basename>"). Anything else has none. The
+// orphan sweep uses it so a file stored as a full URL is not deleted.
+func uploadRefBase(s string) (string, bool) {
+	if u, err := url.Parse(s); err == nil && u.Path != "" {
+		s = u.Path
+	}
+	return cutUploadPrefix(s)
+}
