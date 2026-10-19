@@ -27,7 +27,7 @@ func (f filter) where() string {
 }
 
 // page returns the bound arguments with limit/offset appended, copying so
-// the filter stays reusable after paving.
+// the filter stays reusable after paging.
 func (f filter) page(limit, offset int) []any {
 	out := make([]any, 0, len(f.args)+2)
 	return append(append(out, f.args...), limit, offset)
