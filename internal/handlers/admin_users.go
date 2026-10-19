@@ -63,47 +63,16 @@ func (a *API) AdminGetUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, errMsg)
 		return
 	}
-	var email, phone string
-	var suspended sql.NullInt64
-	if err := a.DB.QueryRowContext(r.Context(),
-		`SELECT email, phone, suspended_at FROM users WHERE id = ?`, id).Scan(&email, &phone, &suspended); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			writeError(w, http.StatusNotFound, "user not found")
-			return
-		}
-		serverError(w, err)
+	view, err := a.adminUserView(r.Context(), id)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "user not found")
 		return
 	}
-	rows, err := a.DB.QueryContext(r.Context(),
-		`SELECT role FROM user_roles WHERE user_id = ? ORDER BY role`, id)
 	if err != nil {
 		serverError(w, err)
 		return
 	}
-	defer func() { _ = rows.Close() }()
-	var roles []string
-	for rows.Next() {
-		var role string
-		if err := rows.Scan(&role); err != nil {
-			serverError(w, err)
-			return
-		}
-		roles = append(roles, role)
-	}
-	if err := rows.Err(); err != nil {
-		serverError(w, err)
-		return
-	}
-	out := map[string]any{
-		"id":    id,
-		"email": email,
-		"phone": phone,
-		"roles": roles,
-	}
-	if suspended.Valid {
-		out["suspended_at"] = suspended.Int64
-	}
-	writeJSON(w, http.StatusOK, out)
+	writeJSON(w, http.StatusOK, view)
 }
 
 // AdminPatchUser toggles the account's suspension. An administrator cannot
@@ -170,23 +139,13 @@ func (a *API) AdminPatchUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return current state.
-	var email, phone string
-	var suspended sql.NullInt64
-	if err := a.DB.QueryRowContext(r.Context(),
-		`SELECT email, phone, suspended_at FROM users WHERE id = ?`, id).Scan(&email, &phone, &suspended); err != nil {
+	// Return the current state, with the roles the detail endpoint shows.
+	view, err := a.adminUserView(r.Context(), id)
+	if err != nil {
 		serverError(w, err)
 		return
 	}
-	out := map[string]any{
-		"id":    id,
-		"email": email,
-		"phone": phone,
-	}
-	if suspended.Valid {
-		out["suspended_at"] = suspended.Int64
-	}
-	writeJSON(w, http.StatusOK, out)
+	writeJSON(w, http.StatusOK, view)
 }
 
 // AdminPatchUserRoles grants or revokes the seller role. The admin role itself
@@ -281,30 +240,10 @@ func (a *API) AdminPatchUserRoles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var email string
-	var phone string
-	var suspended sql.NullInt64
-	var rolesStr sql.NullString
-	if err := a.DB.QueryRowContext(r.Context(),
-		`SELECT u.email, u.phone, u.suspended_at, GROUP_CONCAT(ur.role)
-		 FROM users u LEFT JOIN user_roles ur ON ur.user_id = u.id
-		 WHERE u.id = ?
-		 GROUP BY u.id, u.email, u.phone, u.suspended_at`, id).Scan(&email, &phone, &suspended, &rolesStr); err != nil {
+	view, err := a.adminUserView(r.Context(), id)
+	if err != nil {
 		serverError(w, err)
 		return
 	}
-	var roles []string
-	if rolesStr.Valid && rolesStr.String != "" {
-		roles = strings.Split(rolesStr.String, ",")
-	}
-	out := map[string]any{
-		"id":    id,
-		"email": email,
-		"phone": phone,
-		"roles": roles,
-	}
-	if suspended.Valid {
-		out["suspended_at"] = suspended.Int64
-	}
-	writeJSON(w, http.StatusOK, out)
+	writeJSON(w, http.StatusOK, view)
 }

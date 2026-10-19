@@ -36,12 +36,7 @@ func (a *API) Health(w http.ResponseWriter, r *http.Request) {
 // Me returns the authenticated user's public profile.
 func (a *API) Me(w http.ResponseWriter, r *http.Request) {
 	u, _ := auth.CurrentUser(r.Context())
-	writeJSON(w, http.StatusOK, map[string]any{
-		"id":    u.ID,
-		"email": u.Email,
-		"roles": u.Roles,
-		"phone": u.Phone,
-	})
+	writeJSON(w, http.StatusOK, accountViewFrom(u, 0))
 }
 
 // UpdateMe updates the authenticated user's own profile. Only the phone is
@@ -77,12 +72,9 @@ func (a *API) UpdateMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"id":    u.ID,
-		"email": u.Email,
-		"roles": u.Roles,
-		"phone": phone,
-	})
+	view := accountViewFrom(u, 0)
+	view.Phone = phone
+	writeJSON(w, http.StatusOK, view)
 }
 
 // UpdatePassword changes the authenticated user's password. It also stamps
@@ -264,12 +256,7 @@ func (a *API) BecomeSeller(w http.ResponseWriter, r *http.Request) {
 		u.Roles = append(u.Roles, db.RoleSeller)
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"id":    u.ID,
-		"email": u.Email,
-		"roles": u.Roles,
-		"phone": u.Phone,
-	})
+	writeJSON(w, http.StatusOK, accountViewFrom(u, 0))
 }
 
 // Logout revokes the bearer token used on the request by inserting its

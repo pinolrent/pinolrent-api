@@ -109,7 +109,8 @@ Reactivating it restores access without logging in again.
 {"suspended": true}
 ```
 
-**Answers** `200` with the updated state of the account.
+**Answers** `200` with the updated state of the account, the same shape as
+`GET /admin/users/{id}`.
 
 The operation is idempotent: suspending an already suspended account returns
 `200` without writing anything, neither in the database nor in the audit trail.
