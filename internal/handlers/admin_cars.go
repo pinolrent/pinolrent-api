@@ -75,78 +75,17 @@ func (a *API) AdminPatchCar(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, errMsg)
 		return
 	}
-
-	var in struct {
-		Name        *string `json:"name"`
-		PhotoURL    *string `json:"photo_url"`
-		PricePerDay *int64  `json:"price_per_day"`
-		Active      *bool   `json:"active"`
-	}
-	if err := decodeBody(w, r, &in); err != nil {
-		writeBodyErr(w, err)
+	in, ok := decodeCarPatch(w, r)
+	if !ok {
 		return
 	}
-	if in.Name == nil && in.PhotoURL == nil && in.PricePerDay == nil && in.Active == nil {
-		writeError(w, http.StatusBadRequest, "no fields to update")
-		return
-	}
-	if in.Name != nil {
-		name, msg := normalizeCarName(*in.Name)
-		if msg != "" {
-			writeError(w, http.StatusBadRequest, msg)
-			return
-		}
-		*in.Name = name
-	}
-	if in.PricePerDay != nil {
-		if msg := validateCarPrice(*in.PricePerDay); msg != "" {
-			writeError(w, http.StatusBadRequest, msg)
-			return
-		}
-	}
-	if in.PhotoURL != nil {
-		if msg := validateCarPhotoURL(*in.PhotoURL); msg != "" {
-			writeError(w, http.StatusBadRequest, msg)
-			return
-		}
-	}
 
-	var updated bool
+	updated := false
 	err := db.WithImmediateTx(r.Context(), a.DB, func(conn *sql.Conn) error {
-		ctx := r.Context()
-		var curName, curPhoto string
-		var curPrice int64
-		var curActive int
-		if err := conn.QueryRowContext(ctx,
-			`SELECT name, photo_url, price_per_day, active FROM cars WHERE id = ?`, id).Scan(&curName, &curPhoto, &curPrice, &curActive); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return &statusError{http.StatusNotFound, "car not found"}
-			}
+		if err := a.applyCarPatch(r.Context(), conn, id, in, nil, false); err != nil {
 			return err
 		}
-
-		if in.Name != nil {
-			curName = *in.Name
-		}
-		if in.PhotoURL != nil {
-			curPhoto = *in.PhotoURL
-		}
-		if in.PricePerDay != nil {
-			curPrice = *in.PricePerDay
-		}
-		if in.Active != nil {
-			if *in.Active {
-				curActive = 1
-			} else {
-				curActive = 0
-			}
-		}
-		if _, err := conn.ExecContext(ctx,
-			`UPDATE cars SET name=?, photo_url=?, price_per_day=?, active=? WHERE id=?`,
-			curName, curPhoto, curPrice, curActive, id); err != nil {
-			return err
-		}
-		if err := a.auditAction(ctx, conn, actor.ID, auditActionCarUpdate, targetCars, id, ""); err != nil {
+		if err := a.auditAction(r.Context(), conn, actor.ID, auditActionCarUpdate, targetCars, id, ""); err != nil {
 			return err
 		}
 		updated = true
