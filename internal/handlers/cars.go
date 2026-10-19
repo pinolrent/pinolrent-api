@@ -37,23 +37,7 @@ func (a *API) ListCars(w http.ResponseWriter, r *http.Request) {
 		f.add("c.owner_id = ?", oid)
 	}
 
-	var cars []models.Car
-	if startStr == "" {
-		// #nosec G202 -- the WHERE body comes from fixed filter fragments,
-		// not user input; owner_id is bound as a parameter.
-		rows, err := a.DB.QueryContext(r.Context(),
-			`SELECT `+carColumnsQualified+` FROM cars c WHERE `+f.where()+` ORDER BY c.id LIMIT ? OFFSET ?`,
-			f.page(limit, offset)...)
-		if err != nil {
-			serverError(w, err)
-			return
-		}
-		cars, err = scanCars(rows)
-		if err != nil {
-			serverError(w, err)
-			return
-		}
-	} else {
+	if startStr != "" {
 		start, err := parseDate(startStr)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid start_date, expected YYYY-MM-DD")
@@ -75,26 +59,22 @@ func (a *API) ListCars(w http.ResponseWriter, r *http.Request) {
 					AND r.status NOT IN (?, ?)
 					AND `+db.OverlapPredicate+`
 			)`, db.ReservationCancelled, db.ReservationRejected, endStr, startStr)
-
-		// #nosec G202 -- the WHERE body comes from fixed filter fragments
-		// (including db.OverlapPredicate), not user input; the values are
-		// bound params.
-		rows, err := a.DB.QueryContext(r.Context(), `
-			SELECT `+carColumnsQualified+`
-			FROM cars c
-			WHERE `+f.where()+`
-			ORDER BY c.id LIMIT ? OFFSET ?`, f.page(limit, offset)...)
-		if err != nil {
-			serverError(w, err)
-			return
-		}
-		cars, err = scanCars(rows)
-		if err != nil {
-			serverError(w, err)
-			return
-		}
 	}
 
+	// #nosec G202 -- the WHERE body comes from fixed filter fragments
+	// (including db.OverlapPredicate), not user input; every value is bound.
+	rows, err := a.DB.QueryContext(r.Context(),
+		`SELECT `+carColumnsQualified+` FROM cars c WHERE `+f.where()+` ORDER BY c.id LIMIT ? OFFSET ?`,
+		f.page(limit, offset)...)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	cars, err := scanCars(rows)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
 	if cars == nil {
 		cars = []models.Car{}
 	}
