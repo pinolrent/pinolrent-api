@@ -110,11 +110,16 @@ func (c Config) Validate() error {
 	if _, err := parsePort(c.Port); err != nil {
 		return err
 	}
-	if _, err := c.CORSOrigins(); err != nil {
+	origins, err := c.CORSOrigins()
+	if err != nil {
 		return err
 	}
-	if (c.Env == "prod" || c.Env == "production") && c.CORSAllowedOrigins == "*" {
-		return fmt.Errorf("CORS_ALLOWED_ORIGINS=* not allowed when ENV=%s", c.Env)
+	if isProdEnv(c.Env) {
+		for _, o := range origins {
+			if o == "*" {
+				return fmt.Errorf("CORS_ALLOWED_ORIGINS=* not allowed when ENV=%s", c.Env)
+			}
+		}
 	}
 	if strings.TrimSpace(c.UploadDir) == "" {
 		return fmt.Errorf("UPLOAD_DIR must not be empty")
@@ -132,6 +137,16 @@ func (c Config) Validate() error {
 		return err
 	}
 	return nil
+}
+
+// isProdEnv reports whether ENV selects production. Case and surrounding
+// space are ignored so `ENV=PROD` cannot slip past the prod-only guards.
+func isProdEnv(env string) bool {
+	switch strings.ToLower(strings.TrimSpace(env)) {
+	case "prod", "production":
+		return true
+	}
+	return false
 }
 
 // validatePhoneCountry checks the pair the normalizer relies on: a digit-only
