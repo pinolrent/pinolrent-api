@@ -6,8 +6,9 @@ the frontend polls. Kinds: `reservation.requested` (new booking, to the owner
 and the administrators), `reservation.accepted` (to the buyer),
 `reservation.rejected` (to the buyer and the administrators),
 `reservation.confirmed` (to the buyer, the owner and the administrators),
-`reservation.correction_requested` (to the buyer) and `reservation.cancelled`
-(buyer cancellation, to the owner only).
+`reservation.correction_requested` (to the buyer), `reservation.cancelled`
+(buyer cancellation, to the owner only) and `reservation.correction_submitted`
+(the buyer re-attached a proof after a correction, to the administrators).
 
 Decisions and admin operations are also written to the audit log
 (`GET /admin/audit`) in the same transaction. What is recorded where:
@@ -20,6 +21,7 @@ Decisions and admin operations are also written to the audit log
 | Buyer cancels | owner (`cancelled`) | `reservation.cancel` (actor: buyer) |
 | Admin confirms | buyer + owner + admins (`confirmed`) | `reservation.confirm` (actor: admin) |
 | Admin requests correction | buyer (`correction_requested`) | `reservation.request_correction` (actor: admin) |
+| Buyer re-attaches the proof | administrators (`correction_submitted`) | — (answers the admin request) |
 | Payment recorded / re-attached | — (buyer's own action) | — (visible in `GET /admin/payments`) |
 | Admin operates users / cars | — | `user.suspend`, `user.unsuspend`, `user.role_grant_seller`, `user.role_revoke_seller`, `car.update`, `car.delete` |
 

@@ -82,6 +82,15 @@ func (a *API) RecordPayment(w http.ResponseWriter, r *http.Request) {
 					in.Method, in.ProofURL, db.PaymentPending, payID); err != nil {
 					return err
 				}
+				// The administrators asked for this correction; tell them the
+				// proof is back, so the review does not wait on a manual poll.
+				admins, err := adminIDs(ctx, conn)
+				if err != nil {
+					return err
+				}
+				if err := notifyUsers(ctx, conn, admins, db.NotifyCorrectionSubmitted, id); err != nil {
+					return err
+				}
 				pid = payID
 				payMethod = in.Method
 				payProofURL = in.ProofURL

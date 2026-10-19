@@ -128,6 +128,17 @@ func TestNotificationsCorrectionNote(t *testing.T) {
 	if k := kinds(notificationsOf(t, a, buyer)); !k["reservation.correction_requested"] {
 		t.Fatalf("buyer missing correction_requested: %v", k)
 	}
+
+	// Re-attaching the proof answers the administrator's request: they get a
+	// note instead of having to poll the payment list.
+	if rec := doJSON(t, a, "POST", "/reservations/"+itoa(v.ID)+"/payment", buyer, map[string]any{
+		"method": "pos", "proof_url": "https://example.com/receipt.jpg",
+	}); rec.Code != http.StatusOK {
+		t.Fatalf("re-record: status = %d body %s", rec.Code, rec.Body.String())
+	}
+	if k := kinds(notificationsOf(t, a, admin)); !k["reservation.correction_submitted"] {
+		t.Fatalf("admin missing correction_submitted: %v", k)
+	}
 }
 
 func TestNotificationsReadFlow(t *testing.T) {

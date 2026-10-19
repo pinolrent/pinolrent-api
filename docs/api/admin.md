@@ -307,7 +307,8 @@ what each account was told.
 
 **Query:** `user_id`, `kind` (one of `reservation.requested`,
 `reservation.accepted`, `reservation.rejected`, `reservation.confirmed`,
-`reservation.correction_requested`, `reservation.cancelled`), `unread`
+`reservation.correction_requested`, `reservation.cancelled`,
+`reservation.correction_submitted`), `unread`
 (`true`/`false`), `limit`, `offset`.
 
 **Answers** `200`: `{"items": [...], "total": N, "limit": 50, "offset": 0}`,
