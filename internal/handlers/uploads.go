@@ -137,7 +137,7 @@ func (a *API) UploadFile(w http.ResponseWriter, r *http.Request) {
 	fname := hex.EncodeToString(raw[:]) + ext
 
 	// #nosec G301 -- the upload directory must be readable by the static file
-	// server and any reverse proxy user; uploaded files stay 0600.
+	// server and any reverse proxy user.
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		serverError(w, err)
 		return

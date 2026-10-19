@@ -102,7 +102,7 @@ func main() {
 	}
 
 	// #nosec G301 -- the upload directory must be readable by the static
-	// file server and any reverse proxy user; uploaded files stay 0600.
+	// file server and any reverse proxy user.
 	if err := os.MkdirAll(cfg.UploadDir, 0o755); err != nil {
 		slog.Error("create upload dir", "error", err)
 		os.Exit(1)
