@@ -863,6 +863,11 @@ func TestAdminListsUsers(t *testing.T) {
 	if page.Total != 1 || page.Items[0].ID != adminID {
 		t.Fatalf("role=admin = %+v", page)
 	}
+	// The docs promise alphabetical roles and the smokes assert it; SQLite
+	// does not order GROUP_CONCAT without an explicit ORDER BY.
+	if got := strings.Join(page.Items[0].Roles, ","); got != "admin,buyer" {
+		t.Fatalf("roles = %q, want admin,buyer", got)
+	}
 	rec = doJSON(t, a, "GET", "/admin/users?role=seller", admin, nil)
 	decodeJSON(t, rec, &page)
 	if page.Total != 0 {

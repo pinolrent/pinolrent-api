@@ -36,7 +36,7 @@ func (a *API) adminUserView(ctx context.Context, id int64) (accountView, error) 
 	var suspended sql.NullInt64
 	var rolesStr sql.NullString
 	err := a.DB.QueryRowContext(ctx,
-		`SELECT u.email, u.phone, u.suspended_at, GROUP_CONCAT(ur.role)
+		`SELECT u.email, u.phone, u.suspended_at, GROUP_CONCAT(ur.role ORDER BY ur.role)
 		 FROM users u
 		 LEFT JOIN user_roles ur ON ur.user_id = u.id
 		 WHERE u.id = ?

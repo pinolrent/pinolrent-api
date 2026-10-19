@@ -26,7 +26,7 @@ func (a *API) AdminListUsers(w http.ResponseWriter, r *http.Request) {
 	}
 	listPage(a, w, r,
 		`SELECT COUNT(DISTINCT u.id) FROM users u`,
-		`SELECT u.id, u.email, u.phone, u.suspended_at, GROUP_CONCAT(ur.role) as roles
+		`SELECT u.id, u.email, u.phone, u.suspended_at, GROUP_CONCAT(ur.role ORDER BY ur.role) as roles
 		 FROM users u
 		 LEFT JOIN user_roles ur ON ur.user_id = u.id`,
 		`GROUP BY u.id, u.email, u.phone, u.suspended_at ORDER BY u.id ASC`,
