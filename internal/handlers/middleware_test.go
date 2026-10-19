@@ -51,6 +51,46 @@ func TestRecover(t *testing.T) {
 	}
 }
 
+// TestRecoverAfterPartialWrite pins the guard: once the status line is out,
+// the recovery must not append a JSON error to whatever the client is
+// already reading.
+func TestRecoverAfterPartialWrite(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"partial":true}`))
+		panic("boom")
+	})
+	// Same nesting as production: the recorder sits outside the recoverer.
+	h := WithRequestLog(nil)(WithRecover(handler))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), "GET", "/", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "server error") {
+		t.Fatalf("body = %q, the recovery appended to a started response", rec.Body.String())
+	}
+	if got := rec.Body.String(); got != `{"partial":true}` {
+		t.Fatalf("body = %q, want the partial response untouched", got)
+	}
+}
+
+// TestStatusRecorderUnwrapReachesFlusher pins Unwrap: without it
+// http.ResponseController cannot find the original writer's Flusher.
+func TestStatusRecorderUnwrapReachesFlusher(t *testing.T) {
+	h := WithRequestLog(nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if err := http.NewResponseController(w).Flush(); err != nil {
+			t.Errorf("flush through the recorder: %v", err)
+		}
+	}))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), "GET", "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+}
+
 func TestRequestLogWithRequestID(t *testing.T) {
 	h := WithRequestLog(nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
