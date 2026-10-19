@@ -1,10 +1,13 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -49,7 +52,7 @@ func TestRecover(t *testing.T) {
 }
 
 func TestRequestLogWithRequestID(t *testing.T) {
-	h := WithRequestLog(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	h := WithRequestLog(nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	rec := httptest.NewRecorder()
@@ -58,6 +61,27 @@ func TestRequestLogWithRequestID(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+}
+
+// TestRequestLogIncludesClientIP pins the claim in the deployment and
+// configuration docs: a request line carries the client address, not only
+// the method and path.
+func TestRequestLogIncludesClientIP(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	defer slog.SetDefault(prev)
+
+	h := WithRequestLog(nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	req := httptest.NewRequestWithContext(context.Background(), "GET", "/test", nil)
+	req.RemoteAddr = "203.0.113.7:1234"
+	h.ServeHTTP(httptest.NewRecorder(), req)
+
+	if !strings.Contains(buf.String(), "ip=203.0.113.7") {
+		t.Fatalf("log line %q does not carry the client IP", buf.String())
 	}
 }
 
