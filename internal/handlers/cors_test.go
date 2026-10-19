@@ -76,7 +76,7 @@ func TestPreflight(t *testing.T) {
 	req := httptest.NewRequestWithContext(context.Background(), "OPTIONS", "/auth/login", nil)
 	req.Header.Set("Origin", "https://app.example.com")
 	req.Header.Set("Access-Control-Request-Method", "POST")
-	req.Header.Set("Access-Control-Request-Headers", "authorization, content-type")
+	req.Header.Set("Access-Control-Request-Headers", "authorization, content-type, x-request-id")
 	rec := httptest.NewRecorder()
 
 	called := false
@@ -98,8 +98,8 @@ func TestPreflight(t *testing.T) {
 	if got := rec.Header().Get("Access-Control-Allow-Methods"); got != "POST" {
 		t.Fatalf("Allow-Methods = %q, want requested method echoed", got)
 	}
-	if got := rec.Header().Get("Access-Control-Allow-Headers"); got != "authorization, content-type" {
-		t.Fatalf("Allow-Headers = %q, want requested headers echoed", got)
+	if got := rec.Header().Get("Access-Control-Allow-Headers"); got != "authorization, content-type, x-request-id" {
+		t.Fatalf("Allow-Headers = %q, want the requested headers echoed", got)
 	}
 	if got := rec.Header().Get("Access-Control-Max-Age"); got != "86400" {
 		t.Fatalf("Max-Age = %q, want 86400", got)
