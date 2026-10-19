@@ -100,8 +100,8 @@ in sync.
 
 `internal/handlers/routes.go` holds the single route table: each entry declares its mux pattern, its auth
 wrapper and its rate limiter (`limitNone`/`limitStrict`/`limitStandard`). The test mux (`Routes` in
-`helpers_test.go`), `NewRouter` and the CORS
-method list all derive from it, so a new endpoint is one table entry and nothing else. Tests enforce the
+`helpers_test.go`), `NewRouter` and the CORS method list all derive from it, so a new endpoint is one table
+entry and nothing else. Tests enforce the
 invariants: no duplicate patterns, every `/auth/*` route uses the strict limiter, every mutating route uses
 the standard limiter, and every route that declares a limiter actually answers `429` when its burst is spent.
 
