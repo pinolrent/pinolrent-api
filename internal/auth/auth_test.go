@@ -719,7 +719,10 @@ func TestRevokeFromRequest(t *testing.T) {
 
 	req := httptest.NewRequestWithContext(context.Background(), "POST", "/auth/logout", nil)
 	req.Header.Set("Authorization", "Bearer "+tok)
-	status, msg := a.RevokeFromRequest(req)
+	status, msg, err := a.RevokeFromRequest(req)
+	if err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
 	if status != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (msg %q)", status, msg)
 	}
@@ -737,7 +740,10 @@ func TestRevokeFromRequest(t *testing.T) {
 func TestRevokeFromRequestRejectsBadHeader(t *testing.T) {
 	a := newTestAuth(t)
 	req := httptest.NewRequestWithContext(context.Background(), "POST", "/auth/logout", nil)
-	status, _ := a.RevokeFromRequest(req)
+	status, _, err := a.RevokeFromRequest(req)
+	if err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
 	if status != http.StatusUnauthorized {
 		t.Fatalf("no header: status = %d, want 401", status)
 	}

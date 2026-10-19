@@ -202,22 +202,23 @@ func (a *Auth) Revoke(ctx context.Context, userID int64, jti string, expiresAtUn
 
 // RevokeFromRequest parses the bearer token from r and inserts its jti
 // into revoked_tokens so it cannot be reused. Returns the (httpStatus,
-// message) pair to write back. Use this from the /auth/logout handler so
-// the caller can rely on a single helper instead of re-implementing the
-// header parsing and jti extraction.
-func (a *Auth) RevokeFromRequest(r *http.Request) (status int, msg string) {
+// message) pair to write back; the error is non-nil only for a server-side
+// failure, so the caller can log what went wrong instead of a nil error.
+// Use this from the /auth/logout handler so the caller can rely on a single
+// helper instead of re-implementing the header parsing and jti extraction.
+func (a *Auth) RevokeFromRequest(r *http.Request) (status int, msg string, err error) {
 	token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 	if !ok || strings.TrimSpace(token) == "" {
-		return http.StatusUnauthorized, "missing bearer token"
+		return http.StatusUnauthorized, "missing bearer token", nil
 	}
 	claims, err := a.parseToken(strings.TrimSpace(token))
 	if err != nil {
-		return http.StatusUnauthorized, "invalid or expired token"
+		return http.StatusUnauthorized, "invalid or expired token", nil
 	}
 	if err := a.Revoke(r.Context(), claims.UserID, claims.JTI(), claims.ExpiresAtUnix()); err != nil {
-		return http.StatusInternalServerError, "server error"
+		return http.StatusInternalServerError, "server error", err
 	}
-	return http.StatusOK, ""
+	return http.StatusOK, "", nil
 }
 
 // GCRevoked drops rows from revoked_tokens whose tokens would have

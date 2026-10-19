@@ -268,14 +268,14 @@ func (a *API) BecomeSeller(w http.ResponseWriter, r *http.Request) {
 // revokes its jti, so even a suspended account can clean up its sessions
 // instead of getting a 403 from the auth check.
 func (a *API) Logout(w http.ResponseWriter, r *http.Request) {
-	status, msg := a.Auth.RevokeFromRequest(r)
+	status, msg, err := a.Auth.RevokeFromRequest(r)
 	switch status {
 	case http.StatusOK:
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	case http.StatusUnauthorized:
 		writeError(w, status, msg)
 	default:
-		serverError(w, nil)
+		serverError(w, err)
 	}
 }
 
