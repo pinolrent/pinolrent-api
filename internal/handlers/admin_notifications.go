@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/pinolrent/pinolrent-api/internal/db"
 	"github.com/pinolrent/pinolrent-api/internal/models"
 )
 
@@ -21,7 +22,7 @@ func (a *API) AdminListNotifications(w http.ResponseWriter, r *http.Request) {
 				f.add("user_id = ?", uid)
 			}
 			if s := strings.TrimSpace(r.URL.Query().Get("kind")); s != "" {
-				if !validNotifyKind(s) {
+				if !db.ValidNotifyKind(s) {
 					return "invalid kind"
 				}
 				f.add("kind = ?", s)

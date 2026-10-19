@@ -97,7 +97,7 @@ func (a *API) CreateReservation(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		if err := notifyUsers(ctx, conn, append(admins, ownerID), notifyRequested, reservationID); err != nil {
+		if err := notifyUsers(ctx, conn, append(admins, ownerID), db.NotifyRequested, reservationID); err != nil {
 			return err
 		}
 		return nil
@@ -233,7 +233,7 @@ func (a *API) CancelReservation(w http.ResponseWriter, r *http.Request) {
 		if err := a.auditAction(ctx, conn, u.ID, auditActionReservationCancel, targetReservations, id, ""); err != nil {
 			return err
 		}
-		if err := notifyUsers(ctx, conn, []int64{ownerID}, notifyCancelled, id); err != nil {
+		if err := notifyUsers(ctx, conn, []int64{ownerID}, db.NotifyCancelled, id); err != nil {
 			return err
 		}
 		cancelled = true
