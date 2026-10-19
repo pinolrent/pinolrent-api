@@ -153,9 +153,12 @@ func main() {
 		Addr:              ":" + cfg.Port,
 		Handler:           handlers.NewRouter(h, origins),
 		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       10 * time.Second,
-		// Generous on purpose: a 5 MB upload on a slow mobile link must fit
-		// inside it. Idle connections are bounded by IdleTimeout instead.
+		// The read budget covers the whole request, body included: 5.5 MB of
+		// multipart on a slow mobile link needs more than a few seconds.
+		// Slowloris stays bounded by ReadHeaderTimeout.
+		ReadTimeout: 120 * time.Second,
+		// Generous on purpose: a slow client must be able to receive a large
+		// response. Idle connections are bounded by IdleTimeout instead.
 		WriteTimeout:   120 * time.Second,
 		IdleTimeout:    60 * time.Second,
 		MaxHeaderBytes: 1 << 20,
